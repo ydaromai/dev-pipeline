@@ -1,0 +1,71 @@
+# Pipeline Configuration Template
+# Copy this file to your project root as `pipeline.config.yaml` and customize.
+
+pipeline:
+  # JIRA integration
+  jira:
+    project_key: PROJ           # Your JIRA project key (e.g., MVP, CD)
+    host: https://yourteam.atlassian.net
+    env_file: .env.jira         # Path to JIRA credentials file
+
+  # Critic validation settings
+  validation:
+    default_mode: parallel      # parallel | sequential
+    max_iterations: 3           # Max critic-agent revision cycles
+    escalation: user            # user | skip | fail
+
+    # Per-stage critic overrides
+    stages:
+      req2prd:
+        critics: [product]
+        mode: sequential
+      prd2plan:
+        critics: [product, dev]
+        mode: parallel
+      execute:
+        critics: [product, dev, devops, qa]
+        mode: parallel
+      pre_merge:
+        critics: [dev, devops]
+        mode: sequential        # DevOps reviews after Dev passes
+
+  # Execution settings
+  execution:
+    ralph_loop:
+      build_models:
+        simple: sonnet          # Docs, small edits, config changes
+        medium: sonnet          # Single-file logic, schemas
+        complex: opus           # Multi-file, complex logic
+      review_model: opus        # Always reviews with Opus
+      fresh_context: true       # Fresh CLI session per iteration
+      max_iterations: 3         # Max build-review cycles
+      escalation: user          # user | skip | fail
+    parallel_stories: true      # Enable cross-story parallelism
+    parallel_tasks: true        # Enable within-story parallelism (respects dependencies)
+    branch_pattern: "feat/story-{S}-task-{T}-{slug}"
+
+  # Test commands (override per project)
+  test_commands:
+    unit: "npm test"
+    integration: "npm run test:integration"
+    ui: "npm run test:ui"
+    all: "npm run test:all"
+
+  # Test requirements: file pattern → required test types (project defaults)
+  # PRD Testing Strategy can override/extend these per feature.
+  test_requirements:
+    "lib/**/*.js": [unit, integration]
+    "public/**": [ui]
+    "bq/**/*.sql": [integration]
+    "model/**": [schema_validation]
+    "scripts/**/*.js": [unit]
+
+  # Project-specific paths (override per project)
+  paths:
+    prd_dir: "docs/prd"
+    dev_plans_dir: "docs/dev_plans"
+    agent_constraints: "docs/ai_definitions/AGENT_CONSTRAINTS.md"
+    breakdown_definition: "docs/ai_definitions/TASK_BREAKDOWN_DEFINITION.md"
+    jira_import: "scripts/jira/jira-import.js"
+    jira_transition: "scripts/jira/transition-issue.js"
+    validate_breakdown: "scripts/ai_development/validate-breakdown.js"
