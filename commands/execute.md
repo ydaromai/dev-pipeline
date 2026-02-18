@@ -13,11 +13,41 @@ You are executing the **execute** pipeline stage. This is the core orchestration
 2. Read `pipeline.config.yaml` for execution config
 3. Read `docs/ai_definitions/AGENT_CONSTRAINTS.md`
 4. Read the linked PRD (find by matching slug in `docs/prd/`)
+5. Resolve the JIRA transition script path: use `pipeline.config.yaml` → `paths.jira_transition` if available, otherwise default to `scripts/jira/transition-issue.js`. Store this as `jira_transition_path` for use throughout execution.
 
 Parse all tasks and build a dependency graph:
 - Extract `Depends On` and `Parallel Group` from each task
 - Identify **ready tasks**: tasks with no unmet dependencies (all `Depends On` tasks are marked DONE)
 - Group ready tasks by `Parallel Group`
+
+## Step 1.5: Reconcile JIRA statuses
+
+Before continuing execution, reconcile the dev plan's task statuses with JIRA. This ensures that tasks completed in a previous session (or outside the `/execute` flow) have their JIRA status updated.
+
+1. Read `jira-issue-mapping.json` from the project root to get task→JIRA key mappings (includes both task-level and story-level keys)
+2. Parse the dev plan for each task's current status:
+   - `✅ DONE` — task is complete
+   - `🔄 IN PROGRESS` — task is actively being worked on
+   - Unmarked/pending — task has not started
+3. For each task that has a JIRA key:
+   - If dev plan says `✅ DONE` → run `node <jira_transition_path> <JIRA_KEY> "Done"` (idempotent — `transition-issue.js` handles "already in target status" gracefully)
+   - If dev plan says `🔄 IN PROGRESS` → run `node <jira_transition_path> <JIRA_KEY> "In Progress"`
+4. Reconcile **Story-level** JIRA issues: if **all tasks** under a story are marked `✅ DONE`, transition the story's JIRA issue to "Done"
+5. Report what was synced:
+
+```
+## JIRA Reconciliation
+Synced 5 task statuses to JIRA:
+- PAR-18 (TASK 1.1) → Done ✅
+- PAR-19 (TASK 1.2) → Done ✅
+- PAR-22 (TASK 2.1) → Done ✅
+- PAR-23 (TASK 2.2) → In Progress 🔄
+- PAR-17 (STORY 1) → Done ✅ (all tasks complete)
+
+Already in sync: 3 tasks
+```
+
+If `jira-issue-mapping.json` is not found (e.g., JIRA was skipped), skip this step silently.
 
 ## Step 2: Pre-flight check
 
@@ -100,17 +130,18 @@ You are implementing a task from a dev plan. Follow all agent constraints.
 
 ### 3c. Ralph Loop — REVIEW phase (fresh context, different model)
 
-After the build phase completes, spawn a **review subagent** (Task tool, model: opus) with all 4 critic personas:
+After the build phase completes, spawn a **review subagent** (Task tool, model: opus) with all 5 critic personas:
 
 **Review subagent prompt:**
 ```
 You are the Review Agent for the Ralph Loop. You will review the implementation
-using 4 critic perspectives. Read all critic persona files:
+using 5 critic perspectives. Read all critic persona files:
 
 1. ~/.claude/pipeline/agents/product-critic.md
 2. ~/.claude/pipeline/agents/dev-critic.md
 3. ~/.claude/pipeline/agents/devops-critic.md
 4. ~/.claude/pipeline/agents/qa-critic.md
+5. ~/.claude/pipeline/agents/security-critic.md
 
 ## What to review
 - Branch: <branch name>
@@ -124,7 +155,7 @@ using 4 critic perspectives. Read all critic persona files:
 2. Run each critic's checklist against the implementation
 3. Produce a structured review with verdicts for each critic
 4. Use the output format defined in each critic's persona file
-5. Final verdict: PASS only if ALL 4 critics pass. FAIL if any has Critical findings.
+5. Final verdict: PASS only if ALL 5 critics pass. FAIL if any has Critical findings.
 
 ## Output Format
 Produce each critic's review in sequence, then a final summary:
@@ -134,6 +165,7 @@ Produce each critic's review in sequence, then a final summary:
 - Dev: PASS/FAIL
 - DevOps: PASS/FAIL
 - QA: PASS/FAIL
+- Security: PASS/FAIL
 
 <Then include each critic's full structured output>
 ```

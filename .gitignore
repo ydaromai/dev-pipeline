@@ -2,3 +2,9 @@
 *.swp
 *.swo
 *~
+
+# JIRA credentials and generated files
+.env.jira
+jira-issue-mapping.json
+.jira-import-history.json
+node_modules/

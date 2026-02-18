@@ -11,11 +11,16 @@ You are executing the **full pipeline**. This chains all pipeline stages with hu
 
 ```
 Requirement → PRD → Dev Plan → JIRA → Execution (Ralph Loop) → Done
-                ↑        ↑         ↑                    ↑
-            [GATE 1] [GATE 2] [GATE 3]           [GATE 4: per PR]
+                ↑        ↑      ↑  ↑                    ↑
+            [GATE 1] [GATE 2] [3a][3b]           [GATE 4: per PR]
+                                 │
+                          Mandatory critic
+                         validation (Dev +
+                           Product) before
+                            JIRA creation
 ```
 
-Each gate requires human approval before proceeding.
+Each gate requires human approval before proceeding. Gate 3a (critic validation) is mandatory and automated.
 
 ---
 
@@ -63,7 +68,7 @@ Execute the `/prd2plan` command with the approved PRD:
    - Complexity ratings (Simple/Medium/Complex)
    - Test requirements per task
 4. Validate with `validate-breakdown.js` (if available)
-5. Run Dev Critic + Product Critic (parallel, max 2 iterations)
+5. Run all 5 critics: Product + Dev + DevOps + QA + Security (parallel, max 2 iterations)
 6. Write to `docs/dev_plans/<slug>.md`
 
 ### GATE 2: Dev Plan Approval
@@ -78,8 +83,11 @@ Dev plan generated: docs/dev_plans/<slug>.md
 - Tasks: N (Simple: X, Medium: Y, Complex: Z)
 - Parallel Groups: A(N tasks), B(N tasks), C(N tasks)
 - Estimated Time: X hours
-- Dev Critic: PASS ✅
 - Product Critic: PASS ✅
+- Dev Critic: PASS ✅
+- DevOps Critic: PASS ✅
+- QA Critic: PASS ✅
+- Security Critic: PASS ✅
 
 Dependency Graph:
   Group A: TASK 1.1, TASK 2.1 (parallel)
@@ -96,15 +104,29 @@ Options: approve | edit | abort
 
 Execute the `/plan2jira` command with the approved dev plan:
 
-1. Read pipeline.config.yaml for JIRA config
-2. Dry-run to show what will be created
-3. Wait for confirmation
-4. Create JIRA issues and update dev plan with keys
+1. **Mandatory critic validation** — run Product + Dev critics on the plan (must pass before JIRA creation)
+2. Read pipeline.config.yaml for JIRA config
+3. Dry-run to show what will be created
+4. Wait for confirmation
+5. Create JIRA issues and update dev plan with keys
 
-### GATE 3: JIRA Confirmation
+### GATE 3a: Plan Validation (mandatory)
 
 ```
-## Gate 3: JIRA Issues Created
+## Gate 3a: Plan Validation
+
+Before creating JIRA issues, the plan must pass critic review:
+
+- Product Critic: PASS ✅ / FAIL ❌
+- Dev Critic: PASS ✅ / FAIL ❌
+
+If FAIL: fix plan → re-validate (max 2 iterations) or override.
+```
+
+### GATE 3b: JIRA Confirmation
+
+```
+## Gate 3b: JIRA Issues Created
 
 Created N issues in project <KEY>:
 - 1 Epic: <KEY>-100
@@ -124,11 +146,12 @@ Proceed to execution? (approve/skip-jira/abort)
 
 Execute the `/execute` command with the dev plan:
 
-1. Build dependency graph
-2. Present execution plan
-3. For each ready task (respecting dependencies):
+1. **Reconcile JIRA statuses** — syncs dev plan task statuses to JIRA (transitions completed tasks to "Done", in-progress tasks to "In Progress"). This ensures JIRA is accurate after session restarts.
+2. Build dependency graph
+3. Present execution plan
+4. For each ready task (respecting dependencies):
    - **BUILD** (fresh context, build model per complexity)
-   - **REVIEW** (fresh context, Opus, all 4 critics)
+   - **REVIEW** (fresh context, Opus, all 5 critics)
    - **ITERATE** if FAIL (max 3 cycles, then escalate)
    - **PR** creation with critic results
    - **MERGE** after human approval
@@ -163,7 +186,7 @@ If the pipeline is interrupted at any stage:
 - **Stage 1 interrupted**: Re-run `/req2prd` — PRD file may already exist, ask user whether to regenerate or use existing
 - **Stage 2 interrupted**: Re-run `/prd2plan` — check if dev plan already exists
 - **Stage 3 interrupted**: Re-run `/plan2jira` — jira-import.js handles idempotency (skips already-created issues)
-- **Stage 4 interrupted**: Re-run `/execute @plan` — it reads task statuses from the dev plan and skips DONE tasks
+- **Stage 4 interrupted**: Re-run `/execute @plan` — it reads task statuses from the dev plan, **reconciles JIRA statuses** (transitions completed tasks to "Done" and in-progress tasks to "In Progress"), and then resumes execution from where it left off. No manual JIRA updates are needed after session restarts.
 
 ---
 

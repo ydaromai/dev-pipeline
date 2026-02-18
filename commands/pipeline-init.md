@@ -115,13 +115,17 @@ pipeline:
         critics: [product]
         mode: sequential
       prd2plan:
+        critics: [product, dev, devops, qa, security]
+        mode: parallel
+      plan2jira:
         critics: [product, dev]
         mode: parallel
+        mandatory: true
       execute:
-        critics: [product, dev, devops, qa]
+        critics: [product, dev, devops, qa, security]
         mode: parallel
       pre_merge:
-        critics: [dev, devops]
+        critics: [dev, devops, security]
         mode: sequential
 
   execution:
@@ -216,11 +220,12 @@ This project uses the global development pipeline (`~/.claude/commands/`).
 See `pipeline.config.yaml` for project-specific settings (JIRA, test commands, paths).
 
 ### Critic Agents
-The pipeline uses 4 critic agents for quality validation:
+The pipeline uses 5 critic agents for quality validation:
 - **Product Critic**: PRD alignment, acceptance criteria coverage
-- **Dev Critic**: Code quality, patterns, security
+- **Dev Critic**: Code quality, patterns, conventions
 - **DevOps Critic**: Deployment readiness, secrets, infrastructure
 - **QA Critic**: Test coverage, edge cases, regression risk
+- **Security Critic**: OWASP top 10, auth, injection, secrets, threat modeling
 
 ### Ralph Loop
 Execution uses the Ralph Loop pattern:
@@ -259,13 +264,13 @@ Present the initialization summary:
 - Build models: Sonnet (simple/medium), Opus (complex)
 - Review model: Opus
 - Ralph Loop: 3 max iterations, escalate to user
-- Critics: Product, Dev, DevOps, QA (parallel mode)
+- Critics: Product, Dev, DevOps, QA, Security (parallel mode)
 
 ### Next Steps
 1. Review `pipeline.config.yaml` and adjust if needed
 2. Ensure `.env.jira` has your JIRA credentials:
    ```
-   JIRA_HOST=https://yourteam.atlassian.net
+   JIRA_API_URL=https://yourteam.atlassian.net
    JIRA_EMAIL=your@email.com
    JIRA_API_TOKEN=your-api-token
    JIRA_PROJECT_KEY=<KEY>

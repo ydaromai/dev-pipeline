@@ -78,9 +78,25 @@ node scripts/ai_development/validate-breakdown.js docs/dev_plans/<slug>.md
 
 Fix any validation errors and re-run until it passes.
 
-## Step 5: Critic review (parallel)
+## Step 5: Critic review (parallel — all 5 critics)
 
-Spawn two critic subagents in parallel using the Task tool:
+Spawn all five critic subagents in parallel using the Task tool:
+
+**Product Critic (model: opus):**
+```
+You are the Product Critic. Read:
+1. ~/.claude/pipeline/agents/product-critic.md (your persona)
+2. The PRD: <paste PRD content>
+3. The dev plan: <paste plan content>
+
+Review whether the dev plan fully covers the PRD:
+- Does every P0 requirement have corresponding tasks?
+- Does every user story have corresponding tasks?
+- Are all acceptance criteria traceable to specific tasks?
+- Are there any PRD requirements with no implementation plan?
+
+Produce your structured output.
+```
 
 **Dev Critic (model: opus):**
 ```
@@ -99,25 +115,59 @@ Dev plan content:
 <paste plan content>
 ```
 
-**Product Critic (model: opus):**
+**DevOps Critic (model: opus):**
 ```
-You are the Product Critic. Read:
-1. ~/.claude/pipeline/agents/product-critic.md (your persona)
+You are the DevOps Critic. Read:
+1. ~/.claude/pipeline/agents/devops-critic.md (your persona)
+2. The dev plan document below
+
+Review the dev plan for:
+- Are there deployment or infrastructure tasks that are missing?
+- Are environment variables, config changes, and migrations accounted for?
+- Is the execution order safe for deployment (e.g., migrations before code)?
+- Are there CI/CD implications not captured in the plan?
+
+Dev plan content:
+<paste plan content>
+```
+
+**QA Critic (model: opus):**
+```
+You are the QA Critic. Read:
+1. ~/.claude/pipeline/agents/qa-critic.md (your persona)
+2. The PRD (Section 9 — Testing Strategy): <paste PRD content>
+3. The dev plan document below
+
+Review the dev plan for:
+- Do test requirements per task align with PRD Testing Strategy?
+- Are all acceptance criteria covered by planned tests?
+- Are there missing test types for affected file patterns (per pipeline.config.yaml)?
+- Is regression risk identified and addressed?
+
+Dev plan content:
+<paste plan content>
+```
+
+**Security Critic (model: opus):**
+```
+You are the Security Critic. Read:
+1. ~/.claude/pipeline/agents/security-critic.md (your persona)
 2. The PRD: <paste PRD content>
-3. The dev plan: <paste plan content>
+3. The dev plan document below
 
-Review whether the dev plan fully covers the PRD:
-- Does every P0 requirement have corresponding tasks?
-- Does every user story have corresponding tasks?
-- Are all acceptance criteria traceable to specific tasks?
-- Are there any PRD requirements with no implementation plan?
+Review the dev plan for:
+- Are there security-sensitive tasks missing (auth, input validation, secrets management)?
+- Does the plan introduce insecure design patterns?
+- Are there tasks handling user input, auth, or external data without security considerations?
+- Is threat modeling reflected in the task breakdown?
 
-Produce your structured output.
+Dev plan content:
+<paste plan content>
 ```
 
 ## Step 6: Revise if needed
 
-If either critic verdict is **FAIL**:
+If any critic verdict is **FAIL**:
 1. Read Critical findings from both critics
 2. Revise the plan to address all Critical findings
 3. Re-run only the failed critics (max 2 total iterations)
@@ -152,8 +202,11 @@ Group B (after A):  TASK 1.2, TASK 2.2
 Group C (after B):  TASK 1.3
 
 ## Critic Results
-- Dev Critic: PASS ✅ / FAIL ❌ (N warnings)
 - Product Critic: PASS ✅ / FAIL ❌ (N warnings)
+- Dev Critic: PASS ✅ / FAIL ❌ (N warnings)
+- DevOps Critic: PASS ✅ / FAIL ❌ (N warnings)
+- QA Critic: PASS ✅ / FAIL ❌ (N warnings)
+- Security Critic: PASS ✅ / FAIL ❌ (N warnings)
 
 Please review the dev plan. You can:
 1. Approve it as-is

@@ -20,13 +20,17 @@ pipeline:
         critics: [product]
         mode: sequential
       prd2plan:
+        critics: [product, dev, devops, qa, security]
+        mode: parallel
+      plan2jira:
         critics: [product, dev]
         mode: parallel
+        mandatory: true         # Must pass before JIRA creation
       execute:
-        critics: [product, dev, devops, qa]
+        critics: [product, dev, devops, qa, security]
         mode: parallel
       pre_merge:
-        critics: [dev, devops]
+        critics: [dev, devops, security]
         mode: sequential        # DevOps reviews after Dev passes
 
   # Execution settings

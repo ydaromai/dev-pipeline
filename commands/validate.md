@@ -27,8 +27,8 @@ Parse `$ARGUMENTS` to identify:
 | Target | Default Critics |
 |--------|----------------|
 | PRD | product |
-| Dev plan | product, dev |
-| Code diff | product, dev, devops, qa |
+| Dev plan | product, dev, devops, qa, security |
+| Code diff | product, dev, devops, qa, security |
 
 Read `pipeline.config.yaml` for stage-specific overrides if available.
 
@@ -50,7 +50,7 @@ Depending on target type, read:
 - Run `git diff` and `git diff --staged` to get the full diff
 - Read the related task spec (if identifiable from branch name or `$ARGUMENTS`)
 - Read the PRD (if identifiable)
-- All relevant critic agent files from `~/.claude/pipeline/agents/`
+- All relevant critic agent files from `~/.claude/pipeline/agents/` (including `security-critic.md`)
 - `docs/ai_definitions/AGENT_CONSTRAINTS.md`
 - `pipeline.config.yaml` for test requirements
 
@@ -95,6 +95,7 @@ Aggregate all critic results and present:
 | Dev | FAIL ❌ | 1 | 3 | 0 |
 | DevOps | PASS ✅ | 0 | 1 | 2 |
 | QA | FAIL ❌ | 2 | 1 | 0 |
+| Security | PASS ✅ | 0 | 1 | 0 |
 
 ### Critical Findings (must fix)
 1. [Dev] `lib/api.js:42` — SQL injection via string concatenation → use parameterized query
