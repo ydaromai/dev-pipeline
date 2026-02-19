@@ -37,7 +37,7 @@ Derive the slug from the PRD title (kebab-case, e.g., "Daily Revenue Trends" →
 
 ## Step 4: Product Critic validation
 
-Spawn a subagent (Task tool, model: opus) with the Product Critic persona to review the PRD:
+Spawn a subagent (Task tool, model: opus — Opus 4.6) with the Product Critic persona to review the PRD:
 
 **Subagent prompt:**
 ```

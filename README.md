@@ -68,7 +68,7 @@ Or run stages individually:
 The execution engine uses a build/review cycle with fresh context per iteration:
 
 ```
-BUILD (Sonnet or Opus)  -->  REVIEW (Opus, 5 critics)  -->  PASS? --> PR
+BUILD (Sonnet 4.6 or Opus 4.6)  -->  REVIEW (Opus 4.6, 5 critics)  -->  PASS? --> PR
                                       |
                                      FAIL
                                       |
@@ -76,9 +76,9 @@ BUILD (Sonnet or Opus)  -->  REVIEW (Opus, 5 critics)  -->  PASS? --> PR
                               (max 3 iterations, then escalate)
 ```
 
-- **Simple/Medium tasks**: Built with Sonnet
-- **Complex tasks**: Built with Opus
-- **All reviews**: Opus with all 5 critics
+- **Simple/Medium tasks**: Built with Sonnet 4.6
+- **Complex tasks**: Built with Opus 4.6
+- **All reviews**: Opus 4.6 with all 5 critics
 
 ## Critic Agents
 

@@ -151,7 +151,7 @@ Execute the `/execute` command with the dev plan:
 3. Present execution plan
 4. For each ready task (respecting dependencies):
    - **BUILD** (fresh context, build model per complexity)
-   - **REVIEW** (fresh context, Opus, all 5 critics)
+   - **REVIEW** (fresh context, Opus 4.6, all 5 critics)
    - **ITERATE** if FAIL (max 3 cycles, then escalate)
    - **PR** creation with critic results
    - **MERGE** after human approval

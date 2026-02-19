@@ -56,7 +56,7 @@
 | 1 | Read PRD template | `~/.claude/pipeline/templates/prd-template.md` |
 | 2 | Clarify requirements | If input < 200 chars: ask about target users, core problem, success metrics, constraints, scope |
 | 3 | Generate PRD | 14-section PRD: problem, users, goals, non-goals, user stories (with inline AC), functional requirements (P0/P1/P2), consolidated AC, non-functional, testing strategy, technical context, success metrics, open questions, risks, timeline |
-| 4 | Product Critic validation | Opus subagent reviews against product-critic checklist |
+| 4 | Product Critic validation | Opus 4.6 subagent reviews against product-critic checklist |
 | 5 | Revise if FAIL | Fix critical findings, re-validate (max 2 iterations) |
 | 6 | Write PRD | Save to `docs/prd/<slug>.md` |
 | 7 | **GATE 1** — Human approval | User reviews: approve / request changes / edit directly |
@@ -90,7 +90,7 @@
 | 2 | Explore codebase | Directory structure, existing patterns, test conventions, shared utilities |
 | 3 | Generate dev plan | **Epic** (= PRD feature) → **Stories** (user-facing units) → **Tasks** (implementable, with file paths) → **Subtasks** (agent-sized, 20min–2hrs) |
 | 4 | Validate structure | Run `validate-breakdown.js` if available |
-| 5 | Critic review (parallel, all 5) | Product + Dev + DevOps + QA + Security as Opus subagents |
+| 5 | Critic review (parallel, all 5) | Product + Dev + DevOps + QA + Security as Opus 4.6 subagents |
 | 6 | Revise if FAIL | Fix critical findings from all failed critics (max 2 iterations) |
 | 7 | Write dev plan | Save to `docs/dev_plans/<slug>.md` |
 | 8 | **GATE 2** — Human approval | Summary with dependency graph, critic results |
@@ -108,9 +108,9 @@
 ### Complexity definitions
 | Level | Scope | Build Model |
 |-------|-------|-------------|
-| Simple | Docs, config, small single-file edits | Sonnet |
-| Medium | Single-file logic, API endpoints, DB queries, UI components | Sonnet |
-| Complex | Multi-file changes, complex business logic, cross-cutting concerns | Opus |
+| Simple | Docs, config, small single-file edits | Sonnet 4.6 |
+| Medium | Single-file logic, API endpoints, DB queries, UI components | Sonnet 4.6 |
+| Complex | Multi-file changes, complex business logic, cross-cutting concerns | Opus 4.6 |
 
 ### Critics at this stage (all 5, parallel)
 | Critic | Focus |
@@ -185,7 +185,7 @@ This is the core execution engine. It reads the dev plan, builds a dependency gr
                     │                  RALPH LOOP                      │
                     │                                                  │
   Ready Task ──▶   │   BUILD (fresh ctx)  ──▶  REVIEW (fresh ctx)    │
-                    │   Model per complexity     Opus, all 5 critics   │
+                    │   Model per complexity     Opus 4.6, all 5 critics│
                     │         │                        │               │
                     │         │                   PASS ──▶ Create PR   │
                     │         │                        │               │
@@ -206,8 +206,8 @@ This is the core execution engine. It reads the dev plan, builds a dependency gr
 | 1.5 | Reconcile JIRA statuses | Sync dev plan statuses to JIRA (Done/In Progress), reconcile story-level status |
 | 2 | Pre-flight check | Present execution plan, model config, completed tasks — **wait for approval** |
 | 3a | Setup per task | Create git branch, transition JIRA to "In Progress", update dev plan status |
-| 3b | **BUILD** phase | Fresh-context subagent (Sonnet or Opus per complexity), implements subtasks, writes tests, commits |
-| 3c | **REVIEW** phase | Fresh-context Opus subagent, runs all 5 critic checklists against the diff |
+| 3b | **BUILD** phase | Fresh-context subagent (Sonnet 4.6 or Opus 4.6 per complexity), implements subtasks, writes tests, commits |
+| 3c | **REVIEW** phase | Fresh-context Opus 4.6 subagent, runs all 5 critic checklists against the diff |
 | 3d | **ITERATE** if FAIL | New build subagent with fix prompt (critical findings only), re-review failed critics |
 | 3e | Escalation | After max iterations: mark BLOCKED, create WIP PR, ask user (override/fix/skip/abort) |
 | 3f | Create PR | Push branch, `gh pr create` with critic results + AC checklist + JIRA link |
@@ -228,11 +228,11 @@ This is the core execution engine. It reads the dev plan, builds a dependency gr
 ### Build model selection
 | Complexity | Model | Use Cases |
 |-----------|-------|-----------|
-| Simple | Sonnet | Docs, config, small edits, schema definitions |
-| Medium | Sonnet | Single-file logic, API endpoints, DB queries, UI components |
-| Complex | Opus | Multi-file changes, complex business logic, cross-cutting |
+| Simple | Sonnet 4.6 | Docs, config, small edits, schema definitions |
+| Medium | Sonnet 4.6 | Single-file logic, API endpoints, DB queries, UI components |
+| Complex | Opus 4.6 | Multi-file changes, complex business logic, cross-cutting |
 
-**Review model:** Always Opus
+**Review model:** Always Opus 4.6
 
 ### Parallel execution
 - **Within a group:** Tasks in the same `Parallel Group` run simultaneously
@@ -336,8 +336,8 @@ pipeline:
 
   execution:
     ralph_loop:
-      build_models: { simple: sonnet, medium: sonnet, complex: opus }
-      review_model: opus
+      build_models: { simple: sonnet, medium: sonnet, complex: opus }  # Sonnet 4.6 / Opus 4.6
+      review_model: opus   # Opus 4.6
       fresh_context: true
       max_iterations: 3
       escalation: user

@@ -82,7 +82,7 @@ Fix any validation errors and re-run until it passes.
 
 Spawn all five critic subagents in parallel using the Task tool:
 
-**Product Critic (model: opus):**
+**Product Critic (model: opus — Opus 4.6):**
 ```
 You are the Product Critic. Read:
 1. ~/.claude/pipeline/agents/product-critic.md (your persona)
@@ -98,7 +98,7 @@ Review whether the dev plan fully covers the PRD:
 Produce your structured output.
 ```
 
-**Dev Critic (model: opus):**
+**Dev Critic (model: opus — Opus 4.6):**
 ```
 You are the Dev Critic. Read:
 1. ~/.claude/pipeline/agents/dev-critic.md (your persona)
@@ -115,7 +115,7 @@ Dev plan content:
 <paste plan content>
 ```
 
-**DevOps Critic (model: opus):**
+**DevOps Critic (model: opus — Opus 4.6):**
 ```
 You are the DevOps Critic. Read:
 1. ~/.claude/pipeline/agents/devops-critic.md (your persona)
@@ -131,7 +131,7 @@ Dev plan content:
 <paste plan content>
 ```
 
-**QA Critic (model: opus):**
+**QA Critic (model: opus — Opus 4.6):**
 ```
 You are the QA Critic. Read:
 1. ~/.claude/pipeline/agents/qa-critic.md (your persona)
@@ -148,7 +148,7 @@ Dev plan content:
 <paste plan content>
 ```
 
-**Security Critic (model: opus):**
+**Security Critic (model: opus — Opus 4.6):**
 ```
 You are the Security Critic. Read:
 1. ~/.claude/pipeline/agents/security-critic.md (your persona)

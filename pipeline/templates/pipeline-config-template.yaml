@@ -37,10 +37,10 @@ pipeline:
   execution:
     ralph_loop:
       build_models:
-        simple: sonnet          # Docs, small edits, config changes
-        medium: sonnet          # Single-file logic, schemas
-        complex: opus           # Multi-file, complex logic
-      review_model: opus        # Always reviews with Opus
+        simple: sonnet          # Sonnet 4.6 — Docs, small edits, config changes
+        medium: sonnet          # Sonnet 4.6 — Single-file logic, schemas
+        complex: opus           # Opus 4.6 — Multi-file, complex logic
+      review_model: opus        # Opus 4.6 — Always reviews with Opus 4.6
       fresh_context: true       # Fresh CLI session per iteration
       max_iterations: 3         # Max build-review cycles
       escalation: user          # user | skip | fail

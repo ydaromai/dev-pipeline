@@ -131,10 +131,10 @@ pipeline:
   execution:
     ralph_loop:
       build_models:
-        simple: sonnet
-        medium: sonnet
-        complex: opus
-      review_model: opus
+        simple: sonnet          # Sonnet 4.6
+        medium: sonnet          # Sonnet 4.6
+        complex: opus           # Opus 4.6
+      review_model: opus        # Opus 4.6
       fresh_context: true
       max_iterations: 3
       escalation: user
@@ -230,8 +230,8 @@ The pipeline uses 5 critic agents for quality validation:
 ### Ralph Loop
 Execution uses the Ralph Loop pattern:
 - Fresh context per build/review iteration
-- Build model: Sonnet (simple/medium) or Opus (complex)
-- Review model: Opus (always)
+- Build model: Sonnet 4.6 (simple/medium) or Opus 4.6 (complex)
+- Review model: Opus 4.6 (always)
 - Max 3 iterations before human escalation
 ```
 
@@ -261,8 +261,8 @@ Present the initialization summary:
 - Existing scripts: <list found scripts>
 
 ### Configuration
-- Build models: Sonnet (simple/medium), Opus (complex)
-- Review model: Opus
+- Build models: Sonnet 4.6 (simple/medium), Opus 4.6 (complex)
+- Review model: Opus 4.6
 - Ralph Loop: 3 max iterations, escalate to user
 - Critics: Product, Dev, DevOps, QA, Security (parallel mode)
 

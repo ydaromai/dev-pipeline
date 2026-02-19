@@ -58,7 +58,7 @@ Depending on target type, read:
 
 Read `pipeline.config.yaml` for mode (parallel vs sequential). Default: parallel.
 
-For each critic, spawn a subagent (Task tool, model: opus) with the appropriate persona:
+For each critic, spawn a subagent (Task tool, model: opus — Opus 4.6) with the appropriate persona:
 
 **Subagent prompt template:**
 ```

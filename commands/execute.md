@@ -65,8 +65,8 @@ Group B (after A):          TASK 1.2 (Complex), TASK 2.2 (Simple)
 Group C (after B):          TASK 1.3 (Medium)
 
 ### Ralph Loop Config
-Build Models: Simple→Sonnet, Medium→Sonnet, Complex→Opus
-Review Model: Opus
+Build Models: Simple→Sonnet 4.6, Medium→Sonnet 4.6, Complex→Opus 4.6
+Review Model: Opus 4.6
 Max Iterations: 3
 Fresh Context: Yes
 
@@ -100,9 +100,9 @@ For each task:
 ### 3b. Ralph Loop — BUILD phase (fresh context)
 
 Spawn a subagent (Task tool) with the appropriate model based on task complexity:
-- Simple → `model: sonnet`
-- Medium → `model: sonnet`
-- Complex → `model: opus`
+- Simple → `model: sonnet` (Sonnet 4.6)
+- Medium → `model: sonnet` (Sonnet 4.6)
+- Complex → `model: opus` (Opus 4.6)
 
 **Build subagent prompt:**
 ```
@@ -130,7 +130,7 @@ You are implementing a task from a dev plan. Follow all agent constraints.
 
 ### 3c. Ralph Loop — REVIEW phase (fresh context, different model)
 
-After the build phase completes, spawn a **review subagent** (Task tool, model: opus) with all 5 critic personas:
+After the build phase completes, spawn a **review subagent** (Task tool, model: opus — Opus 4.6) with all 5 critic personas:
 
 **Review subagent prompt:**
 ```
@@ -326,10 +326,10 @@ When a plan has many independent stories, you can generate a session launch scri
 # Each story runs in its own claude CLI session with fresh context
 
 # Story 1 (Tasks 1.1, 1.2, 1.3)
-claude --model opus -p "Execute tasks from docs/dev_plans/<slug>.md for STORY 1 only. Follow /execute workflow." &
+claude --model claude-opus-4-6 -p "Execute tasks from docs/dev_plans/<slug>.md for STORY 1 only. Follow /execute workflow." &
 
 # Story 2 (Tasks 2.1, 2.2) — no dependency on Story 1
-claude --model opus -p "Execute tasks from docs/dev_plans/<slug>.md for STORY 2 only. Follow /execute workflow." &
+claude --model claude-opus-4-6 -p "Execute tasks from docs/dev_plans/<slug>.md for STORY 2 only. Follow /execute workflow." &
 
 wait
 echo "All stories complete. Check dev plan for status."
