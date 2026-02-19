@@ -27,60 +27,29 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname, join, resolve } from 'path';
 import { createInterface } from 'readline';
+import { randomBytes } from 'node:crypto';
 import { markdownToADF, prependAuditTrail } from './lib/markdown-to-adf.js';
+import { redactAuth } from './lib/redact.js';
+import { loadEnvJira } from './lib/env.js';
+import { retryWithBackoff, sleep } from './lib/retry.js';
+import { parseTimeEstimate } from './lib/parse-utils.js';
+import { JiraClient } from './lib/jira-client.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-/** Load .env.jira from project root if JIRA vars are not set (so dp2j works without sourcing). */
-function loadEnvJira() {
-  if (process.env.JIRA_API_URL && process.env.JIRA_EMAIL && process.env.JIRA_API_TOKEN) return;
-  const envPath = join(process.cwd(), '.env.jira');
-  if (!existsSync(envPath)) return;
-  try {
-    const content = readFileSync(envPath, 'utf8');
-    for (const line of content.split('\n')) {
-      const m = line.match(/^export\s+([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
-      if (m) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '').trim();
-    }
-  } catch (_) { /* ignore */ }
-}
 loadEnvJira();
 
-/** Generate a batch ID for this import run */
+/** Generate a batch ID for this import run (not a security credential — used as a local identifier only) */
 function generateBatchId() {
   const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).substring(2, 7);
+  const random = randomBytes(4).toString('hex');
   return `${timestamp}-${random}`;
 }
 
-/** Sleep helper for retry logic */
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-/** Retry a function with exponential backoff */
-async function retryWithBackoff(fn, maxRetries = 3) {
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      return await fn();
-    } catch (err) {
-      const is429 = err.message && (err.message.includes('429') || err.message.includes('rate limit'));
-      const is503 = err.message && err.message.includes('503');
-      
-      if ((is429 || is503) && i < maxRetries - 1) {
-        const delay = Math.pow(2, i) * 1000; // 1s, 2s, 4s
-        console.log(`⏳ Rate limited, retrying in ${delay}ms...`);
-        await sleep(delay);
-      } else {
-        throw err;
-      }
-    }
-  }
-  throw new Error('Max retries exceeded');
-}
+// sleep and retryWithBackoff are now imported from ./lib/retry.js
 
 /** Prompt user for input */
 async function promptUser(question, options = null) {
@@ -297,77 +266,7 @@ DOCUMENTATION:
 `);
 }
 
-// Jira API client
-class JiraClient {
-  constructor(config) {
-    this.config = config;
-    this.baseUrl = `${config.apiUrl}/rest/api/3`;
-    this.auth = Buffer.from(`${config.email}:${config.apiToken}`).toString('base64');
-    this.userCache = new Map(); // Cache for email -> accountId lookups
-  }
-  
-  async makeRequest(method, endpoint, body = null) {
-    return await retryWithBackoff(async () => {
-      const url = `${this.baseUrl}${endpoint}`;
-      const options = {
-        method,
-        headers: {
-          'Authorization': `Basic ${this.auth}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-      };
-      
-      if (body) {
-        options.body = JSON.stringify(body);
-      }
-      
-      const response = await fetch(url, options);
-      
-      if (!response.ok) {
-        let errorText = await response.text();
-        // Redact auth credentials from error messages
-        if (this.auth) {
-          errorText = errorText.replace(new RegExp(this.auth, 'g'), '[REDACTED]');
-        }
-        throw new Error(`Jira API error (${response.status}): ${errorText}`);
-      }
-
-      return await response.json();
-    });
-  }
-  
-  async createIssue(issueData) {
-    return await this.makeRequest('POST', '/issue', issueData);
-  }
-  
-  async getIssue(issueKey) {
-    return await this.makeRequest('GET', `/issue/${issueKey}`);
-  }
-  
-  async getUserByEmail(email) {
-    // Check cache first
-    if (this.userCache.has(email)) {
-      return this.userCache.get(email);
-    }
-    
-    try {
-      const result = await this.makeRequest('GET', `/user/search?query=${encodeURIComponent(email)}`);
-      
-      if (result && result.length > 0) {
-        const accountId = result[0].accountId;
-        this.userCache.set(email, accountId);
-        return accountId;
-      }
-      
-      console.log(`⚠️  User not found for email: ${email}`);
-      return null;
-    } catch (error) {
-      console.log(`⚠️  Failed to lookup user ${email}: ${error.message}`);
-      return null;
-    }
-  }
-}
+// JiraClient is now imported from ./lib/jira-client.js
 
 // Markdown parser
 class MarkdownParser {
@@ -676,26 +575,12 @@ class IssueCreator {
     };
     
     if (story.estimate) {
-      // Convert "40 hours" to "40h", "2 weeks" to "2w", etc.
-      // Also handle flexible formats like "~8 hours", "2-3 days"
-      let estimate = story.estimate;
-      
-      // Remove approximation symbols and ranges (take lower bound)
-      estimate = estimate.replace(/^~/, '').replace(/(\d+)-\d+/, '$1');
-      
-      const parsed = estimate
-        .match(/(\d+)\s*(hour|week|day|minute)/i)?.[0]
-        ?.replace(/\s*(hours?|h)\b/i, 'h')
-        .replace(/\s*(weeks?|w)\b/i, 'w')
-        .replace(/\s*(days?|d)\b/i, 'd')
-        .replace(/\s*(minutes?|m)\b/i, 'm')
-        .replace(/\s+/g, '') || null;
-      
+      const parsed = parseTimeEstimate(story.estimate);
       if (parsed) {
         issueData.fields.timetracking = { originalEstimate: parsed };
       }
     }
-    
+
     // Add batch label
     const labels = [...story.labels];
     const batchLabel = this.getBatchLabel();
@@ -747,22 +632,12 @@ class IssueCreator {
     };
     
     if (task.estimate) {
-      // Handle flexible time formats
-      let estimate = task.estimate.replace(/^~/, '').replace(/(\d+)-\d+/, '$1');
-      
-      const parsed = estimate
-        .match(/(\d+)\s*(hour|week|day|minute)/i)?.[0]
-        ?.replace(/\s*(hours?|h)\b/i, 'h')
-        .replace(/\s*(weeks?|w)\b/i, 'w')
-        .replace(/\s*(days?|d)\b/i, 'd')
-        .replace(/\s*(minutes?|m)\b/i, 'm')
-        .replace(/\s+/g, '') || null;
-      
+      const parsed = parseTimeEstimate(task.estimate);
       if (parsed) {
         issueData.fields.timetracking = { originalEstimate: parsed };
       }
     }
-    
+
     // Add batch label
     const labels = [...task.labels];
     const batchLabel = this.getBatchLabel();
@@ -814,22 +689,12 @@ class IssueCreator {
     };
     
     if (subtask.estimate) {
-      // Handle flexible time formats
-      let estimate = subtask.estimate.replace(/^~/, '').replace(/(\d+)-\d+/, '$1');
-      
-      const parsed = estimate
-        .match(/(\d+)\s*(hour|week|day|minute)/i)?.[0]
-        ?.replace(/\s*(hours?|h)\b/i, 'h')
-        .replace(/\s*(weeks?|w)\b/i, 'w')
-        .replace(/\s*(days?|d)\b/i, 'd')
-        .replace(/\s*(minutes?|m)\b/i, 'm')
-        .replace(/\s+/g, '') || null;
-      
+      const parsed = parseTimeEstimate(subtask.estimate);
       if (parsed) {
         issueData.fields.timetracking = { originalEstimate: parsed };
       }
     }
-    
+
     // Add batch label
     const labels = [...subtask.labels];
     const batchLabel = this.getBatchLabel();
@@ -1072,9 +937,9 @@ async function main() {
 }
 
 // Run main only when executed directly (not when imported for testing)
-const isDirectRun = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/^.*\//, ''));
+const isDirectRun = process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1]);
 if (isDirectRun) {
   main();
 }
 
-export { MarkdownParser };
+export { MarkdownParser, getHeadingId, planItemIdFromIssueId, summaryWithPlanId, updateDevPlanWithJiraLinks };

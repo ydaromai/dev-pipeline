@@ -384,10 +384,13 @@ If you get errors about `customfield_10011`:
 
 **Option 2:** Via API:
 ```bash
-curl -u your.email:your_token \
+# Uses -u with email only — curl will prompt for the API token securely
+curl -u your.email \
   https://yourcompany.atlassian.net/rest/api/3/field \
   | jq '.[] | select(.name == "Epic Name")'
 ```
+
+> **Security note:** Never pass credentials directly on the command line (e.g., `-u email:token`) — they are visible in `ps aux` output and shell history.
 
 Update line in `jira-import.js`:
 ```javascript
