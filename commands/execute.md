@@ -139,7 +139,7 @@ You are implementing a task from a dev plan. Follow all agent constraints.
 
 ## Instructions
 1. Read the codebase to understand existing patterns
-2. Implement all subtasks in order
+2. Implement subtasks: review the subtask list and identify which are independent (no output from one is input to another) vs. dependent (one builds on another's output, e.g., "create schema" before "write migration"). Implement independent subtasks in whatever order is most efficient; maintain sequential order for dependent subtasks. If dependencies between subtasks are unclear, default to sequential execution in the listed order.
 3. Write tests as specified in Required Tests
 4. Run tests: <test command from pipeline.config.yaml>
 5. Commit with conventional commit format, reference JIRA key

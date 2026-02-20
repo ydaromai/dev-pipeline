@@ -9,7 +9,7 @@
 - **PRD:** docs/prd/jira-subtask-sync-and-parallel-execution.md
 - **Dev Plan:** docs/dev_plans/jira-subtask-sync-and-parallel-execution.md
 - **JIRA:** PIPE-1 (Epic)
-- **Progress:** 1/4 tasks complete
+- **Progress:** 2/4 tasks complete
 
 ---
 
@@ -91,6 +91,8 @@ Include subtask-level JIRA reconciliation in Step 1.5 so subtask statuses are ac
 
 ### TASK 2.1: Add subtask reconciliation to execute.md Step 1.5
 **JIRA:** [PIPE-8](https://wiseguys.atlassian.net/browse/PIPE-8)
+**Status:** ✅ DONE
+**PR:** #2
 **Depends On:** None
 **Parallel Group:** A
 **Complexity:** Medium
