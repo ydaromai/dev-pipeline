@@ -90,7 +90,16 @@ For each task:
    ```bash
    node <jira_transition_path> <JIRA_KEY> "In Progress"
    ```
-3. Update the dev plan with task status:
+3. Transition all **subtask** JIRA issues to "In Progress" (if `subtask_jira_sync` is `true` or not set in config, defaulting to `true`):
+   - Look up the task's subtask JIRA keys from `jira-issue-mapping.json`: find all entries where the key starts with `SUBTASK-{N.M}.` (e.g., for TASK 1.1, find `SUBTASK-1.1.1`, `SUBTASK-1.1.2`, etc.)
+   - For each subtask JIRA key found:
+     ```bash
+     node <jira_transition_path> <SUBTASK_JIRA_KEY> "In Progress"
+     ```
+   - Transitions are idempotent — `transition-issue.js` handles "already in target status" gracefully
+   - If a subtask transition fails, log a warning and continue — do **not** block the parent task's execution
+   - If no subtask keys are found in the mapping, skip silently
+4. Update the dev plan with task status:
    ```markdown
    **Status:** 🔄 IN PROGRESS
    **Branch:** feat/story-1-task-1-db-schema
@@ -205,6 +214,7 @@ You are fixing issues found during code review. Follow all agent constraints.
 
 If still failing after max iterations:
 - Update dev plan status: `**Status:** ❌ BLOCKED`
+- **Do NOT transition subtask JIRA issues** — leave them at their current status when the parent task is blocked/escalated. Subtask transitions only happen on successful task start (Step 3a) and completion (Step 3g).
 - Create a WIP PR with all critic feedback in the description
 - Present to user:
 
@@ -273,7 +283,15 @@ If approved:
    ```bash
    node <jira_transition_path> <JIRA_KEY> "Done"
    ```
-3. Update dev plan:
+3. Transition all **subtask** JIRA issues to "Done" (if `subtask_jira_sync` is `true` or not set):
+   - Look up the task's subtask JIRA keys from `jira-issue-mapping.json`: find all entries where the key starts with `SUBTASK-{N.M}.` (same lookup pattern as Step 3a)
+   - For each subtask JIRA key found:
+     ```bash
+     node <jira_transition_path> <SUBTASK_JIRA_KEY> "Done"
+     ```
+   - Transitions are idempotent — already-Done subtasks are handled gracefully
+   - If a subtask transition fails, log a warning and continue — do **not** block the task completion
+4. Update dev plan:
    ```markdown
    **Status:** ✅ DONE
    **PR:** #<number>
