@@ -9,7 +9,7 @@
 - **PRD:** docs/prd/jira-subtask-sync-and-parallel-execution.md
 - **Dev Plan:** docs/dev_plans/jira-subtask-sync-and-parallel-execution.md
 - **JIRA:** PIPE-1 (Epic)
-- **Progress:** 0/4 tasks complete
+- **Progress:** 1/4 tasks complete
 
 ---
 
@@ -29,6 +29,8 @@ Ensure subtask JIRA issues are transitioned to "In Progress" and "Done" alongsid
 
 ### TASK 1.1: Add subtask JIRA transitions to execute.md Steps 3a, 3g, and 3e
 **JIRA:** [PIPE-3](https://wiseguys.atlassian.net/browse/PIPE-3)
+**Status:** ✅ DONE
+**PR:** #1
 **Depends On:** None
 **Parallel Group:** A
 **Complexity:** Medium

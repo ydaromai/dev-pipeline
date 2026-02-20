@@ -24,7 +24,7 @@ Parse all tasks and build a dependency graph:
 
 Before continuing execution, reconcile the dev plan's task statuses with JIRA. This ensures that tasks completed in a previous session (or outside the `/execute` flow) have their JIRA status updated.
 
-1. Read `jira-issue-mapping.json` from the project root to get task→JIRA key mappings (includes both task-level and story-level keys)
+1. Read `jira-issue-mapping.json` from the project root to get task→JIRA key mappings (includes task-level, subtask-level, and story-level keys)
 2. Parse the dev plan for each task's current status:
    - `✅ DONE` — task is complete
    - `🔄 IN PROGRESS` — task is actively being worked on
@@ -32,19 +32,28 @@ Before continuing execution, reconcile the dev plan's task statuses with JIRA. T
 3. For each task that has a JIRA key:
    - If dev plan says `✅ DONE` → run `node <jira_transition_path> <JIRA_KEY> "Done"` (idempotent — `transition-issue.js` handles "already in target status" gracefully)
    - If dev plan says `🔄 IN PROGRESS` → run `node <jira_transition_path> <JIRA_KEY> "In Progress"`
-4. Reconcile **Story-level** JIRA issues: if **all tasks** under a story are marked `✅ DONE`, transition the story's JIRA issue to "Done"
-5. Report what was synced:
+4. Reconcile **Subtask-level** JIRA issues (if `subtask_jira_sync` is `true` or not set, defaulting to `true`): for each task processed in step 3, also look up its subtask JIRA keys from `jira-issue-mapping.json` (find all entries where the key starts with `SUBTASK-{N.M}.`, e.g., for TASK 1.1 find `SUBTASK-1.1.1`, `SUBTASK-1.1.2`, etc.):
+   - If parent task is `✅ DONE` → transition each subtask JIRA issue to "Done"
+   - If parent task is `🔄 IN PROGRESS` → transition each subtask JIRA issue to "In Progress"
+   - Transitions are idempotent — already-in-target-status subtasks are handled gracefully
+   - If a subtask transition fails, log a warning and continue — do **not** block reconciliation
+   - If no subtask keys are found in the mapping for a task, skip silently
+5. Reconcile **Story-level** JIRA issues: if **all tasks** under a story are marked `✅ DONE`, transition the story's JIRA issue to "Done"
+6. Report what was synced:
 
 ```
 ## JIRA Reconciliation
-Synced 5 task statuses to JIRA:
+Synced 8 statuses to JIRA:
 - PAR-18 (TASK 1.1) → Done ✅
+- PAR-24 (SUBTASK 1.1.1) → Done ✅
+- PAR-25 (SUBTASK 1.1.2) → Done ✅
 - PAR-19 (TASK 1.2) → Done ✅
+- PAR-26 (SUBTASK 1.2.1) → Done ✅
 - PAR-22 (TASK 2.1) → Done ✅
 - PAR-23 (TASK 2.2) → In Progress 🔄
 - PAR-17 (STORY 1) → Done ✅ (all tasks complete)
 
-Already in sync: 3 tasks
+Already in sync: 3 tasks, 2 subtasks
 ```
 
 If `jira-issue-mapping.json` is not found (e.g., JIRA was skipped), skip this step silently.
