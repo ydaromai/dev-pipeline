@@ -4,12 +4,12 @@
 **Date:** 2026-02-20
 
 ## Pipeline Status
-- **Stage:** EXECUTING (Stage 4 of 4)
+- **Stage:** COMPLETE (Stage 4 of 4)
 - **Started:** 2026-02-20
 - **PRD:** docs/prd/jira-subtask-sync-and-parallel-execution.md
 - **Dev Plan:** docs/dev_plans/jira-subtask-sync-and-parallel-execution.md
 - **JIRA:** PIPE-1 (Epic)
-- **Progress:** 2/4 tasks complete
+- **Progress:** 4/4 tasks complete
 
 ---
 
@@ -146,6 +146,8 @@ Update the BUILD phase prompt to guide agents to parallelize independent subtask
 
 ### TASK 3.1: Update BUILD prompt with parallel subtask guidance
 **JIRA:** [PIPE-12](https://wiseguys.atlassian.net/browse/PIPE-12)
+**Status:** ✅ DONE
+**PR:** #3
 **Depends On:** None
 **Parallel Group:** A
 **Complexity:** Simple
@@ -187,6 +189,8 @@ Add optional `subtask_jira_sync` config flag to the pipeline config template.
 
 ### TASK 4.1: Add subtask_jira_sync flag to pipeline config template
 **JIRA:** [PIPE-15](https://wiseguys.atlassian.net/browse/PIPE-15)
+**Status:** ✅ DONE
+**PR:** #4
 **Depends On:** None
 **Parallel Group:** A
 **Complexity:** Simple
