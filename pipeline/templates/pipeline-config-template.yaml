@@ -37,8 +37,8 @@ pipeline:
   execution:
     ralph_loop:
       build_models:
-        simple: sonnet          # Sonnet 4.6 — Docs, small edits, config changes
-        medium: sonnet          # Sonnet 4.6 — Single-file logic, schemas
+        simple: opus            # Opus 4.6 — All tasks use Opus
+        medium: opus            # Opus 4.6 — All tasks use Opus
         complex: opus           # Opus 4.6 — Multi-file, complex logic
       review_model: opus        # Opus 4.6 — Always reviews with Opus 4.6
       fresh_context: true       # Fresh CLI session per iteration
@@ -46,6 +46,7 @@ pipeline:
       escalation: user          # user | skip | fail
     parallel_stories: true      # Enable cross-story parallelism
     parallel_tasks: true        # Enable within-story parallelism (respects dependencies)
+    subtask_jira_sync: true     # Sync subtask-level (x.x.x) JIRA issues during execution (set false to skip)
     branch_pattern: "feat/story-{S}-task-{T}-{slug}"
 
   # Test commands (override per project)
