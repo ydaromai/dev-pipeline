@@ -93,14 +93,16 @@ Aggregate all critic results and present:
 
 ### Overall: PASS ✅ | FAIL ❌
 
-| Critic | Verdict | Critical | Warnings | Notes |
-|--------|---------|----------|----------|-------|
-| Product | PASS ✅ | 0 | 2 | 1 |
-| Dev | FAIL ❌ | 1 | 3 | 0 |
-| DevOps | PASS ✅ | 0 | 1 | 2 |
-| QA | FAIL ❌ | 2 | 1 | 0 |
-| Security | PASS ✅ | 0 | 1 | 0 |
-| Designer | PASS ✅ / N/A | 0 | 0 | 1 |
+| Critic | Verdict | Score | Critical | Warnings | Notes |
+|--------|---------|-------|----------|----------|-------|
+| Product | PASS ✅ | 9.0 | 0 | 2 | 1 |
+| Dev | FAIL ❌ | 6.5 | 1 | 3 | 0 |
+| DevOps | PASS ✅ | 8.5 | 0 | 1 | 2 |
+| QA | FAIL ❌ | 5.0 | 2 | 1 | 0 |
+| Security | PASS ✅ | 9.0 | 0 | 1 | 0 |
+| Designer | PASS ✅ / N/A | N/A | 0 | 0 | 1 |
+
+Overall Score: 7.6 (average of scored critics)
 
 ### Critical Findings (must fix)
 1. [Dev] `lib/api.js:42` — SQL injection via string concatenation → use parameterized query

@@ -31,7 +31,7 @@ Execute the `/req2prd` command with the provided requirement:
 1. Read `~/.claude/pipeline/templates/prd-template.md`
 2. If input is short (< 200 chars), ask clarifying questions
 3. Generate PRD with all sections filled (including inline AC per story, consolidated AC, testing strategy)
-4. Run Product Critic validation (max 2 iterations)
+4. Run all-critic scoring Ralph Loop (per-critic > 8.5, overall > 9.0, max 5 iterations)
 5. Write to `docs/prd/<slug>.md`
 
 ### GATE 1: PRD Approval
@@ -45,7 +45,19 @@ PRD generated: docs/prd/<slug>.md
 - User Stories: N
 - P0 Requirements: N
 - Acceptance Criteria: N total (P0: X, P1: Y, P2: Z)
-- Product Critic: PASS ✅
+
+### Critic Scores (iteration N)
+| Critic | Score | Status |
+|--------|-------|--------|
+| Product | 9.0 | ✅ (> 8.5) |
+| Dev | 9.0 | ✅ (> 8.5) |
+| DevOps | 9.5 | ✅ (> 8.5) |
+| QA | 9.0 | ✅ (> 8.5) |
+| Security | 9.5 | ✅ (> 8.5) |
+| Designer | N/A | — |
+| **Overall** | **9.2** | **✅ (> 9.0)** |
+
+Ralph Loop iterations: N
 
 Please review and approve to proceed to dev planning.
 Options: approve | edit | abort
@@ -68,7 +80,7 @@ Execute the `/prd2plan` command with the approved PRD:
    - Complexity ratings (Simple/Medium/Complex)
    - Test requirements per task
 4. Validate with `validate-breakdown.js` (if available)
-5. Run all applicable critics: Product + Dev + DevOps + QA + Security + Designer if `has_frontend: true` (parallel, max 2 iterations)
+5. Run all applicable critics: Product + Dev + DevOps + QA + Security + Designer if `has_frontend: true` (parallel, iterate until 0 Critical + 0 Warnings, max 5 iterations)
 6. Write to `docs/dev_plans/<slug>.md`
 
 ### GATE 2: Dev Plan Approval
@@ -83,12 +95,13 @@ Dev plan generated: docs/dev_plans/<slug>.md
 - Tasks: N (Simple: X, Medium: Y, Complex: Z)
 - Parallel Groups: A(N tasks), B(N tasks), C(N tasks)
 - Estimated Time: X hours
-- Product Critic: PASS ✅
-- Dev Critic: PASS ✅
-- DevOps Critic: PASS ✅
-- QA Critic: PASS ✅
-- Security Critic: PASS ✅
-- Designer Critic: PASS ✅ / N/A
+- Product Critic: PASS ✅ (0 Critical, 0 Warnings)
+- Dev Critic: PASS ✅ (0 Critical, 0 Warnings)
+- DevOps Critic: PASS ✅ (0 Critical, 0 Warnings)
+- QA Critic: PASS ✅ (0 Critical, 0 Warnings)
+- Security Critic: PASS ✅ (0 Critical, 0 Warnings)
+- Designer Critic: PASS ✅ / N/A (0 Critical, 0 Warnings)
+Ralph Loop iterations: N
 
 Dependency Graph:
   Group A: TASK 1.1, TASK 2.1 (parallel)

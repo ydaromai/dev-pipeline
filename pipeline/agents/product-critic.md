@@ -43,6 +43,8 @@ Evaluate each item. Mark `[x]` for pass, `[✗]` for fail.
 
 ### Verdict: PASS | FAIL
 
+### Score: N.N / 10
+
 ### Findings
 
 #### Critical (must fix)
@@ -91,3 +93,4 @@ One paragraph assessment of product alignment.
 - Consider the end user's perspective at all times
 - Do not suggest new features — only validate what was specified
 - If PRD Section 11 defines success metrics, verify analytics/tracking events are defined to measure them — missing tracking for a P0 metric is a Warning
+- **Scoring (1–10 scale):** Rate the artifact holistically from your domain perspective. 9–10 = excellent, no meaningful issues. 7–8.5 = good, minor issues remain. 5–7 = acceptable but needs work. Below 5 = significant rework needed. The score must be consistent with your findings — a score above 8.5 requires zero Critical findings and at most minor Warnings.

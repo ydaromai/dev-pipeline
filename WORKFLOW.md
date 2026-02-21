@@ -42,11 +42,12 @@
 **Output:** `docs/prd/<slug>.md`
 
 ```
-  Requirement          Clarify           Generate PRD        Product Critic        Revise          Write PRD
-  ───────────▶  (if < 200 chars)  ──▶  (from template)  ──▶    Review     ──▶  (if FAIL, max   ──▶  docs/prd/
-                ask 5 questions         14 sections          PASS/FAIL      2 iterations)        <slug>.md
-                                                                │                                    │
-                                                                └── FAIL ──▶ fix criticals ──▶ re-review
+  Requirement          Clarify           Generate PRD       All Critics (parallel)     Scoring Ralph Loop      Write PRD
+  ───────────▶  (if < 200 chars)  ──▶  (from template)  ──▶  Score 1-10 each   ──▶  (until per-critic >   ──▶  docs/prd/
+                ask 5 questions         14 sections          Product, Dev, DevOps    8.5 AND overall > 9,     <slug>.md
+                                                             QA, Security, Designer  max 5 iterations)
+                                                                     │                        │
+                                                                     └── below threshold ──▶ revise PRD ──▶ re-score all
 ```
 
 ### Workflow Detail
@@ -56,15 +57,22 @@
 | 1 | Read PRD template | `~/.claude/pipeline/templates/prd-template.md` |
 | 2 | Clarify requirements | If input < 200 chars: ask about target users, core problem, success metrics, constraints, scope |
 | 3 | Generate PRD | 14-section PRD: problem, users, goals, non-goals, user stories (with inline AC), functional requirements (P0/P1/P2), consolidated AC, non-functional, testing strategy, technical context, success metrics, open questions, risks, timeline |
-| 4 | Product Critic validation | Opus 4.6 subagent reviews against product-critic checklist |
-| 5 | Revise if FAIL | Fix critical findings, re-validate (max 2 iterations) |
+| 4 | All-critic scoring review | All applicable critics (Product, Dev, DevOps, QA, Security, Designer if `has_frontend`) review PRD in parallel, each producing a score (1–10) |
+| 5 | Scoring Ralph Loop | Iterate until per-critic > 8.5 AND overall average > 9.0 (max 5 iterations). Revise PRD based on lowest-scoring critics' findings |
 | 6 | Write PRD | Save to `docs/prd/<slug>.md` |
 | 7 | **GATE 1** — Human approval | User reviews: approve / request changes / edit directly |
 
-### Critic at this stage
-| Critic | Focus |
-|--------|-------|
-| Product | PRD completeness, testable AC, user stories, scope alignment |
+### Critics at this stage (all applicable, parallel, scored 1–10)
+| Critic | PRD Review Focus |
+|--------|-----------------|
+| Product | PRD completeness, testable AC, user stories, scope alignment, analytics tracking |
+| Dev | Technical feasibility, ambiguity-free requirements, data model, API contracts |
+| DevOps | Infrastructure/deployment requirements, environment needs, scalability, monitoring |
+| QA | Testable AC, edge cases identified, testing strategy coverage, measurable NFRs |
+| Security | Auth/authz requirements, sensitive data handling, threat model, compliance |
+| Designer | UX flow completeness, accessibility requirements, responsive design, interaction patterns (only if `has_frontend: true`) |
+
+> **Quality loop asymmetry — PRD vs Dev Plan:** The PRD loop uses numeric scoring (per-critic > 8.5, overall > 9.0) and can tolerate minor warnings if scores are high — PRDs are living documents refined during implementation. The dev plan loop requires zero Critical AND zero Warnings — dev plans are the direct blueprint for code execution, and unresolved warnings propagate into bugs, tech debt, or security gaps.
 
 ---
 
@@ -77,9 +85,9 @@
   Read PRD +          Explore           Generate Plan         Validate           All 6 Critics (parallel)    Write Plan
   Constraints  ──▶   Codebase   ──▶   Epic/Story/Task  ──▶  Structure   ──▶   Product, Dev, DevOps,  ──▶  docs/dev_plans/
   + Config           (patterns,        /Subtask with         (breakdown         QA, Security, Designer     <slug>.md
-                      structure)        dependencies          validator)         PASS/FAIL
+                      structure)        dependencies          validator)         0 Critical + 0 Warnings
                                                                                      │
-                                                                                     └── FAIL ──▶ fix ──▶ re-review
+                                                                                     └── Critical or Warnings ──▶ fix all ──▶ re-review (max 5)
 ```
 
 ### Workflow Detail
@@ -91,7 +99,7 @@
 | 3 | Generate dev plan | **Epic** (= PRD feature) → **Stories** (user-facing units) → **Tasks** (implementable, with file paths) → **Subtasks** (agent-sized, 20min–2hrs) |
 | 4 | Validate structure | Run `validate-breakdown.js` if available |
 | 5 | Critic review (parallel, all applicable) | Product + Dev + DevOps + QA + Security + Designer (if `has_frontend: true`) as Opus 4.6 subagents |
-| 6 | Revise if FAIL | Fix critical findings from all failed critics (max 2 iterations) |
+| 6 | Revise until zero Critical AND zero Warnings | Fix all Critical findings and Warnings from all critics (max 5 iterations). Notes are acceptable. |
 | 7 | Write dev plan | Save to `docs/dev_plans/<slug>.md` |
 | 8 | **GATE 2** — Human approval | Summary with dependency graph, critic results |
 
@@ -267,9 +275,11 @@ Run critics independently against any artifact.
 
 ## Critic Agents Reference
 
-All critics follow the same output pattern: **Verdict** (PASS/FAIL) → **Findings** (Critical/Warnings/Notes) → **Checklist** → **Summary**
+All critics follow the same output pattern: **Verdict** (PASS/FAIL) → **Score** (N.N / 10) → **Findings** (Critical/Warnings/Notes) → **Checklist** → **Summary**
 
 **FAIL rule:** Any Critical finding = FAIL. Only Warnings/Notes = PASS.
+
+**Scoring (1–10 scale):** Each critic rates the artifact holistically. For PRD reviews, scoring drives the Ralph Loop (per-critic > 8.5, overall > 9.0). For code/plan reviews, scoring is supplementary to PASS/FAIL.
 
 ### Product Critic
 - PRD requirements addressed (P0 + P1)
@@ -343,14 +353,19 @@ pipeline:
 
   validation:
     default_mode: parallel          # parallel | sequential
-    max_iterations: 3               # Max critic revision cycles
+    max_iterations: 5               # Max iterations for PRD and dev plan Ralph Loops
     escalation: user                # user | skip | fail
     stages:                         # Per-stage critic overrides
-      req2prd:   { critics: [product], mode: sequential }
+      req2prd:   { critics: [product, dev, devops, qa, security, designer], mode: parallel }  # designer requires has_frontend: true
       prd2plan:  { critics: [product, dev, devops, qa, security, designer], mode: parallel }
       plan2jira: { critics: [product, dev], mode: parallel, mandatory: true }
       execute:   { critics: [product, dev, devops, qa, security, designer], mode: parallel }
       pre_merge: { critics: [dev, devops, security, designer], mode: sequential }
+
+  scoring:                            # PRD quality scoring thresholds
+    per_critic_min: 8.5               # Minimum score per critic (1-10 scale)
+    overall_min: 9.0                  # Minimum average across all critics
+    # Uses validation.max_iterations for iteration limit
 
   execution:
     ralph_loop:

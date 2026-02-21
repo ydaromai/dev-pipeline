@@ -183,13 +183,22 @@ Dev plan content:
 <paste plan content>
 ```
 
-## Step 6: Revise if needed
+## Step 6: Revise until zero Critical AND zero Warnings
 
-If any critic verdict is **FAIL**:
-1. Read Critical findings from both critics
-2. Revise the plan to address all Critical findings
-3. Re-run only the failed critics (max 2 total iterations)
-4. If still failing, include remaining issues as notes in the plan and proceed
+**Pass condition:** ALL critics must have zero Critical findings AND zero Warnings. Notes (informational) are acceptable.
+
+**Expected duration:** Each iteration re-runs up to 6 parallel critic subagents. A full 5-iteration loop may take 10–20 minutes. Most plans converge within 2–3 iterations. If the session is interrupted mid-loop, re-running `/prd2plan` will detect the existing plan file and ask whether to regenerate or resume validation. If model concurrency limits are reached during parallel critic spawning, the Task tool queues and retries automatically.
+
+If any critic has Critical findings OR Warnings:
+1. Read all Critical findings and Warnings from all critics
+2. Revise the plan to address ALL findings (Critical first, then Warnings)
+3. Re-run ALL critics (max 5 total iterations)
+4. If still not clean after max iterations:
+   - Present remaining findings to user
+   - **If Security Critic has remaining warnings:** require explicit Security sign-off — "⚠ Security warnings remain. Approving bypasses these security concerns. Confirm you accept the identified security risks."
+   - Options: continue iterating | approve with remaining warnings | edit manually | abort
+
+**Why zero-warnings for dev plans?** The PRD scoring loop (req2prd) tolerates minor warnings if numeric scores are high — a PRD is a living document refined during implementation. Dev plans, however, are the direct blueprint for code execution. Ambiguity or unresolved warnings in a dev plan propagate directly into implementation as bugs, tech debt, or security gaps. Zero warnings ensures the plan is unambiguous before any code is written.
 
 ## Step 7: Write the dev plan
 
@@ -220,12 +229,13 @@ Group B (after A):  TASK 1.2, TASK 2.2
 Group C (after B):  TASK 1.3
 
 ## Critic Results
-- Product Critic: PASS ✅ / FAIL ❌ (N warnings)
-- Dev Critic: PASS ✅ / FAIL ❌ (N warnings)
-- DevOps Critic: PASS ✅ / FAIL ❌ (N warnings)
-- QA Critic: PASS ✅ / FAIL ❌ (N warnings)
-- Security Critic: PASS ✅ / FAIL ❌ (N warnings)
-- Designer Critic: PASS ✅ / FAIL ❌ / N/A (N warnings)
+- Product Critic: PASS ✅ (0 Critical, 0 Warnings)
+- Dev Critic: PASS ✅ (0 Critical, 0 Warnings)
+- DevOps Critic: PASS ✅ (0 Critical, 0 Warnings)
+- QA Critic: PASS ✅ (0 Critical, 0 Warnings)
+- Security Critic: PASS ✅ (0 Critical, 0 Warnings)
+- Designer Critic: PASS ✅ / N/A (0 Critical, 0 Warnings)
+Ralph Loop iterations: N
 
 Please review the dev plan. You can:
 1. Approve it as-is

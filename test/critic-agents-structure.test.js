@@ -10,13 +10,21 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'fs';
+import { readFileSync, readdirSync, existsSync } from 'fs';
 import { join, basename, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const AGENTS_DIR = join(__dirname, '..', 'pipeline', 'agents');
+
+// Pre-flight: verify required directories exist before running tests.
+// Uses assert so test runner reports a clear failure (not a cryptic ENOENT).
+// If this fails in CI, check that the git clone is complete and pipeline/agents/ exists.
+assert.ok(
+  existsSync(AGENTS_DIR),
+  `Agents directory not found: ${AGENTS_DIR}. Ensure the repository is fully cloned and pipeline/agents/ exists.`
+);
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -54,6 +62,12 @@ const EXPECTED_CRITICS = [
  * Returns the text from startHeading up to (but not including) the next
  * heading of equal or higher level, or end-of-file.
  * Correctly skips headings inside fenced code blocks (```).
+ * Code block detection uses the opening ``` fence marker — tracks toggle state
+ * so that nested or mismatched markers are handled gracefully (toggle on/off).
+ *
+ * Assumes well-formed markdown with standard ATX headings (# level).
+ * Nested heading levels within a section (e.g., ### inside ##) are included
+ * in the extracted content — only same-or-higher level headings terminate.
  */
 function extractSection(content, sectionHeading) {
   const idx = content.indexOf(sectionHeading);
@@ -61,11 +75,13 @@ function extractSection(content, sectionHeading) {
   const afterHeading = content.slice(idx + sectionHeading.length);
   const lines = afterHeading.split('\n');
   const level = sectionHeading.match(/^#+/)[0];
-  const headingRegex = new RegExp(`^${level} (?!#)`);
+  const escapedLevel = level.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const headingRegex = new RegExp(`^${escapedLevel} (?!#)`);
   let inCodeBlock = false;
 
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i].trimEnd().startsWith('```')) {
+    // Toggle code block state on any ``` fence (with or without language tag)
+    if (/^```/.test(lines[i].trimEnd())) {
       inCodeBlock = !inCodeBlock;
       continue;
     }
@@ -79,15 +95,20 @@ function extractSection(content, sectionHeading) {
 /**
  * Extract a named YAML section from a pipeline config file.
  * Returns all lines from "  sectionName:" until the next sibling key.
+ *
+ * Assumes valid YAML with consistent indentation (detects actual indent from
+ * the matched key). sectionName is sanitized for safe regex usage.
+ * Returns empty string if section is not found.
  */
 function extractYamlSection(content, sectionName) {
   const lines = content.split('\n');
   let capturing = false;
   let indent = -1;
   const result = [];
+  const escaped = sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   for (const line of lines) {
-    const match = line.match(new RegExp(`^(\\s*)${sectionName}:`));
+    const match = line.match(new RegExp(`^(\\s*)${escaped}:`));
     if (match && !capturing) {
       capturing = true;
       indent = match[1].length;
@@ -225,6 +246,22 @@ describe('Critic agent structure validation', () => {
         assert.ok(
           outputSection.includes('### Summary'),
           `${file} should have "### Summary" in output format`
+        );
+      });
+
+      it('has Score field in output format', () => {
+        const outputSection = extractSection(content, '## Output Format');
+        assert.ok(
+          outputSection.includes('Score:') && outputSection.includes('/ 10'),
+          `${file} output format should include "Score: N.N / 10"`
+        );
+      });
+
+      it('has scoring guideline', () => {
+        const guidelinesSection = extractSection(content, '## Guidelines');
+        assert.ok(
+          guidelinesSection.includes('Scoring (1') && guidelinesSection.includes('10 scale)'),
+          `${file} should have scoring guideline in Guidelines section`
         );
       });
     });
@@ -411,11 +448,36 @@ describe('Pipeline config template', () => {
     );
   });
 
-  it('does not include designer in req2prd critics', () => {
+  it('includes designer in req2prd critics', () => {
     const req2prdSection = extractYamlSection(content, 'req2prd');
     assert.ok(
-      !req2prdSection.includes('designer'),
-      'req2prd stage should NOT include designer critic'
+      req2prdSection.includes('designer'),
+      'req2prd stage should include designer critic'
+    );
+  });
+
+  it('req2prd stage includes all non-conditional critics', () => {
+    const req2prdSection = extractYamlSection(content, 'req2prd');
+    for (const critic of ['product', 'dev', 'devops', 'qa', 'security']) {
+      assert.ok(
+        req2prdSection.includes(critic),
+        `req2prd section should include ${critic}`
+      );
+    }
+  });
+
+  it('has scoring configuration', () => {
+    assert.ok(
+      content.includes('scoring:'),
+      'Config template should have scoring section'
+    );
+    assert.ok(
+      content.includes('per_critic_min:'),
+      'Config template should have per_critic_min threshold'
+    );
+    assert.ok(
+      content.includes('overall_min:'),
+      'Config template should have overall_min threshold'
     );
   });
 
@@ -474,8 +536,8 @@ describe('Critic agent negative validations', () => {
     for (const file of agentFiles) {
       const content = readFileSync(join(AGENTS_DIR, file), 'utf8');
       assert.ok(
-        content.trim().length > 100,
-        `${file} should not be empty or trivially short`
+        content.trim().length > 100 && content.includes('## Role'),
+        `${file} should not be empty or trivially short (must be >100 chars and contain ## Role)`
       );
     }
   });
@@ -548,6 +610,17 @@ describe('Cross-file consistency', () => {
     }
   });
 
+  it('all critics mention /req2prd in When Used', () => {
+    for (const file of agentFiles) {
+      const content = readFileSync(join(AGENTS_DIR, file), 'utf8');
+      const whenUsedSection = extractSection(content, '## When Used');
+      assert.ok(
+        whenUsedSection.includes('/req2prd'),
+        `${file} When Used section should mention /req2prd`
+      );
+    }
+  });
+
   it('pipeline config template lists the same critics as EXPECTED_CRITICS for prd2plan', () => {
     const configContent = readFileSync(
       join(__dirname, '..', 'pipeline', 'templates', 'pipeline-config-template.yaml'),
@@ -563,4 +636,18 @@ describe('Cross-file consistency', () => {
       );
     }
   });
+});
+
+describe('PRD Review Focus for non-Product critics', () => {
+  const nonProductCritics = agentFiles.filter(f => f !== 'product-critic.md');
+  for (const file of nonProductCritics) {
+    it(`${basename(file, '.md')} has PRD Review Focus section in Review Checklist`, () => {
+      const content = readFileSync(join(AGENTS_DIR, file), 'utf8');
+      const checklistSection = extractSection(content, '## Review Checklist');
+      assert.ok(
+        checklistSection.includes('### PRD Review Focus'),
+        `${file} should have "### PRD Review Focus" in Review Checklist`
+      );
+    });
+  }
 });

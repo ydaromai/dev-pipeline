@@ -14,14 +14,20 @@ pipeline:
   # Critic validation settings
   validation:
     default_mode: parallel      # parallel | sequential
-    max_iterations: 3           # Max critic-agent revision cycles
+    max_iterations: 5           # Max iterations for PRD and dev plan Ralph Loops
     escalation: user            # user | skip | fail
+
+  # PRD quality scoring thresholds
+  scoring:
+    per_critic_min: 8.5         # Minimum score per critic (1-10 scale)
+    overall_min: 9.0            # Minimum average across all critics
+    # Note: max iterations for PRD scoring uses validation.max_iterations above
 
     # Per-stage critic overrides
     stages:
       req2prd:
-        critics: [product]
-        mode: sequential
+        critics: [product, dev, devops, qa, security, designer]  # designer requires has_frontend: true
+        mode: parallel
       prd2plan:
         critics: [product, dev, devops, qa, security, designer]  # designer requires has_frontend: true
         mode: parallel
