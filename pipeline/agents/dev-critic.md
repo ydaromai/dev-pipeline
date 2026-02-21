@@ -39,6 +39,9 @@ Evaluate each item. Mark `[x]` for pass, `[✗]` for fail.
 - [ ] JSDoc comments for exported functions
 - [ ] Parameterized queries for all database access (no string concatenation)
 - [ ] async/await used consistently (no raw Promise chains mixed in)
+- [ ] Analytics events instrumented per PRD specs (if analytics events defined in PRD)
+- [ ] No PII in analytics payloads (user IDs OK, emails/names/IPs are not)
+- [ ] Analytics calls don't block UI rendering (async/fire-and-forget pattern)
 
 ## Output Format
 
@@ -76,6 +79,9 @@ Evaluate each item. Mark `[x]` for pass, `[✗]` for fail.
 - [x/✗] JSDoc for exports
 - [x/✗] Parameterized queries
 - [x/✗] Consistent async/await
+- [x/✗/N/A] Analytics instrumented per PRD
+- [x/✗/N/A] No PII in analytics payloads
+- [x/✗/N/A] Analytics calls non-blocking
 
 ### Code Quality Summary
 | Metric | Value |
@@ -104,3 +110,6 @@ One paragraph assessment of code quality and architecture alignment.
 - Style issues that pass linting are Notes, not Critical
 - Be specific: always include file:line references
 - Suggest concrete fixes, not vague improvements
+- PII in analytics payloads is Critical (privacy/compliance risk)
+- Missing analytics instrumentation is a Warning if PRD defines tracking events, otherwise N/A
+- Blocking analytics calls (synchronous, in the render path) are a Warning

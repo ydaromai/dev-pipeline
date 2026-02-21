@@ -78,9 +78,9 @@ node scripts/ai_development/validate-breakdown.js docs/dev_plans/<slug>.md
 
 Fix any validation errors and re-run until it passes.
 
-## Step 5: Critic review (parallel — all 5 critics)
+## Step 5: Critic review (parallel — all applicable critics)
 
-Spawn all five critic subagents in parallel using the Task tool:
+Spawn all applicable critic subagents in parallel using the Task tool:
 
 **Product Critic (model: opus — Opus 4.6):**
 ```
@@ -165,6 +165,24 @@ Dev plan content:
 <paste plan content>
 ```
 
+**Designer Critic (model: opus — Opus 4.6) — Only spawn if pipeline.config.yaml has `has_frontend: true`:**
+```
+You are the Designer Critic. Read:
+1. ~/.claude/pipeline/agents/designer-critic.md (your persona)
+2. The PRD: <paste PRD content>
+3. The dev plan document below
+
+Review the dev plan for:
+- Do frontend tasks include accessibility considerations?
+- Are loading states, empty states, and error states accounted for?
+- Do UI tasks reference the project's design system or component library?
+- Are responsive design requirements included for frontend tasks?
+- Are there missing UX-related tasks (a11y testing, responsive testing)?
+
+Dev plan content:
+<paste plan content>
+```
+
 ## Step 6: Revise if needed
 
 If any critic verdict is **FAIL**:
@@ -207,6 +225,7 @@ Group C (after B):  TASK 1.3
 - DevOps Critic: PASS ✅ / FAIL ❌ (N warnings)
 - QA Critic: PASS ✅ / FAIL ❌ (N warnings)
 - Security Critic: PASS ✅ / FAIL ❌ (N warnings)
+- Designer Critic: PASS ✅ / FAIL ❌ / N/A (N warnings)
 
 Please review the dev plan. You can:
 1. Approve it as-is

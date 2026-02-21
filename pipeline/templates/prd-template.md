@@ -90,6 +90,15 @@ Define required test types per user story. These override/extend the project def
 | Metric 1 | target value | how measured |
 | Metric 2 | target value | how measured |
 
+### Tracking & Analytics Events
+
+Define events needed to measure the success metrics above. If no client-side tracking is needed, state "N/A — metrics measured server-side / via existing dashboards."
+
+| Event Name | Trigger | Properties | Maps to Metric |
+|-----------|---------|------------|----------------|
+| feature_viewed | User opens feature page | user_id, timestamp | Metric 1 |
+| action_completed | User completes key action | user_id, duration_ms, result | Metric 2 |
+
 ## 12. Open Questions
 
 - [ ] Unresolved decision 1

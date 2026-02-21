@@ -68,7 +68,7 @@ Execute the `/prd2plan` command with the approved PRD:
    - Complexity ratings (Simple/Medium/Complex)
    - Test requirements per task
 4. Validate with `validate-breakdown.js` (if available)
-5. Run all 5 critics: Product + Dev + DevOps + QA + Security (parallel, max 2 iterations)
+5. Run all applicable critics: Product + Dev + DevOps + QA + Security + Designer if `has_frontend: true` (parallel, max 2 iterations)
 6. Write to `docs/dev_plans/<slug>.md`
 
 ### GATE 2: Dev Plan Approval
@@ -88,6 +88,7 @@ Dev plan generated: docs/dev_plans/<slug>.md
 - DevOps Critic: PASS ✅
 - QA Critic: PASS ✅
 - Security Critic: PASS ✅
+- Designer Critic: PASS ✅ / N/A
 
 Dependency Graph:
   Group A: TASK 1.1, TASK 2.1 (parallel)
@@ -151,7 +152,7 @@ Execute the `/execute` command with the dev plan:
 3. Present execution plan
 4. For each ready task (respecting dependencies):
    - **BUILD** (fresh context, build model per complexity)
-   - **REVIEW** (fresh context, Opus 4.6, all 5 critics)
+   - **REVIEW** (fresh context, Opus 4.6, all applicable critics)
    - **ITERATE** if FAIL (max 3 cycles, then escalate)
    - **PR** creation with critic results
    - **MERGE** after human approval

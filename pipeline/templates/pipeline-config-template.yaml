@@ -2,6 +2,9 @@
 # Copy this file to your project root as `pipeline.config.yaml` and customize.
 
 pipeline:
+  # Frontend flag — enables Designer Critic in review stages
+  has_frontend: false            # Set true for projects with frontend code
+
   # JIRA integration
   jira:
     project_key: PROJ           # Your JIRA project key (e.g., MVP, CD)
@@ -20,17 +23,17 @@ pipeline:
         critics: [product]
         mode: sequential
       prd2plan:
-        critics: [product, dev, devops, qa, security]
+        critics: [product, dev, devops, qa, security, designer]  # designer requires has_frontend: true
         mode: parallel
       plan2jira:
         critics: [product, dev]
         mode: parallel
         mandatory: true         # Must pass before JIRA creation
       execute:
-        critics: [product, dev, devops, qa, security]
+        critics: [product, dev, devops, qa, security, designer]  # designer requires has_frontend: true
         mode: parallel
       pre_merge:
-        critics: [dev, devops, security]
+        critics: [dev, devops, security, designer]  # designer requires has_frontend: true
         mode: sequential        # DevOps reviews after Dev passes
 
   # Execution settings

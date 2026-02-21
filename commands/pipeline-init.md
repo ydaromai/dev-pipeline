@@ -95,12 +95,18 @@ Scan the project structure to build `test_requirements` mapping:
 - If `scripts/` exists → `"scripts/**/*.js": [unit]`
 - If `api/` or `routes/` exists → `"api/**/*.js": [unit, integration]`
 
+**Auto-detect frontend:**
+- If `public/`, `frontend/`, `src/components/`, or `app/` exists → `has_frontend: true`
+- Otherwise → `has_frontend: false`
+
 ## Step 5: Create pipeline.config.yaml
 
 Read the template from `~/.claude/pipeline/templates/pipeline-config-template.yaml` and customize it with the gathered values:
 
 ```yaml
 pipeline:
+  has_frontend: <auto-detected>  # Enables Designer Critic in review stages
+
   jira:
     project_key: <from user or auto-detected>
     host: <from user or auto-detected>
@@ -115,17 +121,17 @@ pipeline:
         critics: [product]
         mode: sequential
       prd2plan:
-        critics: [product, dev, devops, qa, security]
+        critics: [product, dev, devops, qa, security, designer]  # designer requires has_frontend: true
         mode: parallel
       plan2jira:
         critics: [product, dev]
         mode: parallel
         mandatory: true
       execute:
-        critics: [product, dev, devops, qa, security]
+        critics: [product, dev, devops, qa, security, designer]  # designer requires has_frontend: true
         mode: parallel
       pre_merge:
-        critics: [dev, devops, security]
+        critics: [dev, devops, security, designer]  # designer requires has_frontend: true
         mode: sequential
 
   execution:
@@ -220,12 +226,13 @@ This project uses the global development pipeline (`~/.claude/commands/`).
 See `pipeline.config.yaml` for project-specific settings (JIRA, test commands, paths).
 
 ### Critic Agents
-The pipeline uses 5 critic agents for quality validation:
-- **Product Critic**: PRD alignment, acceptance criteria coverage
-- **Dev Critic**: Code quality, patterns, conventions
+The pipeline uses 5 standard critic agents (+ Designer for frontend projects) for quality validation:
+- **Product Critic**: PRD alignment, acceptance criteria coverage, analytics tracking
+- **Dev Critic**: Code quality, patterns, conventions, analytics instrumentation
 - **DevOps Critic**: Deployment readiness, secrets, infrastructure
 - **QA Critic**: Test coverage, edge cases, regression risk
 - **Security Critic**: OWASP top 10, auth, injection, secrets, threat modeling
+- **Designer Critic**: Accessibility, responsive design, UX consistency, design system adherence (only when `has_frontend: true`)
 
 ### Ralph Loop
 Execution uses the Ralph Loop pattern:
@@ -264,7 +271,7 @@ Present the initialization summary:
 - Build models: Sonnet 4.6 (simple/medium), Opus 4.6 (complex)
 - Review model: Opus 4.6
 - Ralph Loop: 3 max iterations, escalate to user
-- Critics: Product, Dev, DevOps, QA, Security (parallel mode)
+- Critics: Product, Dev, DevOps, QA, Security + Designer if frontend (parallel mode)
 
 ### Next Steps
 1. Review `pipeline.config.yaml` and adjust if needed

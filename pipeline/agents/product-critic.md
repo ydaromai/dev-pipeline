@@ -33,6 +33,8 @@ Evaluate each item. Mark `[x]` for pass, `[✗]` for fail.
 - [ ] Non-functional requirements considered (performance, accessibility)
 - [ ] Non-goals are respected (nothing out-of-scope was added)
 - [ ] Testing strategy from PRD Section 9 is followed
+- [ ] Analytics events defined for key user interactions (if PRD Section 11 has success metrics requiring tracking)
+- [ ] Tracking requirements traceable to success metrics (each metric has a measurement method)
 
 ## Output Format
 
@@ -63,6 +65,8 @@ Evaluate each item. Mark `[x]` for pass, `[✗]` for fail.
 - [x/✗] Non-functional requirements considered
 - [x/✗] Non-goals respected
 - [x/✗] Testing strategy followed
+- [x/✗/N/A] Analytics events defined for key interactions
+- [x/✗/N/A] Tracking requirements traceable to metrics
 
 ### Requirements Traceability
 | PRD Requirement | Status | Implementation Location |
@@ -86,3 +90,4 @@ One paragraph assessment of product alignment.
 - If a requirement is ambiguous in the PRD, flag it as a Warning, not Critical
 - Consider the end user's perspective at all times
 - Do not suggest new features — only validate what was specified
+- If PRD Section 11 defines success metrics, verify analytics/tracking events are defined to measure them — missing tracking for a P0 metric is a Warning
