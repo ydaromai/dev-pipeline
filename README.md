@@ -56,40 +56,63 @@ Or run stages individually:
 | Command | Description |
 |---------|-------------|
 | `/pipeline-init` | One-time project setup (config, directories, JIRA) |
-| `/req2prd <requirement>` | Requirement to PRD with Product Critic review |
+| `/req2prd <requirement>` | Requirement to PRD with all-critic scoring Ralph Loop |
 | `/prd2plan @<prd>` | PRD to dev plan with 6-critic review |
 | `/plan2jira @<plan>` | Dev plan to JIRA issues (mandatory critic gate) |
 | `/execute @<plan>` | Execute tasks with Ralph Loop (build/review cycles) |
 | `/fullpipeline <requirement>` | Run all stages end-to-end with gates |
 | `/validate @<file>` | Run critic agents standalone on any artifact |
 
-## Ralph Loop
+## Quality Loops
+
+The pipeline uses two distinct quality loops to ensure high-quality artifacts before any code is written:
+
+### PRD Scoring Ralph Loop (`/req2prd`)
+
+All applicable critics (Product, Dev, DevOps, QA, Security, Designer) score the PRD 1–10. The loop iterates until:
+- **Per-critic minimum**: > 8.5
+- **Overall average**: > 9.0
+- **Max iterations**: 5
+
+N/A critics (e.g., Designer when `has_frontend: false`) are excluded from both numerator and denominator.
+
+### Dev Plan Zero-Warnings Loop (`/prd2plan`)
+
+All applicable critics review the dev plan. The loop iterates until:
+- **Zero Critical findings** AND **zero Warnings** across all critics
+- Notes (informational) are acceptable
+- **Max iterations**: 5
+
+> **Why the asymmetry?** PRDs are living documents refined during implementation — minor warnings are acceptable if scores are high. Dev plans are the direct blueprint for code execution — unresolved warnings propagate into bugs, tech debt, or security gaps.
+
+### Execution Ralph Loop (`/execute`)
 
 The execution engine uses a build/review cycle with fresh context per iteration:
 
 ```
-BUILD (Sonnet 4.6 or Opus 4.6)  -->  REVIEW (Opus 4.6, 6 critics)  -->  PASS? --> PR
-                                      |
-                                     FAIL
-                                      |
-                              FIX (fresh context)  -->  RE-REVIEW
-                              (max 3 iterations, then escalate)
+BUILD (Opus 4.6)  -->  REVIEW (Opus 4.6, all critics)  -->  PASS? --> PR
+                        |
+                       FAIL
+                        |
+                FIX (fresh context)  -->  RE-REVIEW
+                (max 3 iterations, then escalate)
 ```
 
-- **Simple/Medium tasks**: Built with Sonnet 4.6
-- **Complex tasks**: Built with Opus 4.6
+- **All tasks**: Built with Opus 4.6
 - **All reviews**: Opus 4.6 with all applicable critics (6 total, Designer conditional on `has_frontend`)
 
 ## Critic Agents
 
-| Critic | Focus |
-|--------|-------|
-| **Product** | PRD alignment, acceptance criteria coverage, analytics tracking |
-| **Dev** | Code quality, patterns, conventions, analytics instrumentation |
-| **DevOps** | Deployment readiness, infrastructure, secrets |
-| **QA** | Test coverage, edge cases, regression risk |
-| **Security** | OWASP Top 10, auth, injection, secrets, threat modeling |
-| **Designer** | Accessibility (WCAG 2.1 AA), responsive design, UX consistency, design system adherence (only when `has_frontend: true`) |
+All critics produce: **Verdict** (PASS/FAIL) → **Score** (N.N / 10) → **Findings** (Critical/Warnings/Notes) → **Checklist** → **Summary**
+
+| Critic | Code/Plan Review Focus | PRD Review Focus |
+|--------|----------------------|-----------------|
+| **Product** | PRD alignment, AC coverage, analytics tracking | Completeness, testable AC, scope, analytics |
+| **Dev** | Code quality, patterns, conventions, instrumentation | Technical feasibility, ambiguity, data model, API contracts |
+| **DevOps** | Deployment readiness, infrastructure, secrets | Infrastructure requirements, environment, scalability, monitoring |
+| **QA** | Test coverage, edge cases, regression risk | Testable AC, edge cases, testing strategy, measurable NFRs |
+| **Security** | OWASP Top 10, auth, injection, secrets, threat modeling | Auth/authz requirements, sensitive data, threat model, compliance |
+| **Designer** | Accessibility (WCAG 2.1 AA), responsive design, UX consistency | UX flow, accessibility, responsive, interaction patterns (only when `has_frontend: true`) |
 
 ## Project Structure
 
@@ -158,7 +181,8 @@ See [scripts/jira/README.md](scripts/jira/README.md) for detailed usage.
 Each project gets a `pipeline.config.yaml` (created by `/pipeline-init`) that controls:
 
 - **JIRA settings**: project key, host, credentials path
-- **Validation**: which critics run at each stage, parallel vs sequential
+- **Validation**: which critics run at each stage, parallel vs sequential, max iterations (5)
+- **Scoring**: PRD quality thresholds (per-critic > 8.5, overall > 9.0)
 - **Execution**: build/review models, max iterations, branch pattern
 - **Test commands**: unit, integration, UI, all
 - **Test requirements**: file patterns mapped to required test types
