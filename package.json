@@ -1,0 +1,11 @@
+{
+  "name": "dev-pipeline",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "AI-driven software delivery pipeline for Claude Code",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "test:jira": "cd scripts/jira && npm test",
+    "test:all": "npm test && npm run test:jira"
+  }
+}

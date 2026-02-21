@@ -74,9 +74,9 @@
 **Output:** `docs/dev_plans/<slug>.md`
 
 ```
-  Read PRD +          Explore           Generate Plan         Validate           All 5 Critics (parallel)    Write Plan
+  Read PRD +          Explore           Generate Plan         Validate           All 6 Critics (parallel)    Write Plan
   Constraints  ──▶   Codebase   ──▶   Epic/Story/Task  ──▶  Structure   ──▶   Product, Dev, DevOps,  ──▶  docs/dev_plans/
-  + Config           (patterns,        /Subtask with         (breakdown         QA, Security                <slug>.md
+  + Config           (patterns,        /Subtask with         (breakdown         QA, Security, Designer     <slug>.md
                       structure)        dependencies          validator)         PASS/FAIL
                                                                                      │
                                                                                      └── FAIL ──▶ fix ──▶ re-review
@@ -90,7 +90,7 @@
 | 2 | Explore codebase | Directory structure, existing patterns, test conventions, shared utilities |
 | 3 | Generate dev plan | **Epic** (= PRD feature) → **Stories** (user-facing units) → **Tasks** (implementable, with file paths) → **Subtasks** (agent-sized, 20min–2hrs) |
 | 4 | Validate structure | Run `validate-breakdown.js` if available |
-| 5 | Critic review (parallel, all 5) | Product + Dev + DevOps + QA + Security as Opus 4.6 subagents |
+| 5 | Critic review (parallel, all applicable) | Product + Dev + DevOps + QA + Security + Designer (if `has_frontend: true`) as Opus 4.6 subagents |
 | 6 | Revise if FAIL | Fix critical findings from all failed critics (max 2 iterations) |
 | 7 | Write dev plan | Save to `docs/dev_plans/<slug>.md` |
 | 8 | **GATE 2** — Human approval | Summary with dependency graph, critic results |
@@ -112,7 +112,7 @@
 | Medium | Single-file logic, API endpoints, DB queries, UI components | Sonnet 4.6 |
 | Complex | Multi-file changes, complex business logic, cross-cutting concerns | Opus 4.6 |
 
-### Critics at this stage (all 5, parallel)
+### Critics at this stage (all applicable, parallel)
 | Critic | Focus |
 |--------|-------|
 | Product | Every P0 requirement has tasks, user stories covered, AC traceable |
@@ -120,6 +120,7 @@
 | DevOps | Deployment/infra tasks present, migration order safe, CI/CD implications captured |
 | QA | Test requirements per task align with PRD testing strategy, regression risk identified |
 | Security | Security-sensitive tasks present (auth, input validation), no insecure design patterns |
+| Designer | Frontend tasks include accessibility, loading/empty/error states, responsive design (only if `has_frontend: true`) |
 
 ---
 
@@ -185,7 +186,7 @@ This is the core execution engine. It reads the dev plan, builds a dependency gr
                     │                  RALPH LOOP                      │
                     │                                                  │
   Ready Task ──▶   │   BUILD (fresh ctx)  ──▶  REVIEW (fresh ctx)    │
-                    │   Model per complexity     Opus 4.6, all 5 critics│
+                    │   Model per complexity     Opus 4.6, all critics  │
                     │         │                        │               │
                     │         │                   PASS ──▶ Create PR   │
                     │         │                        │               │
@@ -207,7 +208,7 @@ This is the core execution engine. It reads the dev plan, builds a dependency gr
 | 2 | Pre-flight check | Present execution plan, model config, completed tasks — **wait for approval** |
 | 3a | Setup per task | Create git branch, transition JIRA to "In Progress", update dev plan status |
 | 3b | **BUILD** phase | Fresh-context subagent (Sonnet 4.6 or Opus 4.6 per complexity), implements subtasks, writes tests, commits |
-| 3c | **REVIEW** phase | Fresh-context Opus 4.6 subagent, runs all 5 critic checklists against the diff |
+| 3c | **REVIEW** phase | Fresh-context Opus 4.6 subagent, runs all applicable critic checklists against the diff (5 standard + Designer if `has_frontend: true`) |
 | 3d | **ITERATE** if FAIL | New build subagent with fix prompt (critical findings only), re-review failed critics |
 | 3e | Escalation | After max iterations: mark BLOCKED, create WIP PR, ask user (override/fix/skip/abort) |
 | 3f | Create PR | Push branch, `gh pr create` with critic results + AC checklist + JIRA link |
@@ -215,15 +216,16 @@ This is the core execution engine. It reads the dev plan, builds a dependency gr
 | 4 | Unlock dependents | Mark task DONE, check for newly unblocked tasks, loop back to Step 3 |
 | 5 | Final report | Results table (task/status/PR/iterations/critics), summary, next steps |
 
-### Critics at this stage (all 5, parallel)
+### Critics at this stage (all applicable, parallel)
 
 | Critic | Focus |
 |--------|-------|
-| Product | PRD alignment, AC coverage, scope creep, user experience |
-| Dev | Code quality, patterns, conventions, test existence |
+| Product | PRD alignment, AC coverage, scope creep, user experience, analytics tracking |
+| Dev | Code quality, patterns, conventions, test existence, analytics instrumentation |
 | DevOps | Env vars, deployment readiness, resource usage, rollback risk |
 | QA | Test coverage (happy/error/boundary), test quality, AC coverage, regression risk |
 | Security | Injection, auth/authz, secrets, OWASP top 10, vulnerable dependencies, threat analysis |
+| Designer | Accessibility (WCAG 2.1 AA), responsive design, UX consistency, design system adherence (only if `has_frontend: true`) |
 
 ### Build model selection
 | Complexity | Model | Use Cases |
@@ -258,8 +260,8 @@ Run critics independently against any artifact.
 | Target | Default Critics |
 |--------|----------------|
 | PRD | Product |
-| Dev Plan | Product, Dev, DevOps, QA, Security |
-| Code Diff | Product, Dev, DevOps, QA, Security |
+| Dev Plan | Product, Dev, DevOps, QA, Security, Designer (if `has_frontend`) |
+| Code Diff | Product, Dev, DevOps, QA, Security, Designer (if `has_frontend`) |
 
 ---
 
@@ -276,6 +278,8 @@ All critics follow the same output pattern: **Verdict** (PASS/FAIL) → **Findin
 - No scope creep, no missing edge cases
 - Error states provide meaningful feedback
 - Testing strategy followed
+- Analytics events defined for key interactions (if PRD Section 11 has tracking requirements)
+- Tracking requirements traceable to success metrics
 
 ### Dev Critic
 - Project conventions followed (from `AGENT_CONSTRAINTS.md`)
@@ -285,6 +289,9 @@ All critics follow the same output pattern: **Verdict** (PASS/FAIL) → **Findin
 - No breaking changes, clean commits
 - No console.log/debugger, no magic numbers, no commented-out code
 - Parameterized queries, consistent async/await
+- Analytics events instrumented per PRD specs
+- No PII in analytics payloads (Critical)
+- Analytics calls non-blocking (async/fire-and-forget)
 
 ### DevOps Critic
 - No hardcoded env values or secrets in code/logs
@@ -312,12 +319,23 @@ All critics follow the same output pattern: **Verdict** (PASS/FAIL) → **Findin
 - API security (rate limiting, CORS, security headers, input size limits)
 - OWASP Top 10 assessment per review
 
+### Designer Critic (only when `has_frontend: true`)
+- Accessibility compliance (WCAG 2.1 AA): alt text, color contrast, keyboard access, ARIA, form labels, screen reader announcements
+- Design system adherence: uses existing components, design tokens, naming conventions
+- Responsive design: mobile/tablet/desktop breakpoints, touch targets, relative font sizes
+- UX consistency: loading/empty/error states, success feedback, navigation patterns
+- Visual hierarchy: spacing, typography, scannability
+- Animation: purposeful, respects prefers-reduced-motion, non-blocking
+- CSP compatibility
+
 ---
 
 ## Configuration — `pipeline.config.yaml`
 
 ```yaml
 pipeline:
+  has_frontend: false               # Set true to enable Designer Critic
+
   jira:
     project_key: PROJ
     host: https://yourteam.atlassian.net
@@ -329,10 +347,10 @@ pipeline:
     escalation: user                # user | skip | fail
     stages:                         # Per-stage critic overrides
       req2prd:   { critics: [product], mode: sequential }
-      prd2plan:  { critics: [product, dev, devops, qa, security], mode: parallel }
+      prd2plan:  { critics: [product, dev, devops, qa, security, designer], mode: parallel }
       plan2jira: { critics: [product, dev], mode: parallel, mandatory: true }
-      execute:   { critics: [product, dev, devops, qa, security], mode: parallel }
-      pre_merge: { critics: [dev, devops, security], mode: sequential }
+      execute:   { critics: [product, dev, devops, qa, security, designer], mode: parallel }
+      pre_merge: { critics: [dev, devops, security, designer], mode: sequential }
 
   execution:
     ralph_loop:
@@ -410,7 +428,8 @@ project-root/
     │   ├── dev-critic.md
     │   ├── devops-critic.md
     │   ├── qa-critic.md
-    │   └── security-critic.md
+    │   ├── security-critic.md
+    │   └── designer-critic.md
     └── examples/
         └── example-prd.md
 ```
@@ -438,4 +457,4 @@ project-root/
 | `/plan2jira @<plan>` | Dev plan file | JIRA issues + updated plan | Mandatory critic validation (Dev+Product) + JIRA creation confirm |
 | `/execute @<plan>` | Dev plan file | Code, PRs, JIRA updates | Per-PR approval |
 | `/validate @<file>` | Any artifact or `--diff` | Critic feedback | None (informational) |
-| `/fullpipeline <requirement>` | Requirement text | Everything above | All 5 gates (including plan2jira validation) |
+| `/fullpipeline <requirement>` | Requirement text | Everything above | All gates (including plan2jira validation) |

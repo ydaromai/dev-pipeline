@@ -31,7 +31,8 @@ Generate a complete PRD following the template structure. Ensure:
 1. **Section 5 (User Stories)**: Each user story has inline acceptance criteria that are specific and testable
 2. **Section 7 (Consolidated AC)**: All acceptance criteria from Section 5 are collected here, grouped by priority (P0/P1/P2)
 3. **Section 9 (Testing Strategy)**: Define required test types per user story, considering the project's `pipeline.config.yaml` test_requirements if available
-4. **All sections filled**: No empty sections — if genuinely not applicable, state "N/A — <reason>"
+4. **Section 11 (Success Metrics)**: Include the "Tracking & Analytics Events" subsection — define events needed to measure success metrics, or state "N/A — metrics measured server-side / via existing dashboards"
+5. **All sections filled**: No empty sections — if genuinely not applicable, state "N/A — <reason>"
 
 Derive the slug from the PRD title (kebab-case, e.g., "Daily Revenue Trends" → `daily-revenue-trends`).
 

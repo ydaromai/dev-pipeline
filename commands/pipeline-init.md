@@ -96,7 +96,8 @@ Scan the project structure to build `test_requirements` mapping:
 - If `api/` or `routes/` exists → `"api/**/*.js": [unit, integration]`
 
 **Auto-detect frontend:**
-- If `public/`, `frontend/`, `src/components/`, or `app/` exists → `has_frontend: true`
+- If `public/` (with `.html`/`.css`/`.jsx`/`.tsx` files), `frontend/`, `src/components/`, or `app/` (with UI framework files like `.jsx`/`.tsx`/`.vue`/`.svelte`) exists → `has_frontend: true`
+- Note: bare `app/` directories in backend frameworks (Express, Rails) should not trigger `has_frontend` — look for UI framework markers
 - Otherwise → `has_frontend: false`
 
 ## Step 5: Create pipeline.config.yaml

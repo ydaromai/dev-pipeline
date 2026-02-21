@@ -99,6 +99,8 @@ Define events needed to measure the success metrics above. If no client-side tra
 | feature_viewed | User opens feature page | user_id, timestamp | Metric 1 |
 | action_completed | User completes key action | user_id, duration_ms, result | Metric 2 |
 
+> **PII note:** Do not include personally identifiable information (emails, names, IPs, phone numbers) in event properties. Opaque user IDs and session IDs are acceptable.
+
 ## 12. Open Questions
 
 - [ ] Unresolved decision 1

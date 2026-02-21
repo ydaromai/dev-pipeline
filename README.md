@@ -9,7 +9,7 @@ Requirement  -->  PRD  -->  Dev Plan  -->  JIRA  -->  Code (Ralph Loop)
               GATE 1     GATE 2      GATE 3a/3b    GATE 4 (per PR)
 ```
 
-Each stage is a Claude Code slash command. Human approval gates sit between stages. Five critic agents (Product, Dev, DevOps, QA, Security) validate artifacts at each gate.
+Each stage is a Claude Code slash command. Human approval gates sit between stages. Six critic agents (Product, Dev, DevOps, QA, Security, Designer) validate artifacts at each gate. The Designer Critic is conditionally active for projects with `has_frontend: true`.
 
 ## Quick Start
 
@@ -57,7 +57,7 @@ Or run stages individually:
 |---------|-------------|
 | `/pipeline-init` | One-time project setup (config, directories, JIRA) |
 | `/req2prd <requirement>` | Requirement to PRD with Product Critic review |
-| `/prd2plan @<prd>` | PRD to dev plan with 5-critic review |
+| `/prd2plan @<prd>` | PRD to dev plan with 6-critic review |
 | `/plan2jira @<plan>` | Dev plan to JIRA issues (mandatory critic gate) |
 | `/execute @<plan>` | Execute tasks with Ralph Loop (build/review cycles) |
 | `/fullpipeline <requirement>` | Run all stages end-to-end with gates |
@@ -68,7 +68,7 @@ Or run stages individually:
 The execution engine uses a build/review cycle with fresh context per iteration:
 
 ```
-BUILD (Sonnet 4.6 or Opus 4.6)  -->  REVIEW (Opus 4.6, 5 critics)  -->  PASS? --> PR
+BUILD (Sonnet 4.6 or Opus 4.6)  -->  REVIEW (Opus 4.6, 6 critics)  -->  PASS? --> PR
                                       |
                                      FAIL
                                       |
@@ -78,17 +78,18 @@ BUILD (Sonnet 4.6 or Opus 4.6)  -->  REVIEW (Opus 4.6, 5 critics)  -->  PASS? --
 
 - **Simple/Medium tasks**: Built with Sonnet 4.6
 - **Complex tasks**: Built with Opus 4.6
-- **All reviews**: Opus 4.6 with all 5 critics
+- **All reviews**: Opus 4.6 with all applicable critics (6 total, Designer conditional on `has_frontend`)
 
 ## Critic Agents
 
 | Critic | Focus |
 |--------|-------|
-| **Product** | PRD alignment, acceptance criteria coverage |
-| **Dev** | Code quality, patterns, conventions |
+| **Product** | PRD alignment, acceptance criteria coverage, analytics tracking |
+| **Dev** | Code quality, patterns, conventions, analytics instrumentation |
 | **DevOps** | Deployment readiness, infrastructure, secrets |
 | **QA** | Test coverage, edge cases, regression risk |
 | **Security** | OWASP Top 10, auth, injection, secrets, threat modeling |
+| **Designer** | Accessibility (WCAG 2.1 AA), responsive design, UX consistency, design system adherence (only when `has_frontend: true`) |
 
 ## Project Structure
 
@@ -109,6 +110,7 @@ dev-pipeline/
       devops-critic.md
       qa-critic.md
       security-critic.md
+      designer-critic.md
     templates/           # PRD and config templates
       prd-template.md
       pipeline-config-template.yaml

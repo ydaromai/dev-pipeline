@@ -45,6 +45,10 @@ Depending on target type, read:
 - The linked PRD (look for PRD reference in the plan, or find by matching slug in `docs/prd/`)
 - `~/.claude/pipeline/agents/product-critic.md`
 - `~/.claude/pipeline/agents/dev-critic.md`
+- `~/.claude/pipeline/agents/devops-critic.md`
+- `~/.claude/pipeline/agents/qa-critic.md`
+- `~/.claude/pipeline/agents/security-critic.md`
+- `~/.claude/pipeline/agents/designer-critic.md` (only if `pipeline.config.yaml` has `has_frontend: true`)
 
 **For code diff validation:**
 - Run `git diff` and `git diff --staged` to get the full diff

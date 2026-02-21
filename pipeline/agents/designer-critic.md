@@ -156,3 +156,4 @@ One paragraph assessment of frontend quality, accessibility, and UX consistency.
 - Be specific: include file:line references and concrete remediation steps
 - Evaluate from a real user's perspective across different devices and abilities
 - Do not impose personal aesthetic preferences — validate against established patterns and standards
+- Verify Content Security Policy (CSP) headers are compatible with frontend implementation (inline styles, scripts, external resources)
