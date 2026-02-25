@@ -1,0 +1,17 @@
+{
+  "name": "ydaromai-tools",
+  "owner": {
+    "name": "Yohai Darom"
+  },
+  "metadata": {
+    "description": "AI-powered development tools by Yohai Darom"
+  },
+  "plugins": [
+    {
+      "name": "dev-pipeline",
+      "source": "./",
+      "description": "AI-driven software delivery pipeline — PRD, dev plan, JIRA, execution with Ralph Loop and multi-critic review",
+      "version": "1.0.0"
+    }
+  ]
+}
