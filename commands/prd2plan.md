@@ -85,7 +85,7 @@ Spawn all applicable critic subagents in parallel using the Task tool:
 **Product Critic (model: opus — Opus 4.6):**
 ```
 You are the Product Critic. Read:
-1. ~/.claude/pipeline/agents/product-critic.md (your persona)
+1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/product-critic.md (your persona)
 2. The PRD: <paste PRD content>
 3. The dev plan: <paste plan content>
 
@@ -101,7 +101,7 @@ Produce your structured output.
 **Dev Critic (model: opus — Opus 4.6):**
 ```
 You are the Dev Critic. Read:
-1. ~/.claude/pipeline/agents/dev-critic.md (your persona)
+1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/dev-critic.md (your persona)
 2. The dev plan document below
 
 Review the dev plan for:
@@ -118,7 +118,7 @@ Dev plan content:
 **DevOps Critic (model: opus — Opus 4.6):**
 ```
 You are the DevOps Critic. Read:
-1. ~/.claude/pipeline/agents/devops-critic.md (your persona)
+1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/devops-critic.md (your persona)
 2. The dev plan document below
 
 Review the dev plan for:
@@ -134,7 +134,7 @@ Dev plan content:
 **QA Critic (model: opus — Opus 4.6):**
 ```
 You are the QA Critic. Read:
-1. ~/.claude/pipeline/agents/qa-critic.md (your persona)
+1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/qa-critic.md (your persona)
 2. The PRD (Section 9 — Testing Strategy): <paste PRD content>
 3. The dev plan document below
 
@@ -151,7 +151,7 @@ Dev plan content:
 **Security Critic (model: opus — Opus 4.6):**
 ```
 You are the Security Critic. Read:
-1. ~/.claude/pipeline/agents/security-critic.md (your persona)
+1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/security-critic.md (your persona)
 2. The PRD: <paste PRD content>
 3. The dev plan document below
 
@@ -168,7 +168,7 @@ Dev plan content:
 **Designer Critic (model: opus — Opus 4.6) — Only spawn if pipeline.config.yaml has `has_frontend: true`:**
 ```
 You are the Designer Critic. Read:
-1. ~/.claude/pipeline/agents/designer-critic.md (your persona)
+1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/designer-critic.md (your persona)
 2. The PRD: <paste PRD content>
 3. The dev plan document below
 

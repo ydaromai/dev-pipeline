@@ -1,0 +1,9 @@
+{
+  "name": "dev-pipeline",
+  "version": "1.0.0",
+  "description": "AI-driven software delivery pipeline — PRD, dev plan, JIRA, execution with Ralph Loop and multi-critic review",
+  "author": { "name": "Yohai Darom" },
+  "repository": "https://github.com/ydaromai/dev-pipeline",
+  "license": "MIT",
+  "keywords": ["pipeline", "prd", "jira", "ralph-loop", "critics", "dev-plan"]
+}

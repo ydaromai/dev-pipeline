@@ -38,23 +38,23 @@ Depending on target type, read:
 
 **For PRD validation:**
 - The PRD file
-- `~/.claude/pipeline/agents/product-critic.md`
+- `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/product-critic.md`
 
 **For dev plan validation:**
 - The dev plan file
 - The linked PRD (look for PRD reference in the plan, or find by matching slug in `docs/prd/`)
-- `~/.claude/pipeline/agents/product-critic.md`
-- `~/.claude/pipeline/agents/dev-critic.md`
-- `~/.claude/pipeline/agents/devops-critic.md`
-- `~/.claude/pipeline/agents/qa-critic.md`
-- `~/.claude/pipeline/agents/security-critic.md`
-- `~/.claude/pipeline/agents/designer-critic.md` (only if `pipeline.config.yaml` has `has_frontend: true`)
+- `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/product-critic.md`
+- `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/dev-critic.md`
+- `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/devops-critic.md`
+- `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/qa-critic.md`
+- `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/security-critic.md`
+- `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/designer-critic.md` (only if `pipeline.config.yaml` has `has_frontend: true`)
 
 **For code diff validation:**
 - Run `git diff` and `git diff --staged` to get the full diff
 - Read the related task spec (if identifiable from branch name or `$ARGUMENTS`)
 - Read the PRD (if identifiable)
-- All relevant critic agent files from `~/.claude/pipeline/agents/` (including `security-critic.md` and `designer-critic.md` if `pipeline.config.yaml` has `has_frontend: true`)
+- All relevant critic agent files from `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/` (including `security-critic.md` and `designer-critic.md` if `pipeline.config.yaml` has `has_frontend: true`)
 - `docs/ai_definitions/AGENT_CONSTRAINTS.md`
 - `pipeline.config.yaml` for test requirements
 
@@ -67,7 +67,7 @@ For each critic, spawn a subagent (Task tool, model: opus — Opus 4.6) with the
 **Subagent prompt template:**
 ```
 You are the [ROLE] Critic. Read your persona and checklist:
-<paste contents of ~/.claude/pipeline/agents/[role]-critic.md>
+<paste contents of ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/[role]-critic.md>
 
 Review the following [target type]:
 <paste target content>

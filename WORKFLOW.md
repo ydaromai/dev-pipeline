@@ -54,7 +54,7 @@
 
 | Step | Action | Details |
 |------|--------|---------|
-| 1 | Read PRD template | `~/.claude/pipeline/templates/prd-template.md` |
+| 1 | Read PRD template | `${CLAUDE_PLUGIN_ROOT}/pipeline/templates/prd-template.md` |
 | 2 | Clarify requirements | If input < 200 chars: ask about target users, core problem, success metrics, constraints, scope |
 | 3 | Generate PRD | 14-section PRD: problem, users, goals, non-goals, user stories (with inline AC), functional requirements (P0/P1/P2), consolidated AC, non-functional, testing strategy, technical context, success metrics, open questions, risks, timeline |
 | 4 | All-critic scoring review | All applicable critics (Product, Dev, DevOps, QA, Security, Designer if `has_frontend`) review PRD in parallel, each producing a score (1–10) |

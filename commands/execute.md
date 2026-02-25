@@ -155,12 +155,12 @@ After the build phase completes, spawn a **review subagent** (Task tool, model: 
 You are the Review Agent for the Ralph Loop. You will review the implementation
 using all applicable critic perspectives. Read all critic persona files:
 
-1. ~/.claude/pipeline/agents/product-critic.md
-2. ~/.claude/pipeline/agents/dev-critic.md
-3. ~/.claude/pipeline/agents/devops-critic.md
-4. ~/.claude/pipeline/agents/qa-critic.md
-5. ~/.claude/pipeline/agents/security-critic.md
-6. ~/.claude/pipeline/agents/designer-critic.md (only if pipeline.config.yaml has `has_frontend: true`)
+1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/product-critic.md
+2. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/dev-critic.md
+3. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/devops-critic.md
+4. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/qa-critic.md
+5. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/security-critic.md
+6. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/designer-critic.md (only if pipeline.config.yaml has `has_frontend: true`)
 
 ## What to review
 - Branch: <branch name>

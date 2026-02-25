@@ -11,11 +11,15 @@ Requirement  -->  PRD  -->  Dev Plan  -->  JIRA  -->  Code (Ralph Loop)
 
 Each stage is a Claude Code slash command. Human approval gates sit between stages. Six critic agents (Product, Dev, DevOps, QA, Security, Designer) validate artifacts at each gate. The Designer Critic is conditionally active for projects with `has_frontend: true`.
 
-## Quick Start
+## Installation
 
-### 1. Install
+### As a Claude Code Plugin (recommended)
 
-Copy the pipeline commands to your Claude Code config:
+```
+/plugin install ydaromai/dev-pipeline
+```
+
+### Manual (symlink — legacy)
 
 ```bash
 # Clone this repo
@@ -26,7 +30,9 @@ ln -s ~/Projects/dev-pipeline/commands ~/.claude/commands
 ln -s ~/Projects/dev-pipeline/pipeline ~/.claude/pipeline
 ```
 
-### 2. Initialize a project
+## Quick Start
+
+### 1. Initialize a project
 
 In your target project directory:
 
@@ -36,7 +42,7 @@ In your target project directory:
 
 This creates `pipeline.config.yaml`, sets up directories, and configures JIRA integration.
 
-### 3. Run the pipeline
+### 2. Run the pipeline
 
 Full pipeline (end-to-end):
 ```
