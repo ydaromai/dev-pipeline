@@ -12,6 +12,12 @@
       "source": "./",
       "description": "AI-driven software delivery pipeline — PRD, dev plan, JIRA, execution with Ralph Loop and multi-critic review",
       "version": "1.0.0"
+    },
+    {
+      "name": "ask",
+      "source": "./plugins/ask",
+      "description": "Read-only Q&A skill — ask anything about your codebase without modifying files",
+      "version": "1.0.0"
     }
   ]
 }
