@@ -169,30 +169,28 @@ class MarkdownParser {
 
   parseBulletList() {
     const items = [];
-    
+
     while (this.currentLine < this.lines.length) {
       const line = this.lines[this.currentLine];
-      
-      // Check for checkbox (task list)
+
+      // Check for checkbox — render as regular bullet with status prefix
+      // (taskList/taskItem ADF nodes are not supported in all JIRA project types)
       const checkboxMatch = line.match(/^[-*] \[([ x])\] (.+)/);
       if (checkboxMatch) {
         const checked = checkboxMatch[1] === 'x';
         const text = checkboxMatch[2];
-        
+        const statusPrefix = checked ? '\u2611 ' : '\u2610 ';
+
         items.push({
-          type: 'taskItem',
-          attrs: {
-            localId: `task-${this.currentLine}`,
-            state: checked ? 'DONE' : 'TODO',
-          },
+          type: 'listItem',
           content: [
             {
-              type: 'text',
-              text,
+              type: 'paragraph',
+              content: this.parseInlineText(statusPrefix + text),
             },
           ],
         });
-        
+
         this.currentLine++;
         continue;
       }
@@ -212,16 +210,13 @@ class MarkdownParser {
           },
         ],
       });
-      
+
       this.currentLine++;
     }
 
     if (items.length > 0) {
-      // Check if all items are task items
-      const allTasks = items.every(item => item.type === 'taskItem');
-      
       this.content.push({
-        type: allTasks ? 'taskList' : 'bulletList',
+        type: 'bulletList',
         content: items,
       });
     }
