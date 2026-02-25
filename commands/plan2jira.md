@@ -11,9 +11,8 @@ You are executing the **plan2jira** pipeline stage. Create JIRA issues from an a
 
 1. Read the dev plan file provided via `$ARGUMENTS`
 2. Locate the JIRA import script by checking these paths in order:
-   - `../dev-pipeline/scripts/jira/jira-import.js` (default — sibling dev-pipeline project)
-   - `scripts/jira/jira-import.js` (current project fallback)
-   - `../cursor-pipeline-template/scripts/jira/jira-import.js` (legacy template fallback)
+   - `scripts/jira/jira-import.js` (current project override — use if present)
+   - `${CLAUDE_PLUGIN_ROOT}/scripts/jira/jira-import.js` (default — from plugin)
    - If none exist, report error and stop
 3. Read `pipeline.config.yaml` for JIRA config (if it exists):
    - `pipeline.jira.project_key` — JIRA project key (e.g., MVP, PAR)
@@ -21,8 +20,7 @@ You are executing the **plan2jira** pipeline stage. Create JIRA issues from an a
    - `pipeline.jira.env_file` — path to credentials file
 4. Locate the `.env.jira` credentials file by checking:
    - `.env.jira` in the current project root
-   - `../dev-pipeline/.env.jira` (sibling dev-pipeline project)
-   - `../cursor-pipeline-template/.env.jira` (legacy template fallback)
+   - `${CLAUDE_PLUGIN_ROOT}/.env.jira` (plugin fallback — local development only)
    - If none exist, ask the user for JIRA credentials (JIRA_API_URL, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY) and create `.env.jira` in the project root
 
 If `pipeline.config.yaml` doesn't exist, check `.env.jira` for `JIRA_PROJECT_KEY`. If not found, ask the user for the JIRA project key.
@@ -36,7 +34,7 @@ Spawn two critic subagents in parallel using the Task tool:
 **Product Critic (model: opus — Opus 4.6):**
 ```
 You are the Product Critic. Read:
-1. ~/.claude/pipeline/agents/product-critic.md (your persona)
+1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/product-critic.md (your persona)
 2. The PRD (find by matching slug in docs/prd/)
 3. The dev plan: <paste plan content>
 
@@ -52,7 +50,7 @@ Produce your structured output.
 **Dev Critic (model: opus — Opus 4.6):**
 ```
 You are the Dev Critic. Read:
-1. ~/.claude/pipeline/agents/dev-critic.md (your persona)
+1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/dev-critic.md (your persona)
 2. The dev plan document below
 
 Review the dev plan for:

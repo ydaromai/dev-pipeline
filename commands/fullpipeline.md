@@ -28,7 +28,7 @@ Each gate requires human approval before proceeding. Gate 3a (critic validation)
 
 Execute the `/req2prd` command with the provided requirement:
 
-1. Read `~/.claude/pipeline/templates/prd-template.md`
+1. Read `${CLAUDE_PLUGIN_ROOT}/pipeline/templates/prd-template.md`
 2. If input is short (< 200 chars), ask clarifying questions
 3. Generate PRD with all sections filled (including inline AC per story, consolidated AC, testing strategy)
 4. Run all-critic scoring Ralph Loop (per-critic > 8.5, overall > 9.0, max 5 iterations)

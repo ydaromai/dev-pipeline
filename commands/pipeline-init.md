@@ -103,7 +103,7 @@ Scan the project structure to build `test_requirements` mapping:
 
 ## Step 5: Create pipeline.config.yaml
 
-Read the template from `~/.claude/pipeline/templates/pipeline-config-template.yaml` and customize it with the gathered values:
+Read the template from `${CLAUDE_PLUGIN_ROOT}/pipeline/templates/pipeline-config-template.yaml` and customize it with the gathered values:
 
 ```yaml
 pipeline:
@@ -211,7 +211,7 @@ If `CLAUDE.md` exists, **append** the pipeline integration section (don't overwr
 
 ## Pipeline Integration
 
-This project uses the global development pipeline (`~/.claude/commands/`).
+This project uses the global development pipeline (`${CLAUDE_PLUGIN_ROOT}/commands/`).
 
 ### Pipeline Commands
 | Command | Description |

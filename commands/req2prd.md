@@ -9,7 +9,7 @@ You are executing the **req2prd** pipeline stage. Convert a raw requirement into
 
 ## Step 1: Read the PRD template
 
-Read `~/.claude/pipeline/templates/prd-template.md` for the required PRD structure.
+Read `${CLAUDE_PLUGIN_ROOT}/pipeline/templates/prd-template.md` for the required PRD structure.
 
 If a `pipeline.config.yaml` exists in the project root, read it for project-specific paths (the `paths.prd_dir` value). Otherwise default to `docs/prd/`.
 
@@ -47,7 +47,7 @@ Read `pipeline.config.yaml` for the `req2prd.critics` list. Default: `[product, 
 **Subagent prompt (per critic):**
 ```
 You are the [ROLE] Critic. Read your persona:
-<paste ~/.claude/pipeline/agents/[role]-critic.md>
+<paste ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/[role]-critic.md>
 
 You are reviewing a PRD (not code or a dev plan). Use your PRD Review Focus checklist.
 
