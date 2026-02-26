@@ -1,42 +1,88 @@
 # /fullpipeline — End-to-End Pipeline Orchestration
 
-You are executing the **full pipeline**. This chains all pipeline stages with human gates between each stage.
+You are executing the **full pipeline**. This chains all pipeline stages with human gates between each stage. Each stage runs in a **fresh-context subagent** to keep the orchestrator lightweight — all artifacts are persisted on disk, so no conversational history needs to carry between stages.
 
 **Input:** Raw requirement text via `$ARGUMENTS`
 **Output:** Fully implemented feature with PRs merged, JIRA updated
 
 ---
 
-## Overview
+## Architecture: Fresh Context Per Stage
 
 ```
-Requirement → PRD → Dev Plan → JIRA → Execution (Ralph Loop) → Done
-                ↑        ↑      ↑  ↑                    ↑
-            [GATE 1] [GATE 2] [3a][3b]           [GATE 4: per PR]
-                                 │
-                          Mandatory critic
-                         validation (Dev +
-                           Product) before
-                            JIRA creation
+ORCHESTRATOR (this agent — lightweight coordinator)
+  │
+  ├─ Stage 1 subagent (fresh context) ──► docs/prd/<slug>.md
+  │    └─ critic subagents (parallel)
+  │
+  │  ◄── GATE 1: user approves PRD ──►
+  │
+  ├─ Stage 2 subagent (fresh context) ──► docs/dev_plans/<slug>.md
+  │    └─ critic subagents (parallel)
+  │
+  │  ◄── GATE 2: user approves plan ──►
+  │
+  ├─ Stage 3 subagent (fresh context) ──► JIRA issues created
+  │    └─ critic subagents (mandatory)
+  │
+  │  ◄── GATE 3a/3b: critic validation + user confirms JIRA ──►
+  │
+  └─ Stage 4 subagent (fresh context) ──► Code implemented, PRs merged
+       └─ per-task: build subagent → review subagent → critic subagents
 ```
 
-Each gate requires human approval before proceeding. Gate 3a (critic validation) is mandatory and automated.
+**Why fresh context?** By Gate 4, the orchestrator would be carrying the full PRD generation conversation, all critic scoring iterations, plan generation, JIRA creation dialogue — none of which the execution engine needs. Each stage's meaningful output lives on disk (PRD file, dev plan file, JIRA mapping). The orchestrator only tracks file paths, the slug, and user decisions.
+
+**Subagent depth:** Max depth is 3 (orchestrator → stage → build/review → critics). Claude Code handles this natively.
 
 ---
 
-## Stage 1: Requirement → PRD
+## Orchestrator State
 
-Execute the `/req2prd` command with the provided requirement:
+The orchestrator maintains only these variables between gates:
 
-1. Read `${CLAUDE_PLUGIN_ROOT}/pipeline/templates/prd-template.md`
-2. If input is short (< 200 chars), ask clarifying questions
-3. Generate PRD with all sections filled (including inline AC per story, consolidated AC, testing strategy)
-4. Run all-critic scoring Ralph Loop (per-critic > 8.5, overall > 9.0, max 5 iterations)
-5. Write to `docs/prd/<slug>.md`
+```
+slug:           <derived from PRD title, kebab-case>
+prd_path:       docs/prd/<slug>.md
+plan_path:      docs/dev_plans/<slug>.md
+requirement:    <original requirement text>
+user_prefs:     { skip_jira: bool, ... }
+```
+
+Everything else is persisted on disk and read fresh by each stage subagent.
+
+---
+
+## Stage 1: Requirement → PRD (fresh context)
+
+Spawn a subagent (Task tool, model: opus — Opus 4.6) to execute the `/req2prd` stage:
+
+**Subagent prompt:**
+```
+You are executing the /req2prd pipeline stage. Read the full command instructions:
+<read and paste ${CLAUDE_PLUGIN_ROOT}/commands/req2prd.md>
+
+Execute all steps (1 through 6) for this requirement:
+
+<paste requirement text from $ARGUMENTS>
+
+Important:
+- Read pipeline.config.yaml for project-specific config
+- Run the full scoring Ralph Loop (all critics, iterate until thresholds met)
+- Write the PRD to docs/prd/<slug>.md
+- Return the following in your final message:
+  1. The slug
+  2. The PRD file path
+  3. A summary: user story count, P0/P1/P2 AC counts, open questions count
+  4. The final critic score table (all critics, scores, iteration count)
+  5. Any unresolved warnings or issues
+```
+
+When the subagent completes, extract the slug and PRD path. Store them as orchestrator state.
 
 ### GATE 1: PRD Approval
 
-Present the PRD summary and wait for user approval.
+Present the subagent's summary to the user:
 
 ```
 ## Gate 1: PRD Review
@@ -56,6 +102,8 @@ PRD generated: docs/prd/<slug>.md
 | Security | 9.5 | ✅ (> 8.5) |
 | Performance | 9.0 | ✅ (> 8.5) |
 | Data Integrity | 9.5 | ✅ (> 8.5) |
+| Observability | 9.0 / N/A | ✅ (> 8.5) / — |
+| API Contract | 9.5 / N/A | ✅ (> 8.5) / — |
 | Designer | N/A | — |
 | **Overall** | **9.3** | **✅ (> 9.0)** |
 
@@ -71,23 +119,38 @@ Options: approve | edit | abort
 
 ---
 
-## Stage 2: PRD → Dev Plan
+## Stage 2: PRD → Dev Plan (fresh context)
 
-Execute the `/prd2plan` command with the approved PRD:
+Spawn a subagent (Task tool, model: opus — Opus 4.6) to execute the `/prd2plan` stage:
 
-1. Read PRD + breakdown definition + agent constraints
-2. Explore codebase for patterns
-3. Generate Epic/Story/Task/Subtask breakdown with:
-   - Dependency annotations (Depends On, Parallel Group)
-   - Complexity ratings (Simple/Medium/Complex)
-   - Test requirements per task
-4. Validate with `validate-breakdown.js` (if available)
-5. Run all applicable critics: Product + Dev + DevOps + QA + Security + Performance + Data Integrity + Designer if `has_frontend: true` (parallel, iterate until 0 Critical + 0 Warnings, max 5 iterations)
-6. Write to `docs/dev_plans/<slug>.md`
+**Subagent prompt:**
+```
+You are executing the /prd2plan pipeline stage. Read the full command instructions:
+<read and paste ${CLAUDE_PLUGIN_ROOT}/commands/prd2plan.md>
+
+Execute all steps (1 through 7) for this PRD:
+
+PRD file: <prd_path>
+
+Important:
+- Read the PRD file, pipeline.config.yaml, AGENT_CONSTRAINTS.md, TASK_BREAKDOWN_DEFINITION.md
+- Explore the codebase for existing patterns
+- Generate the full Epic/Story/Task/Subtask breakdown
+- Run the full critic review loop (0 Critical + 0 Warnings, max 5 iterations)
+- Write the dev plan to docs/dev_plans/<slug>.md
+- Return the following in your final message:
+  1. The dev plan file path
+  2. A summary: story count, task count (by complexity), parallel groups
+  3. The final critic results (all critics, verdicts, iteration count)
+  4. The dependency graph
+  5. Any unresolved issues
+```
+
+When the subagent completes, extract the plan path. Store as orchestrator state.
 
 ### GATE 2: Dev Plan Approval
 
-Present the plan summary with dependency graph and wait for approval.
+Present the subagent's summary to the user:
 
 ```
 ## Gate 2: Dev Plan Review
@@ -96,7 +159,6 @@ Dev plan generated: docs/dev_plans/<slug>.md
 - Stories: N
 - Tasks: N (Simple: X, Medium: Y, Complex: Z)
 - Parallel Groups: A(N tasks), B(N tasks), C(N tasks)
-- Estimated Time: X hours
 - Product Critic: PASS ✅ (0 Critical, 0 Warnings)
 - Dev Critic: PASS ✅ (0 Critical, 0 Warnings)
 - DevOps Critic: PASS ✅ (0 Critical, 0 Warnings)
@@ -104,6 +166,8 @@ Dev plan generated: docs/dev_plans/<slug>.md
 - Security Critic: PASS ✅ (0 Critical, 0 Warnings)
 - Performance Critic: PASS ✅ (0 Critical, 0 Warnings)
 - Data Integrity Critic: PASS ✅ (0 Critical, 0 Warnings)
+- Observability Critic: PASS ✅ / N/A (0 Critical, 0 Warnings)
+- API Contract Critic: PASS ✅ / N/A (0 Critical, 0 Warnings)
 - Designer Critic: PASS ✅ / N/A (0 Critical, 0 Warnings)
 Ralph Loop iterations: N
 
@@ -118,83 +182,86 @@ Options: approve | edit | abort
 
 ---
 
-## Stage 3: Dev Plan → JIRA
+## Stage 3: Dev Plan → JIRA (fresh context)
 
-Execute the `/plan2jira` command with the approved dev plan:
+Spawn a subagent (Task tool, model: opus — Opus 4.6) to execute the `/plan2jira` stage:
 
-1. **Mandatory critic validation** — run Product + Dev critics on the plan (must pass before JIRA creation)
-2. Read pipeline.config.yaml for JIRA config
-3. Dry-run to show what will be created
-4. Wait for confirmation
-5. Create JIRA issues and update dev plan with keys
-
-### GATE 3a: Plan Validation (mandatory)
-
+**Subagent prompt:**
 ```
-## Gate 3a: Plan Validation
+You are executing the /plan2jira pipeline stage. Read the full command instructions:
+<read and paste ${CLAUDE_PLUGIN_ROOT}/commands/plan2jira.md>
 
-Before creating JIRA issues, the plan must pass critic review:
+Execute all steps for this dev plan:
 
-- Product Critic: PASS ✅ / FAIL ❌
-- Dev Critic: PASS ✅ / FAIL ❌
+Dev plan file: <plan_path>
 
-If FAIL: fix plan → re-validate (max 2 iterations) or override.
-```
-
-### GATE 3b: JIRA Confirmation
-
-```
-## Gate 3b: JIRA Issues Created
-
-Created N issues in project <KEY>:
-- 1 Epic: <KEY>-100
-- N Stories: <KEY>-101, <KEY>-102, ...
-- M Tasks: <KEY>-103, <KEY>-104, ...
-
-Dev plan updated with JIRA links.
-
-Proceed to execution? (approve/skip-jira/abort)
+Important:
+- Run mandatory critic validation (Product + Dev must pass)
+- Read pipeline.config.yaml for JIRA config
+- Run dry-run first and present preview
+- Ask user for confirmation before creating issues
+- Create JIRA issues and update the dev plan with keys
+- Return the following in your final message:
+  1. Critic validation results (Product, Dev — PASS/FAIL)
+  2. Number of issues created (Epic, Stories, Tasks)
+  3. JIRA keys for Epic and Stories
+  4. Whether the dev plan was updated with JIRA links
+  5. Any issues encountered
 ```
 
-**If skip-jira** → proceed to execution without JIRA integration (useful when JIRA is unavailable)
+**Note:** This stage includes its own user interaction (Gate 3a critic validation and Gate 3b JIRA confirmation) — the subagent handles both gates directly since they are tightly coupled to the JIRA creation flow.
+
+**If user chose skip-jira** → record `user_prefs.skip_jira = true`, skip this stage entirely, proceed to Stage 4
 
 ---
 
-## Stage 4: Execute with Ralph Loop
+## Stage 4: Execute with Ralph Loop (fresh context)
 
-Execute the `/execute` command with the dev plan:
+Spawn a subagent (Task tool, model: opus — Opus 4.6) to execute the `/execute` stage:
 
-1. **Reconcile JIRA statuses** — syncs dev plan task statuses to JIRA (transitions completed tasks to "Done", in-progress tasks to "In Progress"). This ensures JIRA is accurate after session restarts.
-2. Build dependency graph
-3. Present execution plan
-4. For each ready task (respecting dependencies):
-   - **BUILD** (fresh context, build model per complexity)
-   - **REVIEW** (fresh context, Opus 4.6, all applicable critics)
-   - **ITERATE** if FAIL (max 3 cycles, then escalate)
-   - **PR** creation with critic results
-   - **MERGE** after human approval
+**Subagent prompt:**
+```
+You are executing the /execute pipeline stage. Read the full command instructions:
+<read and paste ${CLAUDE_PLUGIN_ROOT}/commands/execute.md>
+
+Execute all steps for this dev plan:
+
+Dev plan file: <plan_path>
+JIRA integration: <enabled/disabled based on user_prefs.skip_jira>
+
+Important:
+- Reconcile JIRA statuses first (if JIRA enabled)
+- Build the dependency graph and present pre-flight check
+- Execute tasks using the Ralph Loop (BUILD → REVIEW → ITERATE)
+- Each build/review uses fresh context subagents (already defined in execute.md)
+- Create PRs and wait for user approval per PR (Gate 4)
+- Update dev plan and JIRA statuses as tasks complete
+- Return the following in your final message:
+  1. Results table: task, status, PR number, iteration count, critic results
+  2. Summary: completed/blocked counts, total iterations, PRs merged
+  3. Any blocked tasks with their failure reasons
+  4. Next steps
+```
 
 ### GATE 4: Per-PR Approval
 
-Each task's PR requires approval (configurable — can be set to auto-approve for Simple tasks).
+Gate 4 is handled inside the Stage 4 subagent — each task's PR requires user approval before merge. The subagent interacts with the user directly for these approvals since they are tightly coupled to the execution loop.
 
 ---
 
 ## Pipeline State Tracking
 
-Throughout the pipeline, maintain state in the dev plan file:
+Throughout the pipeline, state is persisted in two places:
 
-```markdown
-## Pipeline Status
-- **Stage:** EXECUTING (Stage 4 of 4)
-- **Started:** 2026-02-16T10:00:00
-- **PRD:** docs/prd/daily-revenue-trends.md ✅
-- **Dev Plan:** docs/dev_plans/daily-revenue-trends.md ✅
-- **JIRA:** MVP-100 (Epic) ✅
-- **Progress:** 3/7 tasks complete
-```
+**1. On disk (source of truth):**
+- PRD file: `docs/prd/<slug>.md`
+- Dev plan file: `docs/dev_plans/<slug>.md` (updated with JIRA keys, task statuses, PR links)
+- JIRA mapping: `jira-issue-mapping.json`
 
-This allows resuming the pipeline if interrupted — re-running `/execute` will pick up from where it left off by checking task statuses.
+**2. In the orchestrator (lightweight):**
+- `slug`, `prd_path`, `plan_path`, `requirement`, `user_prefs`
+
+This separation means the pipeline can be resumed at any stage by reading file state — no conversational context is needed.
 
 ---
 
@@ -206,14 +273,16 @@ If the pipeline is interrupted at any stage:
 - **Stage 3 interrupted**: Re-run `/plan2jira` — jira-import.js handles idempotency (skips already-created issues)
 - **Stage 4 interrupted**: Re-run `/execute @plan` — it reads task statuses from the dev plan, **reconciles JIRA statuses** (transitions completed tasks to "Done" and in-progress tasks to "In Progress"), and then resumes execution from where it left off. No manual JIRA updates are needed after session restarts.
 
+**Re-running `/fullpipeline`** after interruption: The orchestrator should check for existing artifacts before spawning each stage subagent. If `docs/prd/<slug>.md` exists, ask the user whether to skip Stage 1. If `docs/dev_plans/<slug>.md` exists, ask whether to skip Stage 2. This avoids re-running completed stages.
+
 ---
 
 ## Completion
 
-When all tasks are done:
+When the Stage 4 subagent returns, present the final report:
 
 ```
-## Pipeline Complete 🎉
+## Pipeline Complete
 
 ### Requirement
 <original requirement text>

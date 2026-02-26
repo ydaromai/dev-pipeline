@@ -2,8 +2,10 @@
 # Copy this file to your project root as `pipeline.config.yaml` and customize.
 
 pipeline:
-  # Frontend flag — enables Designer Critic in review stages
-  has_frontend: false            # Set true for projects with frontend code
+  # Project type flags — enable conditional critic agents
+  has_frontend: false            # Set true for projects with frontend code (enables Designer Critic)
+  has_backend_service: false     # Set true for long-running services: API servers, workers, queue consumers (enables Observability Critic)
+  has_api: false                 # Set true for projects exposing or consuming HTTP/GraphQL/gRPC APIs (enables API Contract Critic)
 
   # JIRA integration
   jira:
@@ -26,28 +28,28 @@ pipeline:
     # Per-stage critic overrides
     stages:
       req2prd:
-        critics: [product, dev, devops, qa, security, performance, data-integrity, designer]  # designer requires has_frontend: true
+        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend)
         mode: parallel
       prd2plan:
-        critics: [product, dev, devops, qa, security, performance, data-integrity, designer]  # designer requires has_frontend: true
+        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend)
         mode: parallel
       plan2jira:
         critics: [product, dev]
         mode: parallel
         mandatory: true         # Must pass before JIRA creation
       execute:
-        critics: [product, dev, devops, qa, security, performance, data-integrity, designer]  # designer requires has_frontend: true
+        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend)
         mode: parallel
       pre_merge:
-        critics: [dev, devops, security, performance, data-integrity, designer]  # designer requires has_frontend: true
+        critics: [dev, devops, security, performance, data-integrity, observability, api-contract, designer]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend)
         mode: sequential        # DevOps reviews after Dev passes
 
   # Execution settings
   execution:
     ralph_loop:
       build_models:
-        simple: opus            # Opus 4.6 — All tasks use Opus
-        medium: opus            # Opus 4.6 — All tasks use Opus
+        simple: sonnet           # Sonnet 4.6 — Docs, config, small edits
+        medium: opus            # Opus 4.6 — Single-file logic, endpoints
         complex: opus           # Opus 4.6 — Multi-file, complex logic
       review_model: opus        # Opus 4.6 — Always reviews with Opus 4.6
       fresh_context: true       # Fresh CLI session per iteration

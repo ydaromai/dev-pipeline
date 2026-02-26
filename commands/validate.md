@@ -27,8 +27,8 @@ Parse `$ARGUMENTS` to identify:
 | Target | Default Critics |
 |--------|----------------|
 | PRD | product |
-| Dev plan | product, dev, devops, qa, security, performance, data-integrity, designer (if has_frontend) |
-| Code diff | product, dev, devops, qa, security, performance, data-integrity, designer (if has_frontend) |
+| Dev plan | product, dev, devops, qa, security, performance, data-integrity, observability (if has_backend_service), api-contract (if has_api), designer (if has_frontend) |
+| Code diff | product, dev, devops, qa, security, performance, data-integrity, observability (if has_backend_service), api-contract (if has_api), designer (if has_frontend) |
 
 Read `pipeline.config.yaml` for stage-specific overrides if available.
 
@@ -50,13 +50,15 @@ Depending on target type, read:
 - `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/security-critic.md`
 - `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/performance-critic.md`
 - `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/data-integrity-critic.md`
+- `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/observability-critic.md` (only if `pipeline.config.yaml` has `has_backend_service: true`)
+- `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/api-contract-critic.md` (only if `pipeline.config.yaml` has `has_api: true`)
 - `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/designer-critic.md` (only if `pipeline.config.yaml` has `has_frontend: true`)
 
 **For code diff validation:**
 - Run `git diff` and `git diff --staged` to get the full diff
 - Read the related task spec (if identifiable from branch name or `$ARGUMENTS`)
 - Read the PRD (if identifiable)
-- All relevant critic agent files from `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/` (including `performance-critic.md`, `data-integrity-critic.md`, and `designer-critic.md` if `pipeline.config.yaml` has `has_frontend: true`)
+- All relevant critic agent files from `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/` (including `performance-critic.md`, `data-integrity-critic.md`, and conditional critics: `observability-critic.md` if `has_backend_service: true`, `api-contract-critic.md` if `has_api: true`, `designer-critic.md` if `has_frontend: true`)
 - `docs/ai_definitions/AGENT_CONSTRAINTS.md`
 - `pipeline.config.yaml` for test requirements
 
@@ -104,6 +106,8 @@ Aggregate all critic results and present:
 | Security | PASS ✅ | 9.0 | 0 | 1 | 0 |
 | Performance | PASS ✅ | 8.5 | 0 | 1 | 0 |
 | Data Integrity | PASS ✅ | 9.0 | 0 | 0 | 1 |
+| Observability | PASS ✅ / N/A | 8.5 | 0 | 1 | 0 |
+| API Contract | PASS ✅ / N/A | 9.0 | 0 | 0 | 1 |
 | Designer | PASS ✅ / N/A | N/A | 0 | 0 | 1 |
 
 Overall Score: 7.6 (average of scored critics)

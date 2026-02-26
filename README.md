@@ -9,7 +9,7 @@ Requirement  -->  PRD  -->  Dev Plan  -->  JIRA  -->  Code (Ralph Loop)
               GATE 1     GATE 2      GATE 3a/3b    GATE 4 (per PR)
 ```
 
-Each stage is a Claude Code slash command. Human approval gates sit between stages. Six critic agents (Product, Dev, DevOps, QA, Security, Designer) validate artifacts at each gate. The Designer Critic is conditionally active for projects with `has_frontend: true`.
+Each stage is a Claude Code slash command. Human approval gates sit between stages. Ten critic agents validate artifacts at each gate — 7 always-on (Product, Dev, DevOps, QA, Security, Performance, Data Integrity) and 3 conditional (Observability when `has_backend_service: true`, API Contract when `has_api: true`, Designer when `has_frontend: true`).
 
 ## Installation
 
@@ -44,7 +44,7 @@ This creates `pipeline.config.yaml`, sets up directories, and configures JIRA in
 
 ### 2. Run the pipeline
 
-Full pipeline (end-to-end):
+Full pipeline (end-to-end, with fresh context per stage):
 ```
 /fullpipeline "Add user authentication with OAuth2"
 ```
@@ -63,7 +63,7 @@ Or run stages individually:
 |---------|-------------|
 | `/pipeline-init` | One-time project setup (config, directories, JIRA) |
 | `/req2prd <requirement>` | Requirement to PRD with all-critic scoring Ralph Loop |
-| `/prd2plan @<prd>` | PRD to dev plan with 6-critic review |
+| `/prd2plan @<prd>` | PRD to dev plan with 10-critic review |
 | `/plan2jira @<plan>` | Dev plan to JIRA issues (mandatory critic gate) |
 | `/execute @<plan>` | Execute tasks with Ralph Loop (build/review cycles) |
 | `/fullpipeline <requirement>` | Run all stages end-to-end with gates |
@@ -75,12 +75,12 @@ The pipeline uses two distinct quality loops to ensure high-quality artifacts be
 
 ### PRD Scoring Ralph Loop (`/req2prd`)
 
-All applicable critics (Product, Dev, DevOps, QA, Security, Designer) score the PRD 1–10. The loop iterates until:
+All applicable critics (7 always-on + conditional: Observability, API Contract, Designer) score the PRD 1–10. The loop iterates until:
 - **Per-critic minimum**: > 8.5
 - **Overall average**: > 9.0
 - **Max iterations**: 5
 
-N/A critics (e.g., Designer when `has_frontend: false`) are excluded from both numerator and denominator.
+N/A critics (e.g., Designer when `has_frontend: false`, Observability when `has_backend_service: false`, API Contract when `has_api: false`) are excluded from both numerator and denominator.
 
 ### Dev Plan Zero-Warnings Loop (`/prd2plan`)
 
@@ -104,8 +104,9 @@ BUILD (Opus 4.6)  -->  REVIEW (Opus 4.6, all critics)  -->  PASS? --> PR
                 (max 3 iterations, then escalate)
 ```
 
-- **All tasks**: Built with Opus 4.6
-- **All reviews**: Opus 4.6 with all applicable critics (6 total, Designer conditional on `has_frontend`)
+- **Simple tasks**: Built with Sonnet 4.6 (docs, config, small edits)
+- **Medium/Complex tasks**: Built with Opus 4.6
+- **All reviews**: Opus 4.6 with all applicable critics (7 always-on + 3 conditional: Observability, API Contract, Designer)
 
 ## Critic Agents
 
@@ -118,6 +119,10 @@ All critics produce: **Verdict** (PASS/FAIL) → **Score** (N.N / 10) → **Find
 | **DevOps** | Deployment readiness, infrastructure, secrets | Infrastructure requirements, environment, scalability, monitoring |
 | **QA** | Test coverage, edge cases, regression risk | Testable AC, edge cases, testing strategy, measurable NFRs |
 | **Security** | OWASP Top 10, auth, injection, secrets, threat modeling | Auth/authz requirements, sensitive data, threat model, compliance |
+| **Performance** | Algorithmic complexity, N+1 queries, caching, pagination | Measurable performance requirements, scalability, latency budgets |
+| **Data Integrity** | Schema safety, migration reversibility, data validation | Data model clarity, data flows, quality requirements, retention |
+| **Observability** | Structured logging, metrics, tracing, health checks, alerting | SLOs/SLIs, alerting expectations, monitoring, dashboarding (only when `has_backend_service: true`) |
+| **API Contract** | Backward compatibility, versioning, documentation, contract tests | API clarity, breaking changes, versioning strategy, consumer impact (only when `has_api: true`) |
 | **Designer** | Accessibility (WCAG 2.1 AA), responsive design, UX consistency | UX flow, accessibility, responsive, interaction patterns (only when `has_frontend: true`) |
 
 ## Project Structure
@@ -139,6 +144,10 @@ dev-pipeline/
       devops-critic.md
       qa-critic.md
       security-critic.md
+      performance-critic.md
+      data-integrity-critic.md
+      observability-critic.md
+      api-contract-critic.md
       designer-critic.md
     templates/           # PRD and config templates
       prd-template.md

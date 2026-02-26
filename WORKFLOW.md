@@ -13,7 +13,7 @@
                        PRD Approval        Plan Approval     Critic Val JIRA Conf    PR Merge
 ```
 
-**Or run everything at once:** `/fullpipeline <requirement>` chains all stages with gates between each.
+**Or run everything at once:** `/fullpipeline <requirement>` chains all stages with gates between each. Each stage runs in a **fresh-context subagent** — the orchestrator only carries file paths and user decisions between gates, keeping context lean. All artifacts are persisted on disk.
 
 ---
 
@@ -57,7 +57,7 @@
 | 1 | Read PRD template | `${CLAUDE_PLUGIN_ROOT}/pipeline/templates/prd-template.md` |
 | 2 | Clarify requirements | If input < 200 chars: ask about target users, core problem, success metrics, constraints, scope |
 | 3 | Generate PRD | 14-section PRD: problem, users, goals, non-goals, user stories (with inline AC), functional requirements (P0/P1/P2), consolidated AC, non-functional, testing strategy, technical context, success metrics, open questions, risks, timeline |
-| 4 | All-critic scoring review | All applicable critics (Product, Dev, DevOps, QA, Security, Designer if `has_frontend`) review PRD in parallel, each producing a score (1–10) |
+| 4 | All-critic scoring review | All applicable critics (Product, Dev, DevOps, QA, Security, Performance, Data Integrity + Observability if `has_backend_service` + API Contract if `has_api` + Designer if `has_frontend`) review PRD in parallel, each producing a score (1–10) |
 | 5 | Scoring Ralph Loop | Iterate until per-critic > 8.5 AND overall average > 9.0 (max 5 iterations). Revise PRD based on lowest-scoring critics' findings |
 | 6 | Write PRD | Save to `docs/prd/<slug>.md` |
 | 7 | **GATE 1** — Human approval | User reviews: approve / request changes / edit directly |
@@ -70,6 +70,10 @@
 | DevOps | Infrastructure/deployment requirements, environment needs, scalability, monitoring |
 | QA | Testable AC, edge cases identified, testing strategy coverage, measurable NFRs |
 | Security | Auth/authz requirements, sensitive data handling, threat model, compliance |
+| Performance | Measurable performance requirements, scalability expectations, latency budgets |
+| Data Integrity | Data model clarity, data flow definitions, quality requirements, retention policies |
+| Observability | SLOs/SLIs defined, alerting expectations, monitoring requirements, dashboarding (only if `has_backend_service: true`) |
+| API Contract | API contracts specified, breaking changes identified, versioning strategy, consumer impact (only if `has_api: true`) |
 | Designer | UX flow completeness, accessibility requirements, responsive design, interaction patterns (only if `has_frontend: true`) |
 
 > **Quality loop asymmetry — PRD vs Dev Plan:** The PRD loop uses numeric scoring (per-critic > 8.5, overall > 9.0) and can tolerate minor warnings if scores are high — PRDs are living documents refined during implementation. The dev plan loop requires zero Critical AND zero Warnings — dev plans are the direct blueprint for code execution, and unresolved warnings propagate into bugs, tech debt, or security gaps.
@@ -98,7 +102,7 @@
 | 2 | Explore codebase | Directory structure, existing patterns, test conventions, shared utilities |
 | 3 | Generate dev plan | **Epic** (= PRD feature) → **Stories** (user-facing units) → **Tasks** (implementable, with file paths) → **Subtasks** (agent-sized, 20min–2hrs) |
 | 4 | Validate structure | Run `validate-breakdown.js` if available |
-| 5 | Critic review (parallel, all applicable) | Product + Dev + DevOps + QA + Security + Designer (if `has_frontend: true`) as Opus 4.6 subagents |
+| 5 | Critic review (parallel, all applicable) | Product + Dev + DevOps + QA + Security + Performance + Data Integrity + Observability (if `has_backend_service`) + API Contract (if `has_api`) + Designer (if `has_frontend`) as Opus 4.6 subagents |
 | 6 | Revise until zero Critical AND zero Warnings | Fix all Critical findings and Warnings from all critics (max 5 iterations). Notes are acceptable. |
 | 7 | Write dev plan | Save to `docs/dev_plans/<slug>.md` |
 | 8 | **GATE 2** — Human approval | Summary with dependency graph, critic results |
@@ -117,7 +121,7 @@
 | Level | Scope | Build Model |
 |-------|-------|-------------|
 | Simple | Docs, config, small single-file edits | Sonnet 4.6 |
-| Medium | Single-file logic, API endpoints, DB queries, UI components | Sonnet 4.6 |
+| Medium | Single-file logic, API endpoints, DB queries, UI components | Opus 4.6 |
 | Complex | Multi-file changes, complex business logic, cross-cutting concerns | Opus 4.6 |
 
 ### Critics at this stage (all applicable, parallel)
@@ -128,6 +132,10 @@
 | DevOps | Deployment/infra tasks present, migration order safe, CI/CD implications captured |
 | QA | Test requirements per task align with PRD testing strategy, regression risk identified |
 | Security | Security-sensitive tasks present (auth, input validation), no insecure design patterns |
+| Performance | Performance-sensitive paths covered, indexing/caching/pagination tasks present |
+| Data Integrity | Schema migration tasks include rollback, data validation at boundaries, referential integrity |
+| Observability | Instrumentation tasks present (logging, metrics, tracing), health checks updated, SLOs covered (only if `has_backend_service: true`) |
+| API Contract | API changes include compatibility considerations, documentation updates, contract tests (only if `has_api: true`) |
 | Designer | Frontend tasks include accessibility, loading/empty/error states, responsive design (only if `has_frontend: true`) |
 
 ---
@@ -216,7 +224,7 @@ This is the core execution engine. It reads the dev plan, builds a dependency gr
 | 2 | Pre-flight check | Present execution plan, model config, completed tasks — **wait for approval** |
 | 3a | Setup per task | Create git branch, transition JIRA to "In Progress", update dev plan status |
 | 3b | **BUILD** phase | Fresh-context subagent (Sonnet 4.6 or Opus 4.6 per complexity), implements subtasks, writes tests, commits |
-| 3c | **REVIEW** phase | Fresh-context Opus 4.6 subagent, runs all applicable critic checklists against the diff (5 standard + Designer if `has_frontend: true`) |
+| 3c | **REVIEW** phase | Fresh-context Opus 4.6 subagent, runs all applicable critic checklists against the diff (7 always-on + conditional: Observability, API Contract, Designer) |
 | 3d | **ITERATE** if FAIL | New build subagent with fix prompt (critical findings only), re-review failed critics |
 | 3e | Escalation | After max iterations: mark BLOCKED, create WIP PR, ask user (override/fix/skip/abort) |
 | 3f | Create PR | Push branch, `gh pr create` with critic results + AC checklist + JIRA link |
@@ -233,13 +241,17 @@ This is the core execution engine. It reads the dev plan, builds a dependency gr
 | DevOps | Env vars, deployment readiness, resource usage, rollback risk |
 | QA | Test coverage (happy/error/boundary), test quality, AC coverage, regression risk |
 | Security | Injection, auth/authz, secrets, OWASP top 10, vulnerable dependencies, threat analysis |
+| Performance | Algorithmic complexity, N+1 queries, pagination, caching, bundle size, memory usage |
+| Data Integrity | Schema migration safety, data validation, referential integrity, transformation accuracy |
+| Observability | Structured logging, metrics emission, tracing, health checks, alerting, error tracking (only if `has_backend_service: true`) |
+| API Contract | Backward compatibility, versioning, documentation, error contracts, contract testing (only if `has_api: true`) |
 | Designer | Accessibility (WCAG 2.1 AA), responsive design, UX consistency, design system adherence (only if `has_frontend: true`) |
 
 ### Build model selection
 | Complexity | Model | Use Cases |
 |-----------|-------|-----------|
 | Simple | Sonnet 4.6 | Docs, config, small edits, schema definitions |
-| Medium | Sonnet 4.6 | Single-file logic, API endpoints, DB queries, UI components |
+| Medium | Opus 4.6 | Single-file logic, API endpoints, DB queries, UI components |
 | Complex | Opus 4.6 | Multi-file changes, complex business logic, cross-cutting |
 
 **Review model:** Always Opus 4.6
@@ -268,8 +280,8 @@ Run critics independently against any artifact.
 | Target | Default Critics |
 |--------|----------------|
 | PRD | Product |
-| Dev Plan | Product, Dev, DevOps, QA, Security, Designer (if `has_frontend`) |
-| Code Diff | Product, Dev, DevOps, QA, Security, Designer (if `has_frontend`) |
+| Dev Plan | Product, Dev, DevOps, QA, Security, Performance, Data Integrity, Observability, API Contract, Designer (if `has_frontend`) |
+| Code Diff | Product, Dev, DevOps, QA, Security, Performance, Data Integrity, Observability, API Contract, Designer (if `has_frontend`) |
 
 ---
 
@@ -329,6 +341,41 @@ All critics follow the same output pattern: **Verdict** (PASS/FAIL) → **Score*
 - API security (rate limiting, CORS, security headers, input size limits)
 - OWASP Top 10 assessment per review
 
+### Performance Critic
+- Algorithmic complexity (no O(n^2)+ on unbounded data)
+- Database query efficiency (N+1, SELECT *, missing indexes, unbounded result sets)
+- Pagination for list endpoints, batch operations, connection pooling
+- API response bounding, async for expensive ops, appropriate timeouts
+- Frontend: lazy loading, bundle size, memoization, virtualization
+- Caching strategy, cache invalidation, no redundant data fetching
+- Memory and resource usage (no leaks, no unbounded collections)
+- Payload efficiency (no over-fetching, compression, size limits)
+
+### Data Integrity Critic
+- Schema migration safety (reversible, no destructive changes, safe type changes)
+- Data validation at system boundaries (required fields, types, ranges, formats)
+- API contracts match documented types, breaking changes versioned
+- Referential integrity (foreign keys, cascade behavior, no orphans)
+- Transformation accuracy (lossless, explicit null handling, timezone consistency)
+- Numeric precision (no floating-point money), character encoding (UTF-8)
+- Concurrent writes handled, partial failures atomic, state transitions valid
+
+### Observability Critic
+- Structured logging (JSON/key-value, appropriate levels, correlation IDs, no PII)
+- Metrics emission (counters, histograms, gauges with meaningful labels, no high-cardinality)
+- Distributed tracing (context propagation, spans on external calls, sampling strategy)
+- Health checks reflect real system state, include new dependencies
+- Alerting thresholds defined, SLOs/SLIs maintained, no alert fatigue
+- Error tracking with context, expected vs unexpected errors distinguished
+
+### API Contract Critic
+- Backward compatibility (no field removal, no new required fields, no type changes without versioning)
+- API documentation updated (OpenAPI spec, request/response schemas, error responses)
+- Request/response design consistent with project conventions (pagination, error format, naming)
+- Versioning and deprecation (breaking changes versioned, sunset timelines, migration guides)
+- Error contract consistency (machine-readable codes, no internal detail leakage, field-level validation errors)
+- Contract testing (schema validation, breaking change detection, consumer contracts)
+
 ### Designer Critic (only when `has_frontend: true`)
 - Accessibility compliance (WCAG 2.1 AA): alt text, color contrast, keyboard access, ARIA, form labels, screen reader announcements
 - Design system adherence: uses existing components, design tokens, naming conventions
@@ -345,6 +392,8 @@ All critics follow the same output pattern: **Verdict** (PASS/FAIL) → **Score*
 ```yaml
 pipeline:
   has_frontend: false               # Set true to enable Designer Critic
+  has_backend_service: false        # Set true to enable Observability Critic
+  has_api: false                    # Set true to enable API Contract Critic
 
   jira:
     project_key: PROJ
@@ -356,11 +405,11 @@ pipeline:
     max_iterations: 5               # Max iterations for PRD and dev plan Ralph Loops
     escalation: user                # user | skip | fail
     stages:                         # Per-stage critic overrides
-      req2prd:   { critics: [product, dev, devops, qa, security, designer], mode: parallel }  # designer requires has_frontend: true
-      prd2plan:  { critics: [product, dev, devops, qa, security, designer], mode: parallel }
+      req2prd:   { critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer], mode: parallel }  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend)
+      prd2plan:  { critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer], mode: parallel }
       plan2jira: { critics: [product, dev], mode: parallel, mandatory: true }
-      execute:   { critics: [product, dev, devops, qa, security, designer], mode: parallel }
-      pre_merge: { critics: [dev, devops, security, designer], mode: sequential }
+      execute:   { critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer], mode: parallel }
+      pre_merge: { critics: [dev, devops, security, performance, data-integrity, observability, api-contract, designer], mode: sequential }
 
   scoring:                            # PRD quality scoring thresholds
     per_critic_min: 8.5               # Minimum score per critic (1-10 scale)
@@ -369,7 +418,7 @@ pipeline:
 
   execution:
     ralph_loop:
-      build_models: { simple: sonnet, medium: sonnet, complex: opus }  # Sonnet 4.6 / Opus 4.6
+      build_models: { simple: sonnet, medium: opus, complex: opus }  # Sonnet 4.6 for simple, Opus 4.6 for medium/complex
       review_model: opus   # Opus 4.6
       fresh_context: true
       max_iterations: 3
@@ -444,6 +493,10 @@ project-root/
     │   ├── devops-critic.md
     │   ├── qa-critic.md
     │   ├── security-critic.md
+    │   ├── performance-critic.md
+    │   ├── data-integrity-critic.md
+    │   ├── observability-critic.md
+    │   ├── api-contract-critic.md
     │   └── designer-critic.md
     └── examples/
         └── example-prd.md

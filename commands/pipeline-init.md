@@ -95,11 +95,26 @@ Scan the project structure to build `test_requirements` mapping:
 - If `scripts/` exists → `"scripts/**/*.js": [unit]`
 - If `api/` or `routes/` exists → `"api/**/*.js": [unit, integration]`
 
-**Auto-detect frontend:**
+**Auto-detect frontend (`has_frontend`):**
 - If `frontend/`, `src/components/`, or directories containing UI framework files (`.jsx`/`.tsx`/`.vue`/`.svelte`) exist → `has_frontend: true`
 - Note: bare `app/` directories in backend frameworks (Express, Rails) should not trigger `has_frontend` — look for UI framework markers (`.jsx`, `.tsx`, `.vue`, `.svelte`)
 - Note: `public/` with only static `.html`/`.css` and no framework components does not trigger `has_frontend` — Designer Critic targets component-based frontends
 - Otherwise → `has_frontend: false`
+
+**Auto-detect backend service (`has_backend_service`):**
+- If `server.js`, `app.js`, `index.ts`, `main.go`, `main.py`, or similar entrypoints exist with HTTP server setup (Express, Fastify, Flask, Django, Gin, etc.) → `has_backend_service: true`
+- If `Dockerfile`, `docker-compose.yml`, or `Procfile` exists with a `web` or `worker` process → `has_backend_service: true`
+- If `package.json` has `"start"` script that runs a server process → `has_backend_service: true`
+- If the project is a CLI tool, library, static site, or batch script with no long-running process → `has_backend_service: false`
+- Otherwise → `has_backend_service: false`
+
+**Auto-detect API (`has_api`):**
+- If `routes/`, `api/`, `controllers/`, `endpoints/` directories exist → `has_api: true`
+- If OpenAPI/Swagger spec files exist (`.yaml`/`.json` with `openapi` or `swagger` key) → `has_api: true`
+- If GraphQL schema files (`.graphql`, `.gql`) or `schema.prisma` with API layer exist → `has_api: true`
+- If Express/Fastify/Flask/Django route definitions are found → `has_api: true`
+- If the project has no HTTP/GraphQL/gRPC surface (pure frontend, CLI, library, batch job) → `has_api: false`
+- Otherwise → `has_api: false`
 
 ## Step 5: Create pipeline.config.yaml
 
@@ -107,7 +122,9 @@ Read the template from `${CLAUDE_PLUGIN_ROOT}/pipeline/templates/pipeline-config
 
 ```yaml
 pipeline:
-  has_frontend: <auto-detected>  # Enables Designer Critic in review stages
+  has_frontend: <auto-detected>        # Enables Designer Critic in review stages
+  has_backend_service: <auto-detected>  # Enables Observability Critic in review stages
+  has_api: <auto-detected>              # Enables API Contract Critic in review stages
 
   jira:
     project_key: <from user or auto-detected>
@@ -123,24 +140,24 @@ pipeline:
         critics: [product]
         mode: sequential
       prd2plan:
-        critics: [product, dev, devops, qa, security, designer]  # designer requires has_frontend: true
+        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend)
         mode: parallel
       plan2jira:
         critics: [product, dev]
         mode: parallel
         mandatory: true
       execute:
-        critics: [product, dev, devops, qa, security, designer]  # designer requires has_frontend: true
+        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend)
         mode: parallel
       pre_merge:
-        critics: [dev, devops, security, designer]  # designer requires has_frontend: true
+        critics: [dev, devops, security, performance, data-integrity, observability, api-contract, designer]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend)
         mode: sequential
 
   execution:
     ralph_loop:
       build_models:
         simple: sonnet          # Sonnet 4.6
-        medium: sonnet          # Sonnet 4.6
+        medium: opus            # Opus 4.6
         complex: opus           # Opus 4.6
       review_model: opus        # Opus 4.6
       fresh_context: true
@@ -228,12 +245,16 @@ This project uses the global development pipeline (`${CLAUDE_PLUGIN_ROOT}/comman
 See `pipeline.config.yaml` for project-specific settings (JIRA, test commands, paths).
 
 ### Critic Agents
-The pipeline uses 5 standard critic agents (+ Designer for frontend projects) for quality validation:
+The pipeline uses 7 always-on critic agents + 3 conditional critics for quality validation:
 - **Product Critic**: PRD alignment, acceptance criteria coverage, analytics tracking
 - **Dev Critic**: Code quality, patterns, conventions, analytics instrumentation
 - **DevOps Critic**: Deployment readiness, secrets, infrastructure
 - **QA Critic**: Test coverage, edge cases, regression risk
 - **Security Critic**: OWASP top 10, auth, injection, secrets, threat modeling
+- **Performance Critic**: Algorithmic complexity, query efficiency, caching, scalability
+- **Data Integrity Critic**: Schema safety, migration reversibility, data validation, referential integrity
+- **Observability Critic**: Structured logging, metrics, tracing, health checks, alerting, SLOs (only when `has_backend_service: true`)
+- **API Contract Critic**: Backward compatibility, versioning, documentation, contract testing (only when `has_api: true`)
 - **Designer Critic**: Accessibility, responsive design, UX consistency, design system adherence (only when `has_frontend: true`)
 
 ### Ralph Loop
@@ -273,7 +294,7 @@ Present the initialization summary:
 - Build models: Sonnet 4.6 (simple/medium), Opus 4.6 (complex)
 - Review model: Opus 4.6
 - Ralph Loop: 3 max iterations, escalate to user
-- Critics: Product, Dev, DevOps, QA, Security + Designer if frontend (parallel mode)
+- Critics: Product, Dev, DevOps, QA, Security, Performance, Data Integrity (always-on) + Observability (if backend service) + API Contract (if API) + Designer (if frontend)
 
 ### Next Steps
 1. Review `pipeline.config.yaml` and adjust if needed

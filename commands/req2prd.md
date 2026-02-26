@@ -40,7 +40,7 @@ Derive the slug from the PRD title (kebab-case, e.g., "Daily Revenue Trends" →
 
 Spawn all applicable critic subagents in parallel using the Task tool. Each critic reviews the PRD from their domain perspective using their **PRD Review Focus** checklist, and produces a **score (1–10)** in addition to findings.
 
-Read `pipeline.config.yaml` for the `req2prd.critics` list. Default: `[product, dev, devops, qa, security, performance, data-integrity]` + `designer` if `has_frontend: true`. **Skip designer entirely** if `has_frontend` is `false` or absent — do not spawn a designer subagent, and mark Designer as N/A in the score table.
+Read `pipeline.config.yaml` for the `req2prd.critics` list. Default: `[product, dev, devops, qa, security, performance, data-integrity]` + `observability` if `has_backend_service: true` + `api-contract` if `has_api: true` + `designer` if `has_frontend: true`. **Skip conditional critics entirely** when their flag is `false` or absent — do not spawn their subagent, and mark them as N/A in the score table.
 
 **Parallelization:** All critics spawn simultaneously via the Task tool. If model concurrency limits are reached, the Task tool queues and retries automatically — no user action required.
 
@@ -70,7 +70,7 @@ Produce your structured output. Include:
 - **Overall score formula:** `overall = sum(scores) / count(scored critics)` — N/A critics (e.g., Designer when `has_frontend: false`) are excluded from both numerator and denominator
 - Max iterations: `validation.max_iterations` (default: **5**)
 
-**Expected duration:** Each iteration spawns up to 6 parallel critic subagents. A full 5-iteration loop may take 10–20 minutes depending on PRD size and model latency. Most PRDs converge within 2–3 iterations. If the session is interrupted mid-loop, re-running `/req2prd` will detect the existing PRD file and ask whether to regenerate or resume validation.
+**Expected duration:** Each iteration spawns up to 10 parallel critic subagents. A full 5-iteration loop may take 10–20 minutes depending on PRD size and model latency. Most PRDs converge within 2–3 iterations. If the session is interrupted mid-loop, re-running `/req2prd` will detect the existing PRD file and ask whether to regenerate or resume validation.
 
 **Loop logic:**
 1. Collect scores from all critics
@@ -91,11 +91,11 @@ Produce your structured output. Include:
 ```
 ## PRD Quality Scores
 
-| Iteration | Product | Dev | DevOps | QA | Security | Performance | Data Integrity | Designer | Overall |
-|-----------|---------|-----|--------|-----|----------|-------------|----------------|----------|---------|
-| 1         | 7.5     | 8.0 | 9.0    | 7.0 | 8.5      | 8.0         | 8.5            | N/A      | 8.1     |
-| 2         | 8.5     | 8.5 | 9.0    | 8.0 | 9.0      | 8.5         | 9.0            | N/A      | 8.6     |
-| 3         | 9.0     | 9.0 | 9.5    | 9.0 | 9.5      | 9.0         | 9.5            | N/A      | 9.2     | ← thresholds met
+| Iteration | Product | Dev | DevOps | QA | Security | Performance | Data Integrity | Observability | API Contract | Designer | Overall |
+|-----------|---------|-----|--------|-----|----------|-------------|----------------|---------------|--------------|----------|---------|
+| 1         | 7.5     | 8.0 | 9.0    | 7.0 | 8.5      | 8.0         | 8.5            | 7.5          | 8.0          | N/A      | 8.1     |
+| 2         | 8.5     | 8.5 | 9.0    | 8.0 | 9.0      | 8.5         | 9.0            | 8.5          | 9.0          | N/A      | 8.7     |
+| 3         | 9.0     | 9.0 | 9.5    | 9.0 | 9.5      | 9.0         | 9.5            | 9.0          | 9.5          | N/A      | 9.3     | ← thresholds met
 ```
 
 ## Step 6: Write the PRD
@@ -131,6 +131,8 @@ PRD generated: docs/prd/<slug>.md
 | Security | 9.5 | ✅ (> 8.5) |
 | Performance | 9.0 | ✅ (> 8.5) |
 | Data Integrity | 9.5 | ✅ (> 8.5) |
+| Observability | 9.0 / N/A | ✅ (> 8.5) / — |
+| API Contract | 9.5 / N/A | ✅ (> 8.5) / — |
 | Designer | N/A | — |
 | **Overall** | **9.3** | **✅ (> 9.0)** |
 

@@ -201,6 +201,42 @@ Dev plan content:
 <paste plan content>
 ```
 
+**Observability Critic (model: opus — Opus 4.6) — Only spawn if pipeline.config.yaml has `has_backend_service: true`:**
+```
+You are the Observability Critic. Read:
+1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/observability-critic.md (your persona)
+2. The PRD: <paste PRD content>
+3. The dev plan document below
+
+Review the dev plan for:
+- Do tasks include instrumentation for logging, metrics, and tracing?
+- Are there missing observability tasks (structured logging setup, metrics emission, health check updates)?
+- Are SLOs/SLIs from the PRD reflected in monitoring tasks?
+- Do tasks handling external integrations include spans and error tracking?
+- Is alerting configuration accounted for in the task breakdown?
+
+Dev plan content:
+<paste plan content>
+```
+
+**API Contract Critic (model: opus — Opus 4.6) — Only spawn if pipeline.config.yaml has `has_api: true`:**
+```
+You are the API Contract Critic. Read:
+1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/api-contract-critic.md (your persona)
+2. The PRD: <paste PRD content>
+3. The dev plan document below
+
+Review the dev plan for:
+- Do tasks modifying APIs include backward compatibility considerations?
+- Are there missing API documentation tasks (OpenAPI spec updates, migration guides)?
+- Are breaking changes identified and versioning tasks included?
+- Do API tasks include contract testing requirements?
+- Is consumer impact assessed for API changes?
+
+Dev plan content:
+<paste plan content>
+```
+
 **Designer Critic (model: opus — Opus 4.6) — Only spawn if pipeline.config.yaml has `has_frontend: true`:**
 ```
 You are the Designer Critic. Read:
@@ -223,7 +259,7 @@ Dev plan content:
 
 **Pass condition:** ALL critics must have zero Critical findings AND zero Warnings. Notes (informational) are acceptable.
 
-**Expected duration:** Each iteration re-runs up to 6 parallel critic subagents. A full 5-iteration loop may take 10–20 minutes. Most plans converge within 2–3 iterations. If the session is interrupted mid-loop, re-running `/prd2plan` will detect the existing plan file and ask whether to regenerate or resume validation. If model concurrency limits are reached during parallel critic spawning, the Task tool queues and retries automatically.
+**Expected duration:** Each iteration re-runs up to 10 parallel critic subagents. A full 5-iteration loop may take 10–20 minutes. Most plans converge within 2–3 iterations. If the session is interrupted mid-loop, re-running `/prd2plan` will detect the existing plan file and ask whether to regenerate or resume validation. If model concurrency limits are reached during parallel critic spawning, the Task tool queues and retries automatically.
 
 If any critic has Critical findings OR Warnings:
 1. Read all Critical findings and Warnings from all critics
@@ -272,6 +308,8 @@ Group C (after B):  TASK 1.3
 - Security Critic: PASS ✅ (0 Critical, 0 Warnings)
 - Performance Critic: PASS ✅ (0 Critical, 0 Warnings)
 - Data Integrity Critic: PASS ✅ (0 Critical, 0 Warnings)
+- Observability Critic: PASS ✅ / N/A (0 Critical, 0 Warnings)
+- API Contract Critic: PASS ✅ / N/A (0 Critical, 0 Warnings)
 - Designer Critic: PASS ✅ / N/A (0 Critical, 0 Warnings)
 Ralph Loop iterations: N
 

@@ -74,7 +74,7 @@ Group B (after A):          TASK 1.2 (Complex), TASK 2.2 (Simple)
 Group C (after B):          TASK 1.3 (Medium)
 
 ### Ralph Loop Config
-Build Models: Simple→Sonnet 4.6, Medium→Sonnet 4.6, Complex→Opus 4.6
+Build Models: Simple→Sonnet 4.6, Medium→Opus 4.6, Complex→Opus 4.6
 Review Model: Opus 4.6
 Max Iterations: 3
 Fresh Context: Yes
@@ -119,7 +119,7 @@ For each task:
 
 Spawn a subagent (Task tool) with the appropriate model based on task complexity:
 - Simple → `model: sonnet` (Sonnet 4.6)
-- Medium → `model: sonnet` (Sonnet 4.6)
+- Medium → `model: opus` (Opus 4.6)
 - Complex → `model: opus` (Opus 4.6)
 
 **Build subagent prompt:**
@@ -148,7 +148,7 @@ You are implementing a task from a dev plan. Follow all agent constraints.
 
 ### 3c. Ralph Loop — REVIEW phase (fresh context, different model)
 
-After the build phase completes, spawn a **review subagent** (Task tool, model: opus — Opus 4.6) with all applicable critic personas (7 standard + Designer if `has_frontend: true`):
+After the build phase completes, spawn a **review subagent** (Task tool, model: opus — Opus 4.6) with all applicable critic personas (7 always-on + conditional: Observability if `has_backend_service: true`, API Contract if `has_api: true`, Designer if `has_frontend: true`):
 
 **Review subagent prompt:**
 ```
@@ -162,7 +162,9 @@ using all applicable critic perspectives. Read all critic persona files:
 5. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/security-critic.md
 6. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/performance-critic.md
 7. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/data-integrity-critic.md
-8. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/designer-critic.md (only if pipeline.config.yaml has `has_frontend: true`)
+8. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/observability-critic.md (only if pipeline.config.yaml has `has_backend_service: true`)
+9. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/api-contract-critic.md (only if pipeline.config.yaml has `has_api: true`)
+10. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/designer-critic.md (only if pipeline.config.yaml has `has_frontend: true`)
 
 ## What to review
 - Branch: <branch name>
@@ -189,6 +191,8 @@ Produce each critic's review in sequence, then a final summary:
 - Security: PASS/FAIL
 - Performance: PASS/FAIL
 - Data Integrity: PASS/FAIL
+- Observability: PASS/FAIL/N/A (only if has_backend_service: true)
+- API Contract: PASS/FAIL/N/A (only if has_api: true)
 - Designer: PASS/FAIL/N/A (only if has_frontend: true)
 
 <Then include each critic's full structured output>
