@@ -30,7 +30,7 @@ assert.ok(
 // Constants
 // ---------------------------------------------------------------------------
 
-const MIN_CRITIC_FILES = 6;
+const MIN_CRITIC_FILES = 8;
 const MIN_CHECKLIST_ITEMS = 5;
 const MIN_OUTPUT_MARKS = 5;
 
@@ -50,6 +50,8 @@ const EXPECTED_CRITICS = [
   'devops-critic.md',
   'qa-critic.md',
   'security-critic.md',
+  'performance-critic.md',
+  'data-integrity-critic.md',
   'designer-critic.md',
 ];
 

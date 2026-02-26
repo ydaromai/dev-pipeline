@@ -26,20 +26,20 @@ pipeline:
     # Per-stage critic overrides
     stages:
       req2prd:
-        critics: [product, dev, devops, qa, security, designer]  # designer requires has_frontend: true
+        critics: [product, dev, devops, qa, security, performance, data-integrity, designer]  # designer requires has_frontend: true
         mode: parallel
       prd2plan:
-        critics: [product, dev, devops, qa, security, designer]  # designer requires has_frontend: true
+        critics: [product, dev, devops, qa, security, performance, data-integrity, designer]  # designer requires has_frontend: true
         mode: parallel
       plan2jira:
         critics: [product, dev]
         mode: parallel
         mandatory: true         # Must pass before JIRA creation
       execute:
-        critics: [product, dev, devops, qa, security, designer]  # designer requires has_frontend: true
+        critics: [product, dev, devops, qa, security, performance, data-integrity, designer]  # designer requires has_frontend: true
         mode: parallel
       pre_merge:
-        critics: [dev, devops, security, designer]  # designer requires has_frontend: true
+        critics: [dev, devops, security, performance, data-integrity, designer]  # designer requires has_frontend: true
         mode: sequential        # DevOps reviews after Dev passes
 
   # Execution settings

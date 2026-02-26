@@ -165,6 +165,42 @@ Dev plan content:
 <paste plan content>
 ```
 
+**Performance Critic (model: opus — Opus 4.6):**
+```
+You are the Performance Critic. Read:
+1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/performance-critic.md (your persona)
+2. The PRD: <paste PRD content>
+3. The dev plan document below
+
+Review the dev plan for:
+- Do tasks account for performance-sensitive code paths?
+- Are there missing performance considerations (indexing, caching, pagination)?
+- Do tasks with heavy data processing include performance budgets or benchmarks?
+- Are there scalability risks not captured in the task breakdown?
+- Is performance testing included for critical paths?
+
+Dev plan content:
+<paste plan content>
+```
+
+**Data Integrity Critic (model: opus — Opus 4.6):**
+```
+You are the Data Integrity Critic. Read:
+1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/data-integrity-critic.md (your persona)
+2. The PRD: <paste PRD content>
+3. The dev plan document below
+
+Review the dev plan for:
+- Do tasks handling schema changes include reversible migrations?
+- Are data validation tasks present for system boundaries?
+- Are there missing data integrity safeguards (referential integrity, transactions)?
+- Do tasks involving data transformations account for precision, encoding, and null handling?
+- Is the migration ordering safe for rolling deployments?
+
+Dev plan content:
+<paste plan content>
+```
+
 **Designer Critic (model: opus — Opus 4.6) — Only spawn if pipeline.config.yaml has `has_frontend: true`:**
 ```
 You are the Designer Critic. Read:
@@ -234,6 +270,8 @@ Group C (after B):  TASK 1.3
 - DevOps Critic: PASS ✅ (0 Critical, 0 Warnings)
 - QA Critic: PASS ✅ (0 Critical, 0 Warnings)
 - Security Critic: PASS ✅ (0 Critical, 0 Warnings)
+- Performance Critic: PASS ✅ (0 Critical, 0 Warnings)
+- Data Integrity Critic: PASS ✅ (0 Critical, 0 Warnings)
 - Designer Critic: PASS ✅ / N/A (0 Critical, 0 Warnings)
 Ralph Loop iterations: N
 

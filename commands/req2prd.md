@@ -40,7 +40,7 @@ Derive the slug from the PRD title (kebab-case, e.g., "Daily Revenue Trends" →
 
 Spawn all applicable critic subagents in parallel using the Task tool. Each critic reviews the PRD from their domain perspective using their **PRD Review Focus** checklist, and produces a **score (1–10)** in addition to findings.
 
-Read `pipeline.config.yaml` for the `req2prd.critics` list. Default: `[product, dev, devops, qa, security]` + `designer` if `has_frontend: true`. **Skip designer entirely** if `has_frontend` is `false` or absent — do not spawn a designer subagent, and mark Designer as N/A in the score table.
+Read `pipeline.config.yaml` for the `req2prd.critics` list. Default: `[product, dev, devops, qa, security, performance, data-integrity]` + `designer` if `has_frontend: true`. **Skip designer entirely** if `has_frontend` is `false` or absent — do not spawn a designer subagent, and mark Designer as N/A in the score table.
 
 **Parallelization:** All critics spawn simultaneously via the Task tool. If model concurrency limits are reached, the Task tool queues and retries automatically — no user action required.
 
@@ -91,11 +91,11 @@ Produce your structured output. Include:
 ```
 ## PRD Quality Scores
 
-| Iteration | Product | Dev | DevOps | QA | Security | Designer | Overall |
-|-----------|---------|-----|--------|-----|----------|----------|---------|
-| 1         | 7.5     | 8.0 | 9.0    | 7.0 | 8.5      | N/A      | 8.0     |
-| 2         | 8.5     | 8.5 | 9.0    | 8.0 | 9.0      | N/A      | 8.6     |
-| 3         | 9.0     | 9.0 | 9.5    | 9.0 | 9.5      | N/A      | 9.2     | ← thresholds met
+| Iteration | Product | Dev | DevOps | QA | Security | Performance | Data Integrity | Designer | Overall |
+|-----------|---------|-----|--------|-----|----------|-------------|----------------|----------|---------|
+| 1         | 7.5     | 8.0 | 9.0    | 7.0 | 8.5      | 8.0         | 8.5            | N/A      | 8.1     |
+| 2         | 8.5     | 8.5 | 9.0    | 8.0 | 9.0      | 8.5         | 9.0            | N/A      | 8.6     |
+| 3         | 9.0     | 9.0 | 9.5    | 9.0 | 9.5      | 9.0         | 9.5            | N/A      | 9.2     | ← thresholds met
 ```
 
 ## Step 6: Write the PRD
@@ -129,8 +129,10 @@ PRD generated: docs/prd/<slug>.md
 | DevOps | 9.5 | ✅ (> 8.5) |
 | QA | 9.0 | ✅ (> 8.5) |
 | Security | 9.5 | ✅ (> 8.5) |
+| Performance | 9.0 | ✅ (> 8.5) |
+| Data Integrity | 9.5 | ✅ (> 8.5) |
 | Designer | N/A | — |
-| **Overall** | **9.2** | **✅ (> 9.0)** |
+| **Overall** | **9.3** | **✅ (> 9.0)** |
 
 Ralph Loop iterations: 3
 

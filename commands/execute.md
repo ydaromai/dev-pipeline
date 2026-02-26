@@ -148,7 +148,7 @@ You are implementing a task from a dev plan. Follow all agent constraints.
 
 ### 3c. Ralph Loop — REVIEW phase (fresh context, different model)
 
-After the build phase completes, spawn a **review subagent** (Task tool, model: opus — Opus 4.6) with all applicable critic personas (5 standard + Designer if `has_frontend: true`):
+After the build phase completes, spawn a **review subagent** (Task tool, model: opus — Opus 4.6) with all applicable critic personas (7 standard + Designer if `has_frontend: true`):
 
 **Review subagent prompt:**
 ```
@@ -160,7 +160,9 @@ using all applicable critic perspectives. Read all critic persona files:
 3. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/devops-critic.md
 4. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/qa-critic.md
 5. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/security-critic.md
-6. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/designer-critic.md (only if pipeline.config.yaml has `has_frontend: true`)
+6. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/performance-critic.md
+7. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/data-integrity-critic.md
+8. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/designer-critic.md (only if pipeline.config.yaml has `has_frontend: true`)
 
 ## What to review
 - Branch: <branch name>
@@ -185,6 +187,8 @@ Produce each critic's review in sequence, then a final summary:
 - DevOps: PASS/FAIL
 - QA: PASS/FAIL
 - Security: PASS/FAIL
+- Performance: PASS/FAIL
+- Data Integrity: PASS/FAIL
 - Designer: PASS/FAIL/N/A (only if has_frontend: true)
 
 <Then include each critic's full structured output>

@@ -54,8 +54,10 @@ PRD generated: docs/prd/<slug>.md
 | DevOps | 9.5 | ✅ (> 8.5) |
 | QA | 9.0 | ✅ (> 8.5) |
 | Security | 9.5 | ✅ (> 8.5) |
+| Performance | 9.0 | ✅ (> 8.5) |
+| Data Integrity | 9.5 | ✅ (> 8.5) |
 | Designer | N/A | — |
-| **Overall** | **9.2** | **✅ (> 9.0)** |
+| **Overall** | **9.3** | **✅ (> 9.0)** |
 
 Ralph Loop iterations: N
 
@@ -80,7 +82,7 @@ Execute the `/prd2plan` command with the approved PRD:
    - Complexity ratings (Simple/Medium/Complex)
    - Test requirements per task
 4. Validate with `validate-breakdown.js` (if available)
-5. Run all applicable critics: Product + Dev + DevOps + QA + Security + Designer if `has_frontend: true` (parallel, iterate until 0 Critical + 0 Warnings, max 5 iterations)
+5. Run all applicable critics: Product + Dev + DevOps + QA + Security + Performance + Data Integrity + Designer if `has_frontend: true` (parallel, iterate until 0 Critical + 0 Warnings, max 5 iterations)
 6. Write to `docs/dev_plans/<slug>.md`
 
 ### GATE 2: Dev Plan Approval
@@ -100,6 +102,8 @@ Dev plan generated: docs/dev_plans/<slug>.md
 - DevOps Critic: PASS ✅ (0 Critical, 0 Warnings)
 - QA Critic: PASS ✅ (0 Critical, 0 Warnings)
 - Security Critic: PASS ✅ (0 Critical, 0 Warnings)
+- Performance Critic: PASS ✅ (0 Critical, 0 Warnings)
+- Data Integrity Critic: PASS ✅ (0 Critical, 0 Warnings)
 - Designer Critic: PASS ✅ / N/A (0 Critical, 0 Warnings)
 Ralph Loop iterations: N
 
