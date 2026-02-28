@@ -26,14 +26,20 @@ const ROOT = join(__dirname, '..');
 const testMdPath = join(ROOT, 'commands', 'test.md');
 const fullpipelinePath = join(ROOT, 'commands', 'fullpipeline.md');
 const configTemplatePath = join(ROOT, 'pipeline', 'templates', 'pipeline-config-template.yaml');
+const executeMdPath = join(ROOT, 'commands', 'execute.md');
+const designerCriticPath = join(ROOT, 'pipeline', 'agents', 'designer-critic.md');
 
 assert.ok(existsSync(testMdPath), `commands/test.md not found at ${testMdPath}`);
 assert.ok(existsSync(fullpipelinePath), `commands/fullpipeline.md not found at ${fullpipelinePath}`);
 assert.ok(existsSync(configTemplatePath), `pipeline-config-template.yaml not found at ${configTemplatePath}`);
+assert.ok(existsSync(executeMdPath), `commands/execute.md not found at ${executeMdPath}`);
+assert.ok(existsSync(designerCriticPath), `designer-critic.md not found at ${designerCriticPath}`);
 
 const testMd = readFileSync(testMdPath, 'utf8');
 const fullpipeline = readFileSync(fullpipelinePath, 'utf8');
 const configTemplate = readFileSync(configTemplatePath, 'utf8');
+const executeMd = readFileSync(executeMdPath, 'utf8');
+const designerCritic = readFileSync(designerCriticPath, 'utf8');
 
 // ---------------------------------------------------------------------------
 // commands/test.md — Structure
@@ -457,8 +463,8 @@ describe('pipeline-config-template.yaml — test_stage config', () => {
 describe('pipeline-config-template.yaml — test_commands updates', () => {
   it('has e2e test command entry', () => {
     assert.ok(
-      configTemplate.includes('e2e:') && configTemplate.includes('test:e2e'),
-      'test_commands should have e2e entry'
+      configTemplate.includes('e2e:') && configTemplate.includes('playwright test'),
+      'test_commands should have e2e entry with playwright test command'
     );
   });
 
@@ -568,5 +574,179 @@ describe('Cross-file consistency — test stage', () => {
       testMd.includes('Skipping Steps 2-5') && testMd.includes('Steps 6-10'),
       'Empty diff message should accurately state Steps 2-5 are skipped and Steps 6-10 run'
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Browser validation — execute.md
+// ---------------------------------------------------------------------------
+
+describe('execute.md — browser validation', () => {
+  it('contains Playwright and browser verification paths (AC 9.1)', () => {
+    assert.ok(
+      executeMd.includes('Playwright'),
+      'execute.md should contain "Playwright"'
+    );
+    assert.ok(
+      executeMd.includes('browser') || executeMd.includes('Browser'),
+      'execute.md should contain browser verification paths'
+    );
+  });
+
+  it('Step 5e references the 3 viewport widths: 375, 768, 1280 (AC 9.2)', () => {
+    assert.ok(
+      executeMd.includes('375') && executeMd.includes('768') && executeMd.includes('1280'),
+      'execute.md Step 5e should reference viewport widths 375, 768, and 1280'
+    );
+  });
+
+  it('Step 5e has a static analysis fallback path (AC 9.3)', () => {
+    assert.ok(
+      executeMd.includes('static analysis') || executeMd.includes('Static analysis'),
+      'execute.md Step 5e should have a static analysis fallback path'
+    );
+    assert.ok(
+      executeMd.includes('Playwright is not available') || executeMd.includes('Playwright NOT available'),
+      'execute.md should describe the fallback when Playwright is not available'
+    );
+  });
+
+  it('has has_frontend guard on browser paths', () => {
+    assert.ok(
+      executeMd.includes('has_frontend: true') || executeMd.includes('has_frontend'),
+      'execute.md browser paths should be gated by has_frontend'
+    );
+  });
+
+  it('has console error capture', () => {
+    assert.ok(
+      executeMd.includes('console.error') || executeMd.includes('console_errors'),
+      'execute.md should capture console errors'
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Browser validation — designer-critic.md
+// ---------------------------------------------------------------------------
+
+describe('designer-critic.md — browser verification evidence', () => {
+  it('has a "Browser Verification Evidence" section (AC 9.4)', () => {
+    assert.ok(
+      designerCritic.includes('Browser Verification Evidence'),
+      'designer-critic.md should have a "Browser Verification Evidence" section'
+    );
+  });
+
+  it('references .pipeline/screenshots/ (AC 9.5)', () => {
+    assert.ok(
+      designerCritic.includes('.pipeline/screenshots/'),
+      'designer-critic.md should reference .pipeline/screenshots/'
+    );
+  });
+
+  it('has Critical finding for missing screenshots with Playwright available', () => {
+    assert.ok(
+      designerCritic.includes('Critical') && designerCritic.includes('screenshots'),
+      'designer-critic.md should raise Critical when screenshots missing with Playwright'
+    );
+  });
+
+  it('has Warning finding for missing screenshots without Playwright', () => {
+    assert.ok(
+      designerCritic.includes('Warning') && designerCritic.includes('Playwright was NOT available'),
+      'designer-critic.md should have Warning path when Playwright unavailable'
+    );
+  });
+
+  it('includes viewport coverage check', () => {
+    assert.ok(
+      designerCritic.includes('3 viewports') || designerCritic.includes('mobile') && designerCritic.includes('tablet') && designerCritic.includes('desktop'),
+      'designer-critic.md should check for 3 viewport coverage'
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Browser validation — test.md mandatory E2E for frontend
+// ---------------------------------------------------------------------------
+
+describe('test.md — mandatory E2E for frontend', () => {
+  it('Step 2 flags missing E2E as Critical for frontend (AC 9.6)', () => {
+    assert.ok(
+      testMd.includes('Critical') && testMd.includes('E2E') && testMd.includes('mandatory'),
+      'test.md Step 2 should flag missing E2E as Critical for frontend projects'
+    );
+  });
+
+  it('Step 4 marks E2E as mandatory for frontend (AC 9.7)', () => {
+    assert.ok(
+      testMd.includes('Mandatory if `has_frontend: true`'),
+      'test.md Step 4 should mark E2E as mandatory when has_frontend: true'
+    );
+  });
+
+  it('E2E shows FAIL not SKIP when mandatory but not configured', () => {
+    assert.ok(
+      testMd.includes('FAIL') && testMd.includes('mandatory for frontend'),
+      'test.md should show FAIL (not SKIP) when E2E is mandatory but not configured'
+    );
+  });
+
+  it('has Playwright E2E scaffolding instruction', () => {
+    assert.ok(
+      testMd.includes('scaffold') || testMd.includes('Playwright E2E'),
+      'test.md Step 3 should include Playwright E2E scaffolding instruction'
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Browser validation — pipeline-config-template.yaml browser_testing
+// ---------------------------------------------------------------------------
+
+describe('pipeline-config-template.yaml — browser_testing', () => {
+  it('has a browser_testing section (AC 9.8)', () => {
+    assert.ok(
+      configTemplate.includes('browser_testing:'),
+      'Config template should have a browser_testing section'
+    );
+  });
+
+  it('has an uncommented e2e in test_commands (AC 9.9)', () => {
+    // The e2e line should NOT start with # (i.e., it should be uncommented)
+    const lines = configTemplate.split('\n');
+    const e2eLine = lines.find(l => l.includes('e2e:') && l.includes('playwright'));
+    assert.ok(e2eLine, 'Config template should have an e2e line with playwright');
+    assert.ok(
+      !e2eLine.trimStart().startsWith('#'),
+      'The e2e line should be uncommented (not start with #)'
+    );
+  });
+
+  it('browser_testing is placed after smoke_test and before test_stage', () => {
+    const smokeTestPos = configTemplate.indexOf('smoke_test:');
+    const browserTestingPos = configTemplate.indexOf('browser_testing:');
+    const testStagePos = configTemplate.indexOf('test_stage:');
+    assert.ok(smokeTestPos > 0, 'smoke_test section should exist');
+    assert.ok(browserTestingPos > smokeTestPos, 'browser_testing should be after smoke_test');
+    assert.ok(testStagePos > browserTestingPos, 'test_stage should be after browser_testing');
+  });
+
+  it('has all documented default fields', () => {
+    assert.ok(configTemplate.includes('tool: "playwright"'), 'should have tool: playwright');
+    assert.ok(configTemplate.includes('headless: true'), 'should have headless: true');
+    assert.ok(configTemplate.includes('screenshot_dir:'), 'should have screenshot_dir');
+    assert.ok(configTemplate.includes('viewports:'), 'should have viewports');
+    assert.ok(configTemplate.includes('max_routes: 10'), 'should have max_routes: 10');
+    assert.ok(configTemplate.includes('max_console_errors: 0'), 'should have max_console_errors: 0');
+    assert.ok(configTemplate.includes('visual_regression: false'), 'should have visual_regression: false');
+    assert.ok(configTemplate.includes('auto_install: false'), 'should have auto_install: false');
+  });
+
+  it('has viewport definitions for mobile, tablet, and desktop', () => {
+    assert.ok(configTemplate.includes('375'), 'should have mobile viewport width 375');
+    assert.ok(configTemplate.includes('768'), 'should have tablet viewport width 768');
+    assert.ok(configTemplate.includes('1280'), 'should have desktop viewport width 1280');
   });
 });
