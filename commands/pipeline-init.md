@@ -80,6 +80,42 @@ If `package.json` exists, parse it for test scripts:
 }
 ```
 
+### Playwright detection (when `has_frontend: true`)
+
+When `has_frontend: true` (auto-detected in Step 4 or user-confirmed), check if `@playwright/test` is present in `devDependencies` of `package.json`:
+
+**If Playwright is found:**
+1. Log: "Playwright detected in devDependencies."
+2. Auto-set `test_commands.e2e` to the detected test:e2e script from package.json, or default to `"npx playwright test"` if no script is defined.
+3. Uncomment the `browser_testing` section in the generated `pipeline.config.yaml`.
+4. Set `test_commands.e2e: "npx playwright test"` in the generated config.
+
+**If Playwright is NOT found:**
+1. Present the user with options:
+   ```
+   Playwright is not installed but is recommended for frontend projects.
+   Browser-based smoke testing requires Playwright for screenshot capture and DOM verification.
+
+   Options:
+   (a) Install now: npm install -D @playwright/test && npx playwright install chromium
+   (b) Skip for now (static fallback will be used with Warning-level findings)
+   ```
+
+2. **If the user chooses (a) Install:**
+   - Run `npm install -D @playwright/test && npx playwright install chromium`
+   - Uncomment the `browser_testing` section in the generated config
+   - Set `test_commands.e2e: "npx playwright test"` in the generated config
+   - Log: "Playwright installed and configured."
+
+3. **If the user chooses (b) Skip:**
+   - Add a note in the generated config above the commented `browser_testing` section:
+     ```yaml
+     # Note: Playwright not installed. Static fallback will be used with Warning-level findings.
+     # Run: npm install -D @playwright/test && npx playwright install chromium
+     ```
+   - Leave the `browser_testing` section commented out
+   - Log: "Skipped Playwright installation. Static analysis fallback will be used."
+
 If `pyproject.toml` or `setup.py` exists, detect Python test patterns.
 If `go.mod` exists, detect Go test patterns.
 If `Cargo.toml` exists, detect Rust test patterns.
