@@ -33,7 +33,7 @@ You are executing the **test** pipeline stage. This is Stage 5 of the full pipel
    git diff main..HEAD --name-only
    ```
    - Extract all changed source file paths (exclude test files, config files, documentation)
-   - If the diff is empty (no changes), report **"No changed files detected. Test audit: N/A. Proceeding to CI/CD audit and critic validation only."** and **skip Steps 2-5**, proceed directly to Step 6.
+   - If the diff is empty (no changes), report **"No changed files detected. Test audit: N/A. Skipping Steps 2-5. Proceeding to Steps 6-10 (CI/CD audit, smoke test, critic validation, report)."** and **skip Steps 2-5**, proceed directly to Step 6.
 
 7. Store the following for use in subsequent steps:
    - `max_fix_iterations`: from `test_stage.max_fix_iterations` (default: 3)

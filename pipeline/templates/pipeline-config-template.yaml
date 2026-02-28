@@ -119,7 +119,7 @@ pipeline:
   #     fix_commented_jobs: false            # set to true to auto-fix commented-out CI jobs
   #     config_paths: []                     # additional CI config file paths to scan (e.g., [".buildkite/pipeline.yml"])
   #   critic_validation:
-  #     critics: [product, dev, devops, qa, security, performance, data-integrity]  # critics for cumulative diff review
+  #     critics: [product, dev, devops, qa, security, performance, data-integrity]  # always-on critics; conditional critics (observability, api-contract, designer) are added automatically based on has_backend_service/has_api/has_frontend flags
   #     max_iterations: 3                    # max fix iterations for critic failures
 
   # Project-specific paths (override per project)
