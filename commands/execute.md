@@ -453,17 +453,71 @@ Verify the primary user flow via HTTP requests and response inspection (not visu
    - Use `smoke_test.llm_timeout_seconds` (default: 30s) for the LLM request (`curl --max-time <timeout>` or equivalent). **On timeout, report:** endpoint called, request payload shape (e.g., `POST /api/chat {messages: [...]}` — not content), timeout value, and whether the dev server process was still running at timeout time.
    - If no API key is available, **skip this sub-step** and report as `⚠️ skipped (no API key)` — this is not a BLOCKING failure
 
-### 5e. Visual rendering check (if `has_frontend: true`)
+### 5e. Visual rendering and screenshot capture
 
-If `has_frontend` is not `true`, skip this step and report `Visual rendering: N/A (no frontend)` in the results table.
+This step has three branches based on project type and Playwright availability:
 
-Since the agent operates via CLI (no browser), verify rendering integrity through static analysis (also checked by the Designer Critic during code review — this step catches integration-level issues after all tasks are merged):
+#### Branch (a): Browser-based checks (`has_frontend: true` AND Playwright available)
+
+When `has_frontend: true` and Playwright was confirmed available in Step 5d, run browser-based checks AND static analysis.
+
+**1. Screenshot directory management:**
+- Clean the screenshot directory at the start of each run: `rm -rf <screenshot_dir> && mkdir -p <screenshot_dir>` (default: `.pipeline/screenshots/`).
+- **Path validation:** The `screenshot_dir` must be a relative path within the project. Reject paths that are `/`, `~`, or contain `..`. The default `.pipeline/screenshots/` is always safe (NFR-5, NFR-10).
+
+**2. Route discovery:**
+Auto-detect routes from framework conventions. Always include the entry URL. Detection patterns:
+- **Next.js App Router:** `app/**/page.tsx` (or `.jsx`, `.js`, `.ts`) — derive URL from directory structure
+- **Next.js Pages Router:** `pages/**/*.tsx` (excluding `_app`, `_document`, `api/` directories)
+- **SvelteKit:** `src/routes/**/+page.svelte` — derive URL from directory structure
+- **Generic SPA:** Entry URL only (single-page apps have one route)
+
+Cap auto-detected routes at `browser_testing.max_routes` (default: 10). When `browser_testing.smoke_test_routes` is set in config (non-empty array), it **completely overrides** auto-detection — the configured routes are used instead of auto-detected ones.
+
+**3. Multi-viewport screenshot capture:**
+For each discovered route, capture screenshots at 3 viewports:
+- **Mobile:** 375x812
+- **Tablet:** 768x1024
+- **Desktop:** 1280x720
+
+Save to `browser_testing.screenshot_dir` (default `.pipeline/screenshots/`) with naming convention: `{route-slug}_{viewport}.png` (e.g., `home_mobile.png`, `dashboard_tablet.png`, `settings_desktop.png`).
+
+Set per-page screenshot timeout of 3 seconds (NFR-2). **Total budget:** `max_routes` routes x 3 viewports x ~3s = ~90s + ~30s overhead (browser launch, route discovery, console aggregation), capped at 120 seconds total (NFR-1).
+
+**4. DOM and rendering verification (browser-based):**
+For each route at each viewport, verify:
+- **Title/heading:** Non-empty `<title>` or `<h1>` exists
+- **Content area:** Main content area is visible with `height > 0` (check `main`, `[role="main"]`, `article`, `.content`)
+- **Error overlays:** Detect error overlays (`[data-nextjs-dialog]`, `.error-boundary`, `[data-error-overlay]`) — **FAIL if any are present**
+- **Image loading:** All `<img>` elements have `naturalWidth > 0` (images actually loaded)
+- **Mobile overflow (mobile viewport only):** Assert `document.documentElement.scrollWidth <= document.documentElement.clientWidth` — no horizontal overflow
+- **Mobile font size (mobile viewport only):** Assert no text element has `font-size` below 12px
+
+**5. Static analysis (supplementary — always runs alongside browser checks):**
+These checks run regardless of Playwright availability, as supplementary validation:
 1. Verify CSS custom properties are defined before use — no orphan `var(--*)` references without a corresponding definition in scope (fonts, colors, spacing, radii, etc.)
 2. Verify dynamic content rendering code parses markdown/responses (not raw display)
 3. Verify images/icons/assets referenced in code exist as files (no missing references)
 4. If the project defines a dark theme (`data-theme`, `prefers-color-scheme`), verify all CSS custom properties have definitions in both themes
 
-> **Note:** For full visual verification, recommend the user perform a manual browser check or configure a headless browser tool in `smoke_test`.
+#### Branch (b): Static analysis only with Warning (`has_frontend: true` BUT Playwright NOT available)
+
+When `has_frontend: true` but Playwright was NOT available (Step 5d fell back to Path B):
+
+1. **Emit a Warning message:**
+   ```
+   ⚠️ Warning: Playwright is not available. Skipping browser-based screenshot capture and DOM verification.
+   Only static analysis checks will be run.
+   Install Playwright: npm install -D @playwright/test && npx playwright install chromium
+   ```
+
+2. **Run static analysis only** (same as Branch (a) step 5 above):
+   - CSS custom properties, dynamic content rendering, asset references, dark theme
+   - Report results with a Warning-level note that browser checks were skipped
+
+#### Branch (c): Skip entirely (`has_frontend: false`)
+
+If `has_frontend` is not `true`, skip this step and report `Visual rendering: N/A (no frontend)` in the results table. No static analysis or browser checks are performed.
 
 ### 5f. Teardown
 
