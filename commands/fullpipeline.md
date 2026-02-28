@@ -393,6 +393,7 @@ When all stages complete (Stage 5 subagent returns, or Stage 5 is skipped), pres
 | SDK version compatibility | ✅ | 1.1s | ai@6.2.1 — confirmed |
 | Core user flow | ✅ | 0.8s | POST /api/chat → 200 |
 | Visual rendering | ✅ / N/A (no frontend) | 0.5s | 0 orphan CSS vars |
+| Browser screenshots | ✅ / N/A / ⚠️ | 12.3s | 5 routes x 3 viewports = 15 screenshots / N/A (has_frontend: false) / Playwright not available — static only |
 | Real API test | ✅ / ⚠️ skipped (no API key) | 2.1s | — |
 | Server teardown | ✅ | 0.2s | ports released |
 
