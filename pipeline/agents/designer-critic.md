@@ -75,6 +75,20 @@ When reviewing a PRD (not code), evaluate:
 - [ ] CSS variable chain is unbroken (no orphan `var(--*)` references without a corresponding definition in scope — fonts, colors, spacing, radii, etc.)
 - [ ] Assets referenced in code actually exist and will load (images, icons, fonts) _(also verified at runtime in smoke test step 5e)_
 
+### Browser Verification Evidence
+
+> **Applies to:** Code review only (not PRD review). Only evaluated when `has_frontend: true`.
+
+- [ ] Screenshots exist in `.pipeline/screenshots/` directory (captured by execute.md Step 5e)
+- [ ] Screenshots cover all 3 viewports: mobile (375x812), tablet (768x1024), desktop (1280x720)
+- [ ] Zero `console.error` events captured in browser output during smoke test
+- [ ] No error overlays detected in screenshots (e.g., `[data-nextjs-dialog]`, `.error-boundary`)
+- [ ] Interaction screenshots present if `smoke_test.interaction_endpoint` was configured
+
+**Conditional finding logic:**
+- When `has_frontend: true`, no screenshots exist in `.pipeline/screenshots/`, AND Playwright was available during the execute stage (i.e., the smoke test report shows Path A was used) → raise a **Critical** finding: "Browser screenshots are missing despite Playwright being available. The execute stage should have captured screenshots in `.pipeline/screenshots/`. Re-run `/execute` or investigate why screenshot capture failed."
+- When `has_frontend: true` but Playwright was NOT available (i.e., the smoke test report shows Path B / fallback was used) → downgrade missing screenshots to a **Warning**: "Browser screenshots are not available because Playwright was not installed during the execute stage. Static analysis was used as fallback. Install Playwright for full browser verification: `npm install -D @playwright/test && npx playwright install chromium`"
+
 ### Animation & Transitions
 - [ ] Animations serve a purpose (guide attention, provide feedback)
 - [ ] Animations respect prefers-reduced-motion media query
@@ -139,6 +153,13 @@ When reviewing a PRD (not code), evaluate:
 - [x/✗/N/A] Typography hierarchy clear
 - [x/✗/N/A] Content is scannable
 
+#### Browser Verification Evidence (only when `has_frontend: true`)
+- [x/✗/N/A] Screenshots exist in `.pipeline/screenshots/`
+- [x/✗/N/A] All 3 viewports covered (mobile, tablet, desktop)
+- [x/✗/N/A] Zero console errors in browser output
+- [x/✗/N/A] No error overlays detected
+- [x/✗/N/A] Interaction screenshots present (if interaction_endpoint configured)
+
 #### Animation
 - [x/✗/N/A] Animations serve a purpose
 - [x/✗/N/A] Respects prefers-reduced-motion
@@ -174,4 +195,5 @@ One paragraph assessment of frontend quality, accessibility, and UX consistency.
 - Evaluate from a real user's perspective across different devices and abilities
 - Do not impose personal aesthetic preferences — validate against established patterns and standards
 - Verify Content Security Policy (CSP) headers are compatible with frontend implementation (inline styles, scripts, external resources)
+- **Browser Verification Evidence:** When `has_frontend: true` and reviewing code (not PRD), check `.pipeline/screenshots/` for browser-captured evidence. Missing screenshots when Playwright was available is Critical; missing screenshots when Playwright was unavailable is a Warning only. This section is skipped entirely for PRD reviews and when `has_frontend` is not `true`.
 - **Scoring (1–10 scale):** Rate the artifact holistically from your domain perspective. 9–10 = excellent, no meaningful issues. 7–8.5 = good, minor issues remain. 5–7 = acceptable but needs work. Below 5 = significant rework needed. The score must be consistent with your findings — a score above 8.5 requires zero Critical findings and at most minor Warnings.

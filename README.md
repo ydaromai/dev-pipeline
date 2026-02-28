@@ -5,11 +5,11 @@ AI-driven software delivery pipeline for Claude Code. Converts requirements into
 ## How It Works
 
 ```
-Requirement  -->  PRD  -->  Dev Plan  -->  JIRA  -->  Code (Ralph Loop)
-              GATE 1     GATE 2      GATE 3a/3b    GATE 4 (per PR)
+Requirement  -->  PRD  -->  Dev Plan  -->  JIRA  -->  Code (Ralph Loop)  -->  Test Verification
+              GATE 1     GATE 2      GATE 3a/3b    GATE 4 (per PR)        GATE 5
 ```
 
-Each stage is a Claude Code slash command. Human approval gates sit between stages. Ten critic agents validate artifacts at each gate — 7 always-on (Product, Dev, DevOps, QA, Security, Performance, Data Integrity) and 3 conditional (Observability when `has_backend_service: true`, API Contract when `has_api: true`, Designer when `has_frontend: true`).
+Each stage is a Claude Code slash command. Human approval gates sit between stages. Stage 5 (`/test`) performs comprehensive test verification: test existence audit, missing test generation, full test execution, coverage verification, CI/CD audit, and cumulative critic validation across the entire feature branch. Ten critic agents validate artifacts at each gate — 7 always-on (Product, Dev, DevOps, QA, Security, Performance, Data Integrity) and 3 conditional (Observability when `has_backend_service: true`, API Contract when `has_api: true`, Designer when `has_frontend: true`).
 
 ## Installation
 
@@ -55,6 +55,7 @@ Or run stages individually:
 /prd2plan @docs/prd/user-auth.md
 /plan2jira @docs/dev_plans/user-auth.md
 /execute @docs/dev_plans/user-auth.md
+/test @docs/dev_plans/user-auth.md
 ```
 
 ## Commands
@@ -66,6 +67,7 @@ Or run stages individually:
 | `/prd2plan @<prd>` | PRD to dev plan with 10-critic review |
 | `/plan2jira @<plan>` | Dev plan to JIRA issues (mandatory critic gate) |
 | `/execute @<plan>` | Execute tasks with Ralph Loop (build/review cycles) |
+| `/test @<plan>` | Run test verification: audit, execute, coverage, CI/CD audit, critic validation |
 | `/fullpipeline <requirement>` | Run all stages end-to-end with gates |
 | `/validate @<file>` | Run critic agents standalone on any artifact |
 
@@ -134,6 +136,7 @@ dev-pipeline/
     prd2plan.md
     plan2jira.md
     execute.md
+    test.md
     fullpipeline.md
     validate.md
     pipeline-init.md
@@ -199,11 +202,38 @@ Each project gets a `pipeline.config.yaml` (created by `/pipeline-init`) that co
 - **Validation**: which critics run at each stage, parallel vs sequential, max iterations (5)
 - **Scoring**: PRD quality thresholds (per-critic > 8.5, overall > 9.0)
 - **Execution**: build/review models, max iterations, branch pattern
-- **Test commands**: unit, integration, UI, all
+- **Test commands**: unit, integration, UI, E2E, component, all
 - **Test requirements**: file patterns mapped to required test types
+- **Test stage**: enabled, coverage thresholds, CI audit behavior, critic validation
+- **Browser testing**: Playwright-based validation for frontend projects (viewports, screenshots, routes)
 - **Paths**: PRD dir, dev plans dir, scripts locations
 
 See [pipeline/templates/pipeline-config-template.yaml](pipeline/templates/pipeline-config-template.yaml) for the full template.
+
+## Browser-Based Validation (Frontend Projects)
+
+When `has_frontend: true`, the pipeline adds browser-level verification:
+
+- **Smoke test** (`/execute` Step 5d/5e): Launches headless Chromium via Playwright, verifies pages render without JS errors, captures multi-viewport screenshots (mobile, tablet, desktop) as evidence
+- **E2E tests** (`/test`): E2E browser tests are mandatory — missing configuration is flagged as Critical
+- **Designer Critic**: Requires screenshot evidence from browser rendering; cannot PASS without proof of actual rendering
+- **Pipeline init** (`/pipeline-init`): Auto-detects Playwright and offers installation when `has_frontend: true`
+
+Non-frontend projects (`has_frontend: false`) are completely unaffected. When Playwright is not installed, the pipeline falls back gracefully to static analysis with Warning messages.
+
+Configure in `pipeline.config.yaml`:
+```yaml
+  browser_testing:
+    tool: playwright
+    headless: true
+    screenshot_dir: ".pipeline/screenshots"
+    viewports:
+      - { name: "mobile", width: 375, height: 812 }
+      - { name: "tablet", width: 768, height: 1024 }
+      - { name: "desktop", width: 1280, height: 720 }
+    max_routes: 10
+    max_console_errors: 0
+```
 
 ## Requirements
 
@@ -211,3 +241,4 @@ See [pipeline/templates/pipeline-config-template.yaml](pipeline/templates/pipeli
 - Node.js >= 18 (for JIRA scripts)
 - `gh` CLI (for PR creation during execution)
 - JIRA Cloud account (optional, can skip with `skip-jira`)
+- Playwright (optional, for browser-based validation on frontend projects: `npm install -D @playwright/test && npx playwright install chromium`)

@@ -3,17 +3,17 @@
 ## Pipeline Overview
 
 ```
- ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
- │  /pipeline-  │     │  /req2prd   │     │  /prd2plan  │     │  /plan2jira │     │  /execute   │
- │    init      │────▶│             │────▶│             │────▶│             │────▶│             │
- │  (one-time)  │     │ Requirement │     │  PRD → Dev  │     │ Dev Plan →  │     │ Ralph Loop  │
- │             │     │   → PRD     │     │    Plan     │     │   JIRA      │     │ Build/Review│
- └─────────────┘     └──────┬──────┘     └──────┬──────┘     └──────┬──────┘     └──────┬──────┘
-                          GATE 1              GATE 2            GATE 3a  GATE 3b     GATE 4 (per PR)
-                       PRD Approval        Plan Approval     Critic Val JIRA Conf    PR Merge
+ ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+ │  /pipeline-  │     │  /req2prd   │     │  /prd2plan  │     │  /plan2jira │     │  /execute   │     │  /test      │
+ │    init      │────▶│             │────▶│             │────▶│             │────▶│             │────▶│             │
+ │  (one-time)  │     │ Requirement │     │  PRD → Dev  │     │ Dev Plan →  │     │ Ralph Loop  │     │   Test      │
+ │             │     │   → PRD     │     │    Plan     │     │   JIRA      │     │ Build/Review│     │ Verification│
+ └─────────────┘     └──────┬──────┘     └──────┬──────┘     └──────┬──────┘     └──────┬──────┘     └──────┬──────┘
+                          GATE 1              GATE 2            GATE 3a  GATE 3b     GATE 4 (per PR)     GATE 5
+                       PRD Approval        Plan Approval     Critic Val JIRA Conf    PR Merge         Test Results
 ```
 
-**Or run everything at once:** `/fullpipeline <requirement>` chains all stages with gates between each. Each stage runs in a **fresh-context subagent** — the orchestrator only carries file paths and user decisions between gates, keeping context lean. All artifacts are persisted on disk.
+**Or run everything at once:** `/fullpipeline <requirement>` chains all 5 stages with gates between each. Each stage runs in a **fresh-context subagent** — the orchestrator only carries file paths and user decisions between gates, keeping context lean. All artifacts are persisted on disk.
 
 ---
 
@@ -230,7 +230,7 @@ This is the core execution engine. It reads the dev plan, builds a dependency gr
 | 3f | Create PR | Push branch, `gh pr create` with critic results + AC checklist + JIRA link |
 | 3g | **GATE 4** — Per-PR approval | User approves → squash merge → JIRA "Done" → update dev plan status |
 | 4 | Unlock dependents | Mark task DONE, check for newly unblocked tasks, loop back to Step 3 |
-| 5 | Final report | Results table (task/status/PR/iterations/critics), summary, next steps |
+| 5 | Pre-delivery smoke test + final report | Mandatory smoke test (5a-5f): dev server startup, health checks, SDK compatibility, core user flow, visual rendering. When `has_frontend: true`: 5d includes Playwright-based browser verification; 5e captures multi-viewport screenshots and DOM checks. Results table (task/status/PR/iterations/critics), summary, next steps |
 
 ### Critics at this stage (all applicable, parallel)
 
@@ -260,6 +260,49 @@ This is the core execution engine. It reads the dev plan, builds a dependency gr
 - **Within a group:** Tasks in the same `Parallel Group` run simultaneously
 - **Across groups:** Groups execute in order (A → B → C), each waits for previous group
 - **Cross-story:** Independent stories can run in separate CLI sessions (multi-session scaling)
+
+---
+
+## Stage 5: Test Verification -- `/test`
+
+**Input:** `@docs/dev_plans/<slug>.md`
+**Output:** Comprehensive test verification report (PASS/FAIL)
+
+```
+  Read Inputs +    Test Existence   Missing Test    Run All Tests    Coverage       CI Audit     CD Audit     Smoke Test      Critic         Final
+  Compute Scope -> Audit         -> Generation   -> (per-type)   -> Verification -> (verify) -> (report)  -> (if enabled) -> Validation  -> Report
+  (config, diff)   (patterns)      (Ralph Loop)    (fix loop)      (warning)       (fix?)      (no fix)     (execute.md)    (all critics)   (PASS/FAIL)
+```
+
+### Workflow Detail
+
+| Step | Action | Details |
+|------|--------|---------|
+| 1 | Read inputs + compute scope | Dev plan, config, PRD, constraints, `git diff main..HEAD`, handle empty diff/missing file |
+| 2 | Test Existence Audit | Match changed files against `test_requirements` patterns, cross-ref PRD Section 9, produce inventory table |
+| 3 | Missing Test Generation | Ralph Loop: BUILD tests (opus), REVIEW with QA+Dev critics, max 3 iterations, PR with human gate |
+| 4 | Run All Tests | Each type via `test_commands`, per-type reporting, fix loop (re-run ALL after fix), max 3 iterations |
+| 5 | Coverage Verification | Auto-detect coverage flag, compare against threshold, per-file report, Warning if below |
+| 6 | CI Pipeline Audit | Detect CI configs, verify jobs/commands, optional auto-fix, health table |
+| 7 | CD Pipeline Audit | Detect CD configs, verify deploy/health/rollback, report-only (no auto-fix) |
+| 8 | Local Deployment | Smoke test using execute.md Step 5 infrastructure, skip if disabled |
+| 9 | Cumulative Critic Validation | All applicable critics on `main..HEAD` diff, fix loop for failures, max 3 iterations |
+| 10 | Final Report | Per-section verdicts, overall PASS/FAIL |
+
+### Critics at this stage (all applicable, parallel)
+
+| Critic | Focus |
+|--------|-------|
+| Product | PRD alignment, AC coverage, scope creep, user experience, analytics tracking |
+| Dev | Code quality, patterns, conventions, test existence, analytics instrumentation |
+| DevOps | Env vars, deployment readiness, resource usage, rollback risk |
+| QA | Test coverage (happy/error/boundary), test quality, AC coverage, regression risk |
+| Security | Injection, auth/authz, secrets, OWASP top 10, vulnerable dependencies, threat analysis |
+| Performance | Algorithmic complexity, N+1 queries, pagination, caching, bundle size, memory usage |
+| Data Integrity | Schema migration safety, data validation, referential integrity, transformation accuracy |
+| Observability | Structured logging, metrics, tracing, health checks, alerting, error tracking (only if `has_backend_service: true`) |
+| API Contract | Backward compatibility, versioning, documentation, contract testing (only if `has_api: true`) |
+| Designer | Accessibility (WCAG 2.1 AA), responsive design, UX consistency, design system adherence (only if `has_frontend: true`) |
 
 ---
 
@@ -409,6 +452,7 @@ pipeline:
       prd2plan:  { critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer], mode: parallel }
       plan2jira: { critics: [product, dev], mode: parallel, mandatory: true }
       execute:   { critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer], mode: parallel }
+      test:      { critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer], mode: parallel }
       pre_merge: { critics: [dev, devops, security, performance, data-integrity, observability, api-contract, designer], mode: sequential }
 
   scoring:                            # PRD quality scoring thresholds
@@ -432,11 +476,23 @@ pipeline:
     integration: "npm run test:integration"
     ui: "npm run test:ui"
     all: "npm run test:all"
+    # e2e: "npm run test:e2e"
+    # component: "npm run test:component"
 
   test_requirements:                # File pattern → required test types
     "lib/**/*.js": [unit, integration]
     "public/**": [ui]
     "scripts/**/*.js": [unit]
+
+  # test_stage:                       # Test verification stage (Stage 5)
+  #   enabled: true                   # set to false to skip Stage 5
+  #   max_fix_iterations: 3           # max Ralph Loop iterations
+  #   coverage_thresholds:
+  #     lines: 80                     # minimum line coverage % (Warning, not blocking)
+  #   ci_audit:
+  #     fix_commented_jobs: false     # auto-fix commented-out CI jobs
+  #   critic_validation:
+  #     max_iterations: 3             # max fix iterations for critic failures
 
   paths:
     prd_dir: "docs/prd"
@@ -481,6 +537,7 @@ project-root/
 │   ├── prd2plan.md
 │   ├── plan2jira.md
 │   ├── execute.md
+│   ├── test.md
 │   ├── validate.md
 │   └── fullpipeline.md
 └── pipeline/
@@ -512,6 +569,7 @@ project-root/
 | Stage 2 (Plan) | Re-run `/prd2plan` | Checks if dev plan already exists |
 | Stage 3 (JIRA) | Re-run `/plan2jira` | Idempotent — skips already-created issues |
 | Stage 4 (Execute) | Re-run `/execute @plan` | Reads task statuses, reconciles JIRA, resumes from where it left off |
+| Stage 5 (Test) | Re-run `/test @plan` | Idempotent -- scans everything from scratch, no persistent state |
 
 ---
 
@@ -524,5 +582,6 @@ project-root/
 | `/prd2plan @<prd>` | PRD file | `docs/dev_plans/<slug>.md` | Plan approval |
 | `/plan2jira @<plan>` | Dev plan file | JIRA issues + updated plan | Mandatory critic validation (Dev+Product) + JIRA creation confirm |
 | `/execute @<plan>` | Dev plan file | Code, PRs, JIRA updates | Per-PR approval |
+| `/test @<plan>` | Dev plan file | Test verification report (PASS/FAIL) | Test results approval (Gate 5) |
 | `/validate @<file>` | Any artifact or `--diff` | Critic feedback | None (informational) |
 | `/fullpipeline <requirement>` | Requirement text | Everything above | All gates (including plan2jira validation) |
