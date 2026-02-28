@@ -69,7 +69,7 @@ pipeline:
     integration: "npm run test:integration"
     ui: "npm run test:ui"
     all: "npm run test:all"
-    # e2e: "npm run test:e2e"               # E2E test command (uncomment to enable)
+    e2e: "npx playwright test"              # Mandatory when has_frontend: true
     # component: "npm run test:component"   # Component test command (uncomment to enable; typically for has_frontend: true projects)
 
   # Test requirements: file pattern → required test types (project defaults)
@@ -106,6 +106,24 @@ pipeline:
   #   llm_api_key_env: null          # e.g., "ANTHROPIC_API_KEY" — auto-detect from .env if omitted
   #   llm_timeout_seconds: 30       # timeout for LLM API requests during smoke test
   #   max_fix_attempts: 2            # max smoke test fix iterations before escalating to user
+
+  # Browser-based validation (when has_frontend: true)
+  # Enables headless browser smoke testing, multi-viewport screenshot capture, and DOM verification.
+  # When has_frontend: false, this entire section is ignored.
+  # Uncomment and customize to override defaults.
+  # browser_testing:
+  #   tool: "playwright"                         # Browser automation tool (only "playwright" supported)
+  #   headless: true                             # Run browser in headless mode (default: true; no display server required)
+  #   screenshot_dir: ".pipeline/screenshots"    # Directory for captured screenshots (cleaned each run)
+  #   viewports:                                 # Viewport sizes for multi-viewport screenshot capture
+  #     mobile: { width: 375, height: 812 }      # Mobile viewport (iPhone-class)
+  #     tablet: { width: 768, height: 1024 }     # Tablet viewport (iPad-class)
+  #     desktop: { width: 1280, height: 720 }    # Desktop viewport (standard HD)
+  #   smoke_test_routes: []                      # Explicit routes to screenshot (overrides auto-detection; empty = auto-detect)
+  #   max_routes: 10                             # Maximum routes to screenshot (caps auto-detection)
+  #   max_console_errors: 0                      # Maximum allowed console.error events across all page loads (0 = strict)
+  #   visual_regression: false                   # Enable visual regression testing (deferred — not yet implemented)
+  #   auto_install: false                        # Auto-install Playwright browsers in CI (default: false; never installs without consent)
 
   # Test verification stage (Stage 5 of /fullpipeline, or run standalone via /test)
   # Controls the /test command behavior. When omitted, /test uses defaults.
