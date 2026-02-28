@@ -326,9 +326,131 @@ After a task completes:
 
 Repeat until all tasks are DONE or BLOCKED.
 
-## Step 5: Final report
+## Step 5: Pre-Delivery Smoke Test (MANDATORY)
 
-When all tasks are processed:
+**This step is mandatory.** Do NOT skip it. Do NOT present results to the user before completing it. This step typically adds 30–90 seconds to pipeline execution depending on server startup time and LLM latency.
+
+After all tasks are DONE (or BLOCKED), but BEFORE declaring the pipeline complete, perform runtime verification. This catches integration seams that critics miss (critics review code; smoke tests verify experience).
+
+### Smoke test configuration
+
+Read `AGENT_CONSTRAINTS.md` → "Pre-Delivery Validation" for the project-specific checklist. If `pipeline.config.yaml` has a `smoke_test` section, use its configuration. Otherwise, apply the defaults below.
+
+**Expected `smoke_test` config schema in `pipeline.config.yaml`** (canonical source; also mirrored in `pipeline/templates/pipeline-config-template.yaml` — keep both in sync):
+```yaml
+smoke_test:
+  enabled: true                    # set to false to skip (e.g., libraries, CLI tools, data pipelines)
+  # start_command: "pnpm dev"     # default: auto-detected from lockfile (omit to auto-detect)
+  startup_timeout_seconds: 30      # max wait for server readiness
+  ready_patterns:                  # case-insensitive substrings to match in server output (replaces defaults if set)
+    - "ready"
+    - "listening"
+    - "started"
+    - "compiled successfully"
+    - "running"
+    - "available"
+  endpoints:                       # health check URLs (overrides auto-detect from has_frontend/has_backend_service)
+    - { url: "http://localhost:3000", expect_status: 200 }
+    - { url: "http://localhost:3001/health", expect_status: 200, expect_body_contains: "ok" }
+  endpoint_timeout_seconds: 10     # per-endpoint HTTP timeout
+  entry_url: "http://localhost:3000"
+  interaction_endpoint: null       # e.g., "POST /api/chat" — auto-inferred from PRD if omitted
+  has_llm: true                    # whether to test with LLM_MOCK=false
+  llm_api_key_env: null            # e.g., "ANTHROPIC_API_KEY" — auto-detect from .env if omitted
+  llm_timeout_seconds: 30          # timeout for LLM API requests during smoke test
+  max_fix_attempts: 2              # max smoke test fix iterations before escalating to user
+```
+
+**Defaults:** If the `smoke_test` section is absent from config, Step 5 still runs using auto-detection (this step is mandatory). If `smoke_test` is present but `enabled` is omitted, it defaults to `true`. Only `smoke_test.enabled: false` skips the smoke test.
+
+**If `smoke_test.enabled` is explicitly `false`, skip this entire step** and use this report snippet in Step 6:
+```
+### Smoke Test Results
+Smoke tests: SKIPPED (opted out via `smoke_test.enabled: false`)
+```
+
+**Edge cases:**
+- `max_fix_attempts: 0` → escalate to the user immediately on first failure without attempting fixes.
+- `ready_patterns: []` (empty list) → skip readiness pattern matching entirely; wait the full `startup_timeout_seconds` then proceed. This is useful for servers with no stdout output.
+
+### 5a. Start the dev server
+
+1. **Pre-check:** Verify target ports are free (`lsof -i :<port>` or equivalent). If a port is occupied, fail fast with a clear message identifying which port is blocked and which process holds it.
+2. **Detect the package manager** from the lockfile (`pnpm-lock.yaml` → `pnpm`, `yarn.lock` → `yarn`, `bun.lockb` or `bun.lock` → `bun`, `package-lock.json` → `npm`). Use `smoke_test.start_command` from config if set, otherwise use `<detected-pm> run dev`. **Non-JS projects** (Python, Go, Rust, etc.) have no lockfile auto-detection — they MUST set `smoke_test.start_command` explicitly, or startup will fail with a clear error.
+3. Start the dev server in the background. Record the PID for teardown. **Note:** The dev server inherits the current shell environment. This is acceptable for local development but may expose additional env vars in CI-hosted pipeline runs — consider using `env -i` with explicit vars in CI contexts.
+4. Wait for a readiness signal — match any of `smoke_test.ready_patterns` (default: `ready`, `listening`, `started`, `compiled successfully`, `running`, `available` — case-insensitive) in the server output. Projects with non-standard readiness messages should configure `ready_patterns` explicitly.
+5. **Timeout:** If no readiness signal appears within `smoke_test.startup_timeout_seconds` (default: 30s), treat as a BLOCKING failure. **On startup failure, capture the last 50 lines of server output** and include them in the failure report for diagnostic context.
+
+### 5b. Health checks
+
+Verify all services respond. Read endpoints from `smoke_test.endpoints` in config — if present, this **overrides** auto-detection entirely. If `endpoints` is not configured, auto-detect from **top-level** pipeline config flags:
+- If `has_frontend: true` → check `http://localhost:3000` (expect 200)
+- If `has_backend_service: true` → check `http://localhost:3001/health` (expect 200)
+- If neither flag is set, check `http://localhost:3000` only
+
+Use `smoke_test.endpoint_timeout_seconds` (default: 10s) as the per-endpoint HTTP timeout. If `expect_body_contains` is set for an endpoint, verify the response body includes that string (catches degraded health endpoints that return 200 with unhealthy status).
+
+Use any available HTTP method (curl with `--connect-timeout 5 --max-time 10`, fetch, wget) — the tool does not matter, the result does. **On failure, record and report:** endpoint URL, HTTP status code received (or connection error), response body (first 500 chars), and request duration.
+
+### 5c. SDK version compatibility
+
+> **Note:** This complements the Dev Critic's static checklist (SDK API surface + cross-boundary format). The critic catches mismatches during code review; this step verifies at integration time after all tasks are merged, catching seams between independently-reviewed tasks.
+
+For any SDK used in the project:
+1. Read the project manifest for installed versions — for Node.js, read both `dependencies` and `devDependencies` in `package.json`; for other ecosystems, read the equivalent (`requirements.txt`, `go.mod`, `Cargo.toml`, etc.)
+2. Verify server-side API methods match the installed version (check SDK changelog or type definitions, or equivalent for non-JS SDKs)
+3. Verify client-side transport expects the same format the server sends
+4. **Cross-SDK seams** (e.g., AI SDK client ↔ server) are the highest-risk area
+5. **Emit a structured audit line per SDK checked** in the results, e.g., `ai@6.2.1 — toUIMessageStreamResponse: confirmed`. This provides an audit trail if a version-related issue surfaces later.
+
+### 5d. Core user flow verification
+
+Verify the primary user flow via HTTP requests and response inspection (not visual browser interaction):
+1. Request the entry URL — verify HTTP 200 and the response HTML contains expected elements (root div, script tags, meta tags)
+2. Trigger the main interaction endpoint — use `smoke_test.interaction_endpoint` from config if set; otherwise infer from the PRD's primary user flow and the codebase route definitions (scan `app/api/`, `pages/api/`, `routes/`, or framework-equivalent directories for the primary endpoint). Examples: `POST /api/chat` for chat apps, `GET /api/items` for CRUD apps, `POST /api/generate` for generation apps. Verify the response status and format.
+3. If the app has an LLM component and `smoke_test.has_llm` is not `false`:
+   - Check for an API key: look at `smoke_test.llm_api_key_env` from config, or auto-detect from common env vars (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) or the project's `.env` file. **When reading `.env`, check only whether the specific key exists** (e.g., `grep '^ANTHROPIC_API_KEY=' .env`) — do not parse or retain the full file contents and do not capture or log the key's value, as it may contain unrelated secrets.
+   - If an API key is available, test once with `LLM_MOCK=false` and verify the response **status and format only** — do NOT log or persist the full response body (it may contain sensitive content)
+   - Use `smoke_test.llm_timeout_seconds` (default: 30s) for the LLM request (`curl --max-time <timeout>` or equivalent). **On timeout, report:** endpoint called, request payload shape (e.g., `POST /api/chat {messages: [...]}` — not content), timeout value, and whether the dev server process was still running at timeout time.
+   - If no API key is available, **skip this sub-step** and report as `⚠️ skipped (no API key)` — this is not a BLOCKING failure
+
+### 5e. Visual rendering check (if `has_frontend: true`)
+
+If `has_frontend` is not `true`, skip this step and report `Visual rendering: N/A (no frontend)` in the results table.
+
+Since the agent operates via CLI (no browser), verify rendering integrity through static analysis (also checked by the Designer Critic during code review — this step catches integration-level issues after all tasks are merged):
+1. Verify CSS custom properties are defined before use — no orphan `var(--*)` references without a corresponding definition in scope (fonts, colors, spacing, radii, etc.)
+2. Verify dynamic content rendering code parses markdown/responses (not raw display)
+3. Verify images/icons/assets referenced in code exist as files (no missing references)
+4. If the project defines a dark theme (`data-theme`, `prefers-color-scheme`), verify all CSS custom properties have definitions in both themes
+
+> **Note:** For full visual verification, recommend the user perform a manual browser check or configure a headless browser tool in `smoke_test`.
+
+### 5f. Teardown
+
+**After smoke tests complete (pass or fail), terminate the dev server process started in 5a:**
+1. Send SIGTERM to the **process group** (`kill -- -$PID` on Linux/macOS). If that fails (e.g., process is not a group leader), fall back to `pkill -P $PID` to kill child processes. Dev servers (Next.js, Vite, etc.) often spawn child workers; killing only the parent leaves orphan processes holding ports.
+2. Wait up to 5 seconds for the process group to exit
+3. If still running, send SIGKILL to the process group (`kill -9 -- -$PID`)
+4. Verify the ports are released (`lsof -i :<port>` returns empty) before proceeding
+
+### Failure handling
+
+If ANY smoke test step fails:
+1. **Create a `fix/smoke-test-<short-sha>-<attempt>` branch** from the current HEAD (use the first 7 chars of HEAD SHA + attempt number for uniqueness, e.g., `fix/smoke-test-a1b2c3d-1`).
+2. Apply the fix and run the relevant critics (Dev + QA + Security minimum) against the change.
+3. **Log each fix attempt** with structured output: what was changed (files modified), which smoke test step was re-run, and the pass/fail result with the same structured diagnostics as the original failure.
+4. Create a PR and present it to the user for approval (same gate as Step 3g).
+5. After merge, re-run the failed smoke test step to confirm the fix.
+6. **Max attempts:** After `smoke_test.max_fix_attempts` (default: 2) failed fix cycles, escalate to the user as a BLOCKING issue — do not loop indefinitely.
+7. If you cannot fix it, report it explicitly in the final report as a BLOCKING issue.
+8. The pipeline is NOT complete until smoke tests pass.
+
+---
+
+## Step 6: Final report
+
+When all tasks are processed AND smoke tests pass:
 
 ```
 ## Execution Complete
@@ -340,15 +462,58 @@ When all tasks are processed:
 | TASK 1.2 | ✅ DONE | #43 | 2 | All PASS |
 | TASK 2.1 | ❌ BLOCKED | WIP #44 | 3 | Dev FAIL |
 
+### Smoke Test Results
+| Check | Status | Duration | Details |
+|-------|--------|----------|---------|
+| Dev server startup | ✅ | 4.2s | pnpm dev, ready in 4.2s |
+| Health checks | ✅ | 0.3s | 2/2 endpoints healthy |
+| SDK version compatibility | ✅ | 1.1s | ai@6.2.1 — toUIMessageStreamResponse: confirmed |
+| Core user flow | ✅ | 0.8s | POST /api/chat → 200 |
+| Visual rendering | ✅ / N/A (no frontend) | 0.5s | 0 orphan CSS vars, 0 missing assets |
+| Real API test | ✅ / ⚠️ skipped (no API key) | 2.1s | LLM response format valid / no ANTHROPIC_API_KEY |
+| Server teardown | ✅ | 0.2s | PID group terminated, ports released |
+
 ### Summary
 - Completed: N/M tasks
 - Blocked: K tasks (require manual intervention)
 - Total Ralph Loop iterations: X
 - PRs merged: Y
+- Smoke tests: PASS ✅
 
 ### Next Steps
 <if blocked tasks exist, suggest resolution steps>
-<if all done, suggest running integration tests>
+- Run full test suite: <test command from pipeline.config.yaml>
+- Deploy to staging
+```
+
+**If smoke tests fail after `max_fix_attempts`**, use this variant instead:
+
+```
+## Execution Incomplete — Smoke Test Failure
+
+### Results
+| Task | Status | PR | Iterations | Critics |
+|------|--------|-----|-----------|---------|
+| TASK 1.1 | ✅ DONE | #42 | 1 | All PASS |
+| TASK 1.2 | ✅ DONE | #43 | 2 | All PASS |
+
+### Smoke Test Results
+| Check | Status | Duration | Error Details |
+|-------|--------|----------|---------------|
+| Dev server startup | ✅ | 4.2s | — |
+| Health checks | ❌ FAIL | 0.3s | GET http://localhost:3001/health → 503, body: {"status":"unhealthy","db":"disconnected"} |
+| SDK version compatibility | ⏭️ skipped | — | Blocked by prior failure |
+| Server teardown | ✅ | 0.2s | PID group terminated, ports released |
+
+### Summary
+- Completed: N/M tasks
+- Smoke tests: FAIL ❌ (after N fix attempts)
+- Blocking issue: <description of the failing step and root cause>
+
+### Next Steps
+- Fix the issue manually on branch: <branch>
+- Re-run smoke tests: `/validate --smoke-test`
+- Or override: proceed to deploy with known issue
 ```
 
 ---

@@ -76,6 +76,32 @@ pipeline:
     "model/**": [schema_validation]
     "scripts/**/*.js": [unit]
 
+  # Pre-delivery smoke test (Step 5 of /execute)
+  # Canonical schema is in commands/execute.md — keep both in sync.
+  # When this section is omitted, /execute uses auto-detection from has_frontend/has_backend_service flags.
+  # Uncomment and customize to override auto-detection.
+  # smoke_test:
+  #   enabled: true                  # set to false to skip (e.g., libraries, CLI tools, data pipelines)
+  #   # start_command: "pnpm dev"   # default: auto-detected from lockfile (omit to auto-detect)
+  #   startup_timeout_seconds: 30    # max wait for server readiness
+  #   ready_patterns:                # case-insensitive substrings to match in server output (replaces defaults if set)
+  #     - "ready"
+  #     - "listening"
+  #     - "started"
+  #     - "compiled successfully"
+  #     - "running"
+  #     - "available"
+  #   endpoints:                     # health check URLs (overrides auto-detect from has_frontend/has_backend_service)
+  #     - { url: "http://localhost:3000", expect_status: 200 }
+  #     - { url: "http://localhost:3001/health", expect_status: 200, expect_body_contains: "ok" }
+  #   endpoint_timeout_seconds: 10   # per-endpoint HTTP timeout
+  #   entry_url: "http://localhost:3000"
+  #   interaction_endpoint: null     # e.g., "POST /api/chat" — auto-inferred from PRD if omitted
+  #   has_llm: true                  # whether to test with LLM_MOCK=false
+  #   llm_api_key_env: null          # e.g., "ANTHROPIC_API_KEY" — auto-detect from .env if omitted
+  #   llm_timeout_seconds: 30       # timeout for LLM API requests during smoke test
+  #   max_fix_attempts: 2            # max smoke test fix iterations before escalating to user
+
   # Project-specific paths (override per project)
   paths:
     prd_dir: "docs/prd"

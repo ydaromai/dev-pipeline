@@ -45,6 +45,7 @@ When reviewing a PRD (not code), evaluate:
 - [ ] Tests are independent (no order dependency between tests)
 - [ ] Assertions are specific (not just "no error thrown")
 - [ ] Mocks/stubs are appropriate (not over-mocking)
+- [ ] Integration seams are tested with real formats, not just mocked (e.g., actual SSE stream parsing, not mocked transport)
 
 ### Requirements Coverage
 - [ ] Acceptance criteria from task spec are covered by tests
@@ -87,7 +88,8 @@ When reviewing a PRD (not code), evaluate:
 - [x/✗] Test data realistic
 - [x/✗] Tests independent
 - [x/✗] Assertions specific
-- [x/✗] Mocks appropriate
+- [x/✗] Mocks appropriate (not over-mocking)
+- [x/✗] Integration seams tested with real formats
 - [x/✗] Task acceptance criteria covered
 - [x/✗] PRD acceptance criteria covered
 - [x/✗] Regression risk assessed
@@ -131,4 +133,6 @@ One paragraph assessment of test adequacy and quality confidence.
 - Flaky tests are Critical — they erode trust in the entire suite
 - Document manual test scenarios as Notes when automation is impractical
 - Consider: "If this code breaks in production, would the tests catch it?"
+- Over-mocking is Critical when it hides integration failures (e.g., mocking the HTTP transport means stream format bugs aren't caught)
+- If the app uses mock mode (LLM_MOCK, etc.), verify that tests also cover the real code path, not just the mock
 - **Scoring (1–10 scale):** Rate the artifact holistically from your domain perspective. 9–10 = excellent, no meaningful issues. 7–8.5 = good, minor issues remain. 5–7 = acceptable but needs work. Below 5 = significant rework needed. The score must be consistent with your findings — a score above 8.5 requires zero Critical findings and at most minor Warnings.

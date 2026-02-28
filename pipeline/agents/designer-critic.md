@@ -69,6 +69,12 @@ When reviewing a PRD (not code), evaluate:
 - [ ] Typography hierarchy is clear (headings, body, captions)
 - [ ] Content is scannable (not walls of text)
 
+### Runtime Rendering Integrity
+- [ ] Font loading pipeline is complete (font imported → CSS variable defined → applied to root element)
+- [ ] Dynamic content (AI/LLM responses, markdown, user-generated) is rendered/parsed, not displayed raw
+- [ ] CSS variable chain is unbroken (no orphan `var(--*)` references without a corresponding definition in scope — fonts, colors, spacing, radii, etc.)
+- [ ] Assets referenced in code actually exist and will load (images, icons, fonts) _(also verified at runtime in smoke test step 5e)_
+
 ### Animation & Transitions
 - [ ] Animations serve a purpose (guide attention, provide feedback)
 - [ ] Animations respect prefers-reduced-motion media query

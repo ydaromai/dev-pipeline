@@ -239,8 +239,9 @@ Important:
 - Return the following in your final message:
   1. Results table: task, status, PR number, iteration count, critic results
   2. Summary: completed/blocked counts, total iterations, PRs merged
-  3. Any blocked tasks with their failure reasons
-  4. Next steps
+  3. Smoke test results table (from Step 5 of /execute)
+  4. Any blocked tasks with their failure reasons
+  5. Next steps
 ```
 
 ### GATE 4: Per-PR Approval
@@ -304,8 +305,25 @@ When the Stage 4 subagent returns, present the final report:
 - All critics passed for all tasks
 - Test coverage: N%
 
+### Smoke Test (Pre-Delivery)
+| Check | Status | Duration | Details |
+|-------|--------|----------|---------|
+| Dev server startup | ✅ | 4.2s | pnpm dev, ready in 4.2s |
+| Health checks | ✅ | 0.3s | 2/2 endpoints healthy |
+| SDK version compatibility | ✅ | 1.1s | ai@6.2.1 — confirmed |
+| Core user flow | ✅ | 0.8s | POST /api/chat → 200 |
+| Visual rendering | ✅ / N/A (no frontend) | 0.5s | 0 orphan CSS vars |
+| Real API test | ✅ / ⚠️ skipped (no API key) | 2.1s | — |
+| Server teardown | ✅ | 0.2s | ports released |
+
 ### Next Steps
-- Run full integration test suite: <test_all command>
+- Run full test suite: <test command from pipeline.config.yaml>
 - Deploy to staging
 - Product review against PRD acceptance criteria
 ```
+
+**IMPORTANT:** The Stage 4 subagent's `/execute` includes a mandatory smoke test step (Step 5) that verifies the dev server actually works before declaring complete. If the smoke test fails, the pipeline is NOT complete — the subagent must fix the issues or report them as blocking. Never present a "Pipeline Complete" report to the user without smoke tests passing. **Verify the Stage 4 subagent's response includes a "Smoke Test Results" section before declaring pipeline complete.** If absent, query the subagent for smoke test status. **Heading rules:**
+- All smoke tests PASS → "Pipeline Complete"
+- Any smoke test row shows FAIL → "Pipeline Incomplete — Smoke Test Failure" (include Error Details column in the table)
+- Smoke tests SKIPPED (opted out via `smoke_test.enabled: false`) → "Pipeline Complete" (treat opt-out as acceptable; include the "SKIPPED" line in the report)
+- Any smoke test row is a skip/warning (e.g., "⚠️ skipped (no API key)") → "Pipeline Complete" but list skipped checks so the user knows coverage level

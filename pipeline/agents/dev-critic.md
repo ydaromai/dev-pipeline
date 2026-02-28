@@ -40,6 +40,9 @@ Evaluate each item. Mark `[x]` for pass, `[✗]` for fail.
 - [ ] JSDoc comments for exported functions
 - [ ] Parameterized queries for all database access (no string concatenation)
 - [ ] async/await used consistently (no raw Promise chains mixed in)
+- [ ] SDK API surface matches installed version (e.g., AI SDK v6 uses `toUIMessageStreamResponse`, not v5's `toDataStreamResponse`)
+- [ ] Cross-boundary format compatibility (server response format matches what client transport expects)
+
 ### PRD Review Focus
 When reviewing a PRD (not code), evaluate:
 - [ ] Requirements are technically feasible with the stated tech stack
@@ -48,6 +51,7 @@ When reviewing a PRD (not code), evaluate:
 - [ ] Data model implications are clear
 - [ ] API contracts or integration points are well-defined
 
+### Analytics
 - [ ] Analytics events instrumented per PRD specs (if analytics events defined in PRD)
 - [ ] No PII in analytics payloads (user IDs OK, emails/names/IPs are not)
 - [ ] Analytics calls don't block UI rendering (async/fire-and-forget pattern)
@@ -90,6 +94,8 @@ When reviewing a PRD (not code), evaluate:
 - [x/✗] JSDoc for exports
 - [x/✗] Parameterized queries
 - [x/✗] Consistent async/await
+- [x/✗/N/A] SDK API surface matches installed version
+- [x/✗/N/A] Cross-boundary format compatibility
 - [x/✗/N/A] Analytics instrumented per PRD
 - [x/✗/N/A] No PII in analytics payloads
 - [x/✗/N/A] Analytics calls non-blocking
@@ -124,4 +130,6 @@ One paragraph assessment of code quality and architecture alignment.
 - PII in analytics payloads is Critical (privacy/compliance risk)
 - Missing analytics instrumentation is a Warning if PRD defines tracking events, otherwise N/A
 - Blocking analytics calls (synchronous, in the render path) are a Warning
+- SDK version mismatch (using API methods from a different version than installed) is Critical — it causes silent runtime failures
+- Cross-boundary format incompatibility (server sends format X, client expects format Y) is Critical
 - **Scoring (1–10 scale):** Rate the artifact holistically from your domain perspective. 9–10 = excellent, no meaningful issues. 7–8.5 = good, minor issues remain. 5–7 = acceptable but needs work. Below 5 = significant rework needed. The score must be consistent with your findings — a score above 8.5 requires zero Critical findings and at most minor Warnings.
