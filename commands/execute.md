@@ -563,6 +563,7 @@ When all tasks are processed AND smoke tests pass:
 | SDK version compatibility | ✅ | 1.1s | ai@6.2.1 — toUIMessageStreamResponse: confirmed |
 | Core user flow | ✅ | 0.8s | POST /api/chat → 200 |
 | Visual rendering | ✅ / N/A (no frontend) | 0.5s | 0 orphan CSS vars, 0 missing assets |
+| Browser screenshots | ✅ / N/A / ⚠️ | 12.3s | 5 routes x 3 viewports = 15 screenshots / N/A (has_frontend: false) / Warning: Playwright not available — static analysis only (see installation instructions above) |
 | Real API test | ✅ / ⚠️ skipped (no API key) | 2.1s | LLM response format valid / no ANTHROPIC_API_KEY |
 | Server teardown | ✅ | 0.2s | PID group terminated, ports released |
 
