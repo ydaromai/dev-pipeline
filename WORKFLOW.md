@@ -230,7 +230,7 @@ This is the core execution engine. It reads the dev plan, builds a dependency gr
 | 3f | Create PR | Push branch, `gh pr create` with critic results + AC checklist + JIRA link |
 | 3g | **GATE 4** — Per-PR approval | User approves → squash merge → JIRA "Done" → update dev plan status |
 | 4 | Unlock dependents | Mark task DONE, check for newly unblocked tasks, loop back to Step 3 |
-| 5 | Final report | Results table (task/status/PR/iterations/critics), summary, next steps |
+| 5 | Pre-delivery smoke test + final report | Mandatory smoke test (5a-5f): dev server startup, health checks, SDK compatibility, core user flow, visual rendering. When `has_frontend: true`: 5d includes Playwright-based browser verification; 5e captures multi-viewport screenshots and DOM checks. Results table (task/status/PR/iterations/critics), summary, next steps |
 
 ### Critics at this stage (all applicable, parallel)
 
