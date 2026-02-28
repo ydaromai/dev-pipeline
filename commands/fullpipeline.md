@@ -27,8 +27,13 @@ ORCHESTRATOR (this agent — lightweight coordinator)
   │
   │  ◄── GATE 3a/3b: critic validation + user confirms JIRA ──►
   │
-  └─ Stage 4 subagent (fresh context) ──► Code implemented, PRs merged
-       └─ per-task: build subagent → review subagent → critic subagents
+  ├─ Stage 4 subagent (fresh context) ──► Code implemented, PRs merged
+  │    └─ per-task: build subagent → review subagent → critic subagents
+  │
+  │  ◄── GATE 4: per-PR approval ──►
+  │
+  └─ Stage 5 subagent (fresh context) ──► Test verification report
+       └─ test audit, test generation, test execution, critic validation
 ```
 
 **Why fresh context?** By Gate 4, the orchestrator would be carrying the full PRD generation conversation, all critic scoring iterations, plan generation, JIRA creation dialogue — none of which the execution engine needs. Each stage's meaningful output lives on disk (PRD file, dev plan file, JIRA mapping). The orchestrator only tracks file paths, the slug, and user decisions.
@@ -47,6 +52,7 @@ prd_path:       docs/prd/<slug>.md
 plan_path:      docs/dev_plans/<slug>.md
 requirement:    <original requirement text>
 user_prefs:     { skip_jira: bool, ... }
+test_result:    PASS | FAIL | SKIPPED
 ```
 
 Everything else is persisted on disk and read fresh by each stage subagent.
@@ -250,6 +256,79 @@ Gate 4 is handled inside the Stage 4 subagent — each task's PR requires user a
 
 ---
 
+## Stage 5: Test Verification (fresh context)
+
+Check `test_stage.enabled` from `pipeline.config.yaml` (default: `true`):
+- If `false`, skip Stage 5 entirely. Set `test_result: SKIPPED` in orchestrator state. Proceed to Completion.
+
+Spawn a subagent (Task tool, model: opus — Opus 4.6) to execute the `/test` stage:
+
+**Subagent prompt:**
+```
+You are executing the /test pipeline stage. Read the full command instructions:
+<read and paste ${CLAUDE_PLUGIN_ROOT}/commands/test.md>
+
+Execute all steps (1 through 10) for this dev plan:
+
+Dev plan file: <plan_path>
+
+Important:
+- Read pipeline.config.yaml for test_stage config
+- Run test existence audit, test generation, test execution
+- Run full cumulative critic validation on main..HEAD diff
+- Produce comprehensive final report
+- Return the following in your final message:
+  1. Test inventory summary (files audited, gaps found/filled)
+  2. Test results table (per-type pass/fail/skip/duration)
+  3. Coverage summary
+  4. CI/CD audit results
+  5. Critic validation results (all critics, verdicts)
+  6. Overall verdict (PASS/FAIL)
+  7. Any unresolved issues
+```
+
+When the subagent completes, extract the test result. Store `test_result` as orchestrator state (`PASS` or `FAIL`).
+
+### GATE 5: Test Results Approval
+
+Present the subagent's summary to the user:
+
+```
+## Gate 5: Test Verification Results
+
+### Test Results
+| Type | Status | Pass | Fail | Skip | Duration |
+|------|--------|------|------|------|----------|
+| Unit | PASS | 42 | 0 | 2 | 3.2s |
+| Integration | PASS | 15 | 0 | 0 | 8.1s |
+| All | PASS | 57 | 0 | 2 | 11.5s |
+
+### Critic Validation (cumulative diff)
+| Critic | Verdict |
+|--------|---------|
+| Product | PASS ✅ |
+| Dev | PASS ✅ |
+| DevOps | PASS ✅ |
+| QA | PASS ✅ |
+| Security | PASS ✅ |
+| Performance | PASS ✅ |
+| Data Integrity | PASS ✅ |
+| Observability | N/A |
+| API Contract | N/A |
+| Designer | N/A |
+
+Overall: PASS / FAIL
+Ralph Loop iterations: N
+
+Options: approve | fix | abort
+```
+
+**If approved** → proceed to Completion
+**If fix requested** → wait for user fixes, then re-run `/test`
+**If aborted** → stop pipeline, report where artifacts are saved
+
+---
+
 ## Pipeline State Tracking
 
 Throughout the pipeline, state is persisted in two places:
@@ -260,7 +339,7 @@ Throughout the pipeline, state is persisted in two places:
 - JIRA mapping: `jira-issue-mapping.json`
 
 **2. In the orchestrator (lightweight):**
-- `slug`, `prd_path`, `plan_path`, `requirement`, `user_prefs`
+- `slug`, `prd_path`, `plan_path`, `requirement`, `user_prefs`, `test_result`
 
 This separation means the pipeline can be resumed at any stage by reading file state — no conversational context is needed.
 
@@ -273,6 +352,7 @@ If the pipeline is interrupted at any stage:
 - **Stage 2 interrupted**: Re-run `/prd2plan` — check if dev plan already exists
 - **Stage 3 interrupted**: Re-run `/plan2jira` — jira-import.js handles idempotency (skips already-created issues)
 - **Stage 4 interrupted**: Re-run `/execute @plan` — it reads task statuses from the dev plan, **reconciles JIRA statuses** (transitions completed tasks to "Done" and in-progress tasks to "In Progress"), and then resumes execution from where it left off. No manual JIRA updates are needed after session restarts.
+- **Stage 5 interrupted**: Re-run `/test @plan` — `/test` is idempotent, scans everything from scratch with no persistent state.
 
 **Re-running `/fullpipeline`** after interruption: The orchestrator should check for existing artifacts before spawning each stage subagent. If `docs/prd/<slug>.md` exists, ask the user whether to skip Stage 1. If `docs/dev_plans/<slug>.md` exists, ask whether to skip Stage 2. This avoids re-running completed stages.
 
@@ -280,7 +360,7 @@ If the pipeline is interrupted at any stage:
 
 ## Completion
 
-When the Stage 4 subagent returns, present the final report:
+When all stages complete (Stage 5 subagent returns, or Stage 5 is skipped), present the final report:
 
 ```
 ## Pipeline Complete
@@ -305,7 +385,7 @@ When the Stage 4 subagent returns, present the final report:
 - All critics passed for all tasks
 - Test coverage: N%
 
-### Smoke Test (Pre-Delivery)
+### Smoke Test (Pre-Delivery, Stage 4)
 | Check | Status | Duration | Details |
 |-------|--------|----------|---------|
 | Dev server startup | ✅ | 4.2s | pnpm dev, ready in 4.2s |
@@ -316,14 +396,27 @@ When the Stage 4 subagent returns, present the final report:
 | Real API test | ✅ / ⚠️ skipped (no API key) | 2.1s | — |
 | Server teardown | ✅ | 0.2s | ports released |
 
+### Test Verification (Stage 5)
+| Section | Status | Details |
+|---------|--------|---------|
+| Test Inventory | PASS | X files audited, Y gaps found, Z filled |
+| Test Results | PASS | All types green (unit: 42/0, integration: 15/0) |
+| Coverage | WARNING | 75% overall (threshold: 80%) |
+| CI Audit | PASS | All jobs active |
+| CD Audit | INFO | Report-only — 2 findings |
+| Smoke Test | PASS / SKIPPED | Post-test deployment verified / smoke_test.enabled: false |
+| Critic Validation | PASS | All 7 critics passed on cumulative diff |
+| **Overall** | **PASS** | |
+
 ### Next Steps
-- Run full test suite: <test command from pipeline.config.yaml>
 - Deploy to staging
 - Product review against PRD acceptance criteria
 ```
 
 **IMPORTANT:** The Stage 4 subagent's `/execute` includes a mandatory smoke test step (Step 5) that verifies the dev server actually works before declaring complete. If the smoke test fails, the pipeline is NOT complete — the subagent must fix the issues or report them as blocking. Never present a "Pipeline Complete" report to the user without smoke tests passing. **Verify the Stage 4 subagent's response includes a "Smoke Test Results" section before declaring pipeline complete.** If absent, query the subagent for smoke test status. **Heading rules:**
-- All smoke tests PASS → "Pipeline Complete"
+- All smoke tests PASS and test verification PASS → "Pipeline Complete"
 - Any smoke test row shows FAIL → "Pipeline Incomplete — Smoke Test Failure" (include Error Details column in the table)
+- Test verification FAIL → "Pipeline Incomplete — Test Verification Failure" (include blocking items)
 - Smoke tests SKIPPED (opted out via `smoke_test.enabled: false`) → "Pipeline Complete" (treat opt-out as acceptable; include the "SKIPPED" line in the report)
+- Test verification SKIPPED (opted out via `test_stage.enabled: false`) → "Pipeline Complete" (treat opt-out as acceptable; include the "SKIPPED" line in the report)
 - Any smoke test row is a skip/warning (e.g., "⚠️ skipped (no API key)") → "Pipeline Complete" but list skipped checks so the user knows coverage level
