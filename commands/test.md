@@ -61,13 +61,19 @@ Audit all changed source files to determine which test types are required and wh
    - `component` -- only if `has_frontend: true`
    - `integration` -- always applicable
    - `ui` -- only if `has_frontend: true`
-   - `e2e` -- only if `test_commands.e2e` is configured
+   - `e2e` -- mandatory if `has_frontend: true` (regardless of configuration); only if `test_commands.e2e` is configured otherwise
 
-4. **Search for existing tests** matching each changed source file:
+4. **Frontend E2E enforcement check:** When `has_frontend: true` and `test_commands.e2e` is not configured (absent or commented out in `pipeline.config.yaml`), add a Critical finding row to the inventory table:
+   ```
+   | (project-wide) | e2e | -- | e2e (Critical) |
+   ```
+   Message: "E2E browser tests are mandatory for frontend projects. Configure `test_commands.e2e` in pipeline.config.yaml."
+
+5. **Search for existing tests** matching each changed source file:
    - Look for test files following common naming conventions: `*.test.*`, `*.spec.*`, `__tests__/*`, `test/*`
    - Check if each required test type has corresponding test coverage
 
-5. **Produce an inventory table**:
+6. **Produce an inventory table**:
 
 ```
 ## Test Existence Audit
@@ -81,7 +87,7 @@ Audit all changed source files to determine which test types are required and wh
 Summary: X files audited, Y gaps found
 ```
 
-6. If **no gaps** are found, report **"No gaps found -- all changed files have required test coverage"** and proceed to Step 3 (which will skip).
+7. If **no gaps** are found, report **"No gaps found -- all changed files have required test coverage"** and proceed to Step 3 (which will skip).
 
 ---
 
@@ -94,6 +100,8 @@ Generate tests for any gaps identified in Step 2 using the Ralph Loop pattern.
 ## Step 3: Missing Test Generation
 SKIPPED -- no gaps
 ```
+
+**Playwright E2E scaffolding (when `has_frontend: true` and E2E is missing):** When `has_frontend: true` and E2E tests are missing, the fix subagent should scaffold a minimal Playwright E2E test at `tests/e2e/smoke.spec.ts` that navigates to the entry URL and verifies the page renders (title is non-empty, root element is visible). The subagent should also configure `test_commands.e2e: "npx playwright test"` in `pipeline.config.yaml` if not already set.
 
 **If gaps exist**, for each gap (or group of related gaps):
 
@@ -242,10 +250,11 @@ For each test type, use the corresponding command from `pipeline.config.yaml` `t
 | Unit | `test_commands.unit` | Always run if configured |
 | Integration | `test_commands.integration` | Always run if configured |
 | UI | `test_commands.ui` | Only if `has_frontend: true` and configured |
-| E2E | `test_commands.e2e` | Only if configured |
+| E2E | `test_commands.e2e` | Mandatory if `has_frontend: true`; only if configured otherwise |
 | Component | `test_commands.component` | Only if `has_frontend: true` and configured |
 
 - If a `test_commands` key is **not configured** for a type, skip it and report **"SKIPPED (not configured)"** in the results table.
+- **Exception:** When `has_frontend: true` and `test_commands.e2e` is not configured, the E2E row shows **"FAIL — E2E mandatory for frontend projects but not configured"** (not SKIP). This is a blocking failure.
 - Run each configured type and capture: pass count, fail count, skip count, duration.
 
 ### 4b. Run full suite
