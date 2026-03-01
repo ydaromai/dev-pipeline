@@ -30,6 +30,7 @@ Evaluate each item. Mark `[x]` for pass, `[✗]` for fail.
 - [ ] No security vulnerabilities (OWASP top 10: injection, XSS, auth bypass, etc.)
 - [ ] Tests exist and are meaningful (not just coverage padding)
 - [ ] Test coverage >= 80% for new code
+- [ ] React components wrapping native form elements (`input`, `textarea`, `select`) use `React.forwardRef` — missing forwardRef silently drops refs in React 18, causing form libraries to receive `undefined` for all field values
 - [ ] No breaking changes to existing APIs/interfaces
 - [ ] Git commits are clean (conventional commits, properly scoped)
 - [ ] Dependencies added are justified (no unnecessary packages)
@@ -84,6 +85,7 @@ When reviewing a PRD (not code), evaluate:
 - [x/✗] No security vulnerabilities
 - [x/✗] Tests exist and meaningful
 - [x/✗] Coverage >= 80%
+- [x/✗] Form element wrappers use forwardRef
 - [x/✗] No breaking changes
 - [x/✗] Clean git commits
 - [x/✗] Dependencies justified

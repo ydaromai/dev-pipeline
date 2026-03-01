@@ -405,6 +405,45 @@ For any SDK used in the project:
 
 ### 5d. Core user flow verification
 
+<!-- Gate: has_frontend determines the verification path -->
+
+#### Path A: Browser-based verification (`has_frontend: true` AND Playwright available)
+
+When `has_frontend: true`, check Playwright availability first:
+
+1. **Playwright availability check (deterministic):** Run `npx playwright --version` and verify it exits with code 0. This check is deterministic — it does not depend on PATH or node_modules state beyond the project root. If the command fails, fall back to Path B below.
+
+2. **Browser-based entry URL verification:** Launch headless Chromium via Playwright. **Before navigation**, register a `console.error` listener on the page to capture all console errors throughout the smoke test run. Navigate to the `entry_url` with a per-page timeout of 30 seconds (NFR-2). Wait for page load (`domcontentloaded` or `networkidle` depending on framework).
+
+3. **Console error assertion:** Aggregate console error counts across all page loads within the smoke test run. After all navigation is complete, assert the total count is within the `browser_testing.max_console_errors` threshold (default: 0). If the count exceeds the threshold, report as a FAIL with the console error messages listed.
+
+4. **DOM element visibility verification:** Verify the root element is present and visible — check for `#root`, `#__next`, `#app`, or `main` (in that order, first match wins). Verify a navigation element exists (`nav`, `[role="navigation"]`). Verify a content area element exists (`main`, `[role="main"]`, `article`, `.content`). Report each check as PASS/FAIL in the results.
+
+5. **Interaction flow via Playwright (if configured):** When `smoke_test.interaction_endpoint` is set and Playwright is available, simulate the user flow via Playwright actions (click, type, navigate) instead of HTTP requests. For example, for a chat app: locate the input field, type a message, click send, wait for response to appear in the DOM. Verify the interaction completes without errors.
+
+6. **LLM component verification:** If the app has an LLM component and `smoke_test.has_llm` is not `false`:
+   - Check for an API key: look at `smoke_test.llm_api_key_env` from config, or auto-detect from common env vars (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) or the project's `.env` file. **When reading `.env`, check only whether the specific key exists** (e.g., `grep '^ANTHROPIC_API_KEY=' .env`) — do not parse or retain the full file contents and do not capture or log the key's value, as it may contain unrelated secrets.
+   - If an API key is available, test once with `LLM_MOCK=false` and verify the response **status and format only** — do NOT log or persist the full response body (it may contain sensitive content)
+   - Use `smoke_test.llm_timeout_seconds` (default: 30s) for the LLM request (`curl --max-time <timeout>` or equivalent). **On timeout, report:** endpoint called, request payload shape (e.g., `POST /api/chat {messages: [...]}` — not content), timeout value, and whether the dev server process was still running at timeout time.
+   - If no API key is available, **skip this sub-step** and report as `⚠️ skipped (no API key)` — this is not a BLOCKING failure
+
+#### Path B: Fallback — HTTP-only with Warning (`has_frontend: true` BUT Playwright NOT available)
+
+When `has_frontend: true` but the Playwright availability check in Path A step 1 fails:
+
+1. **Emit a Warning message:**
+   ```
+   ⚠️ Warning: Playwright is not available. Falling back to HTTP-only smoke test.
+   Browser-based verification (screenshots, DOM checks, console error capture) is skipped.
+   Install Playwright: npm install -D @playwright/test && npx playwright install chromium
+   ```
+
+2. **Fall back to existing HTTP-only behavior** (same as Path C below): request the entry URL via HTTP, verify status 200, check response HTML for expected elements, trigger interaction endpoint, LLM test.
+
+#### Path C: HTTP-only verification (`has_frontend: false`)
+
+<!-- This is the existing behavior — unchanged for non-frontend projects -->
+
 Verify the primary user flow via HTTP requests and response inspection (not visual browser interaction):
 1. Request the entry URL — verify HTTP 200 and the response HTML contains expected elements (root div, script tags, meta tags)
 2. Trigger the main interaction endpoint — use `smoke_test.interaction_endpoint` from config if set; otherwise infer from the PRD's primary user flow and the codebase route definitions (scan `app/api/`, `pages/api/`, `routes/`, or framework-equivalent directories for the primary endpoint). Examples: `POST /api/chat` for chat apps, `GET /api/items` for CRUD apps, `POST /api/generate` for generation apps. Verify the response status and format.
@@ -414,17 +453,71 @@ Verify the primary user flow via HTTP requests and response inspection (not visu
    - Use `smoke_test.llm_timeout_seconds` (default: 30s) for the LLM request (`curl --max-time <timeout>` or equivalent). **On timeout, report:** endpoint called, request payload shape (e.g., `POST /api/chat {messages: [...]}` — not content), timeout value, and whether the dev server process was still running at timeout time.
    - If no API key is available, **skip this sub-step** and report as `⚠️ skipped (no API key)` — this is not a BLOCKING failure
 
-### 5e. Visual rendering check (if `has_frontend: true`)
+### 5e. Visual rendering and screenshot capture
 
-If `has_frontend` is not `true`, skip this step and report `Visual rendering: N/A (no frontend)` in the results table.
+This step has three branches based on project type and Playwright availability:
 
-Since the agent operates via CLI (no browser), verify rendering integrity through static analysis (also checked by the Designer Critic during code review — this step catches integration-level issues after all tasks are merged):
+#### Branch (a): Browser-based checks (`has_frontend: true` AND Playwright available)
+
+When `has_frontend: true` and Playwright was confirmed available in Step 5d, run browser-based checks AND static analysis.
+
+**1. Screenshot directory management:**
+- Clean the screenshot directory at the start of each run: `rm -rf <screenshot_dir> && mkdir -p <screenshot_dir>` (default: `.pipeline/screenshots/`).
+- **Path validation:** The `screenshot_dir` must be a relative path within the project. Reject paths that are `/`, `~`, or contain `..`. The default `.pipeline/screenshots/` is always safe (NFR-5, NFR-10).
+
+**2. Route discovery:**
+Auto-detect routes from framework conventions. Always include the entry URL. Detection patterns:
+- **Next.js App Router:** `app/**/page.tsx` (or `.jsx`, `.js`, `.ts`) — derive URL from directory structure
+- **Next.js Pages Router:** `pages/**/*.tsx` (excluding `_app`, `_document`, `api/` directories)
+- **SvelteKit:** `src/routes/**/+page.svelte` — derive URL from directory structure
+- **Generic SPA:** Entry URL only (single-page apps have one route)
+
+Cap auto-detected routes at `browser_testing.max_routes` (default: 10). When `browser_testing.smoke_test_routes` is set in config (non-empty array), it **completely overrides** auto-detection — the configured routes are used instead of auto-detected ones.
+
+**3. Multi-viewport screenshot capture:**
+For each discovered route, capture screenshots at 3 viewports:
+- **Mobile:** 375x812
+- **Tablet:** 768x1024
+- **Desktop:** 1280x720
+
+Save to `browser_testing.screenshot_dir` (default `.pipeline/screenshots/`) with naming convention: `{route-slug}_{viewport}.png` (e.g., `home_mobile.png`, `dashboard_tablet.png`, `settings_desktop.png`).
+
+Set per-page screenshot timeout of 3 seconds (NFR-2). **Total budget:** `max_routes` routes x 3 viewports x ~3s = ~90s + ~30s overhead (browser launch, route discovery, console aggregation), capped at 120 seconds total (NFR-1).
+
+**4. DOM and rendering verification (browser-based):**
+For each route at each viewport, verify:
+- **Title/heading:** Non-empty `<title>` or `<h1>` exists
+- **Content area:** Main content area is visible with `height > 0` (check `main`, `[role="main"]`, `article`, `.content`)
+- **Error overlays:** Detect error overlays (`[data-nextjs-dialog]`, `.error-boundary`, `[data-error-overlay]`) — **FAIL if any are present**
+- **Image loading:** All `<img>` elements have `naturalWidth > 0` (images actually loaded)
+- **Mobile overflow (mobile viewport only):** Assert `document.documentElement.scrollWidth <= document.documentElement.clientWidth` — no horizontal overflow
+- **Mobile font size (mobile viewport only):** Assert no text element has `font-size` below 12px
+
+**5. Static analysis (supplementary — always runs alongside browser checks):**
+These checks run regardless of Playwright availability, as supplementary validation:
 1. Verify CSS custom properties are defined before use — no orphan `var(--*)` references without a corresponding definition in scope (fonts, colors, spacing, radii, etc.)
 2. Verify dynamic content rendering code parses markdown/responses (not raw display)
 3. Verify images/icons/assets referenced in code exist as files (no missing references)
 4. If the project defines a dark theme (`data-theme`, `prefers-color-scheme`), verify all CSS custom properties have definitions in both themes
 
-> **Note:** For full visual verification, recommend the user perform a manual browser check or configure a headless browser tool in `smoke_test`.
+#### Branch (b): Static analysis only with Warning (`has_frontend: true` BUT Playwright NOT available)
+
+When `has_frontend: true` but Playwright was NOT available (Step 5d fell back to Path B):
+
+1. **Emit a Warning message:**
+   ```
+   ⚠️ Warning: Playwright is not available. Skipping browser-based screenshot capture and DOM verification.
+   Only static analysis checks will be run.
+   Install Playwright: npm install -D @playwright/test && npx playwright install chromium
+   ```
+
+2. **Run static analysis only** (same as Branch (a) step 5 above):
+   - CSS custom properties, dynamic content rendering, asset references, dark theme
+   - Report results with a Warning-level note that browser checks were skipped
+
+#### Branch (c): Skip entirely (`has_frontend: false`)
+
+If `has_frontend` is not `true`, skip this step and report `Visual rendering: N/A (no frontend)` in the results table. No static analysis or browser checks are performed.
 
 ### 5f. Teardown
 
@@ -470,6 +563,7 @@ When all tasks are processed AND smoke tests pass:
 | SDK version compatibility | ✅ | 1.1s | ai@6.2.1 — toUIMessageStreamResponse: confirmed |
 | Core user flow | ✅ | 0.8s | POST /api/chat → 200 |
 | Visual rendering | ✅ / N/A (no frontend) | 0.5s | 0 orphan CSS vars, 0 missing assets |
+| Browser screenshots | ✅ / N/A / ⚠️ | 12.3s | 5 routes x 3 viewports = 15 screenshots / N/A (has_frontend: false) / Warning: Playwright not available — static analysis only (see installation instructions above) |
 | Real API test | ✅ / ⚠️ skipped (no API key) | 2.1s | LLM response format valid / no ANTHROPIC_API_KEY |
 | Server teardown | ✅ | 0.2s | PID group terminated, ports released |
 
