@@ -1,6 +1,6 @@
 {
   "name": "dev-pipeline",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "AI-driven software delivery pipeline — PRD, dev plan, JIRA, execution with Ralph Loop, multi-critic review, browser-based validation, and TDD pipeline with blind-agent test-first development",
   "author": { "name": "Yohai Darom" },
   "repository": "https://github.com/ydaromai/dev-pipeline",
