@@ -82,6 +82,10 @@ Or run stages individually:
 | `/test @<plan>` | Run test verification: audit, execute, coverage, CI/CD audit, critic validation |
 | `/fullpipeline <requirement>` | Run all stages end-to-end with gates |
 | `/tdd-fullpipeline <requirement>` | Run TDD pipeline: PRD, Design Brief, Mock Analysis, Test Plan, Dev Plan, Develop Tests, Develop App, Validate |
+| `/tdd-design-brief @<prd>` | PRD to Design Brief for Figma AI mock app creation |
+| `/tdd-mock-analysis <url>` | Playwright crawl of mock app to extract UI contract |
+| `/tdd-test-plan @<prd> @<contract>` | PRD + UI Contract to tiered test plan with TP-{N} traceability |
+| `/tdd-develop-tests @<test-plan>` | Blind agent develops Tier 1 E2E tests with self-health gate |
 | `/validate @<file>` | Run critic agents standalone on any artifact |
 
 ## Quality Loops
