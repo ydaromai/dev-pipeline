@@ -165,9 +165,11 @@ dev-pipeline/
       observability-critic.md
       api-contract-critic.md
       designer-critic.md
-    templates/           # PRD and config templates
+    templates/           # PRD, config, and project scaffolding templates
       prd-template.md
       pipeline-config-template.yaml
+      agent-constraints-template.md
+      task-breakdown-definition-template.md
     examples/
       example-prd.md
   scripts/
