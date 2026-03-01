@@ -244,7 +244,7 @@ TASK_BREAKDOWN_DEFINITION.md not found. Options:
 2. Skip — I'll add it later
 ```
 
-If creating, use the standard format (the same one used in the existing projects).
+If creating, read the template from `${CLAUDE_PLUGIN_ROOT}/pipeline/templates/task-breakdown-definition-template.md` and write it to `docs/ai_definitions/TASK_BREAKDOWN_DEFINITION.md`.
 
 If `docs/ai_definitions/AGENT_CONSTRAINTS.md` doesn't exist, ask the user:
 
@@ -253,6 +253,8 @@ AGENT_CONSTRAINTS.md not found. Options:
 1. Create from default template (Recommended) — standard agent behavioral constraints
 2. Skip — I'll add it later
 ```
+
+If creating, read the template from `${CLAUDE_PLUGIN_ROOT}/pipeline/templates/agent-constraints-template.md` and write it to `docs/ai_definitions/AGENT_CONSTRAINTS.md`.
 
 ## Step 8: Update CLAUDE.md
 
