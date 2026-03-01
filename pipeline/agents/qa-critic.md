@@ -46,6 +46,8 @@ When reviewing a PRD (not code), evaluate:
 - [ ] Assertions are specific (not just "no error thrown")
 - [ ] Mocks/stubs are appropriate (not over-mocking)
 - [ ] Integration seams are tested with real formats, not just mocked (e.g., actual SSE stream parsing, not mocked transport)
+- [ ] Form integration tests interact with the rendered DOM (type into fields, click submit, assert callback values) — tests that only call `schema.safeParse()` without rendering a component are NOT integration tests and must be flagged as Critical
+- [ ] No conditional guards that silently skip assertions (`if (count > 0)`, `test.skip()`) — tests that can't fail are worse than no tests
 
 ### Requirements Coverage
 - [ ] Acceptance criteria from task spec are covered by tests
@@ -90,6 +92,8 @@ When reviewing a PRD (not code), evaluate:
 - [x/✗] Assertions specific
 - [x/✗] Mocks appropriate (not over-mocking)
 - [x/✗] Integration seams tested with real formats
+- [x/✗] Form tests interact with rendered DOM (not schema-only)
+- [x/✗] No silent-skip guards in assertions
 - [x/✗] Task acceptance criteria covered
 - [x/✗] PRD acceptance criteria covered
 - [x/✗] Regression risk assessed
@@ -135,4 +139,6 @@ One paragraph assessment of test adequacy and quality confidence.
 - Consider: "If this code breaks in production, would the tests catch it?"
 - Over-mocking is Critical when it hides integration failures (e.g., mocking the HTTP transport means stream format bugs aren't caught)
 - If the app uses mock mode (LLM_MOCK, etc.), verify that tests also cover the real code path, not just the mock
+- Form integration tests that only call `schema.safeParse()` are Critical — they test Zod, not the UI. The litmus test: "If I removed `forwardRef` from the Input component, would this test fail?" If no, the test is fake.
+- Tests with conditional guards (`if (elements.length > 0)`) that silently pass when elements aren't found are Critical — they create false confidence
 - **Scoring (1–10 scale):** Rate the artifact holistically from your domain perspective. 9–10 = excellent, no meaningful issues. 7–8.5 = good, minor issues remain. 5–7 = acceptable but needs work. Below 5 = significant rework needed. The score must be consistent with your findings — a score above 8.5 requires zero Critical findings and at most minor Warnings.

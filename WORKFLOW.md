@@ -306,6 +306,147 @@ This is the core execution engine. It reads the dev plan, builds a dependency gr
 
 ---
 
+## TDD Pipeline — /tdd-fullpipeline
+
+**Purpose:** A parallel TDD pipeline option that reorders the existing pipeline to write tests before code. Run `/tdd-fullpipeline <requirement>` to chain all 8 stages with gates between each. Each stage runs in a **fresh-context subagent** (max depth 3: orchestrator, stage, build/review/critic). The existing `/fullpipeline` is unmodified.
+
+```
+ ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+ │  Stage 1    │     │  Stage 2    │     │  Stage 3    │     │  Stage 4    │     │  Stage 5    │     │  Stage 6    │     │  Stage 7    │     │  Stage 8    │
+ │  /req2prd   │────▶│  Design     │────▶│  Mock       │────▶│  Test Plan  │────▶│  /prd2plan  │────▶│  Develop    │────▶│  /execute   │────▶│  Validate   │
+ │             │     │  Brief      │     │  Analysis   │     │             │     │             │     │  Tests      │     │             │     │             │
+ │ Requirement │     │ PRD → Brief │     │ Mock App →  │     │ PRD+Contract│     │ PRD → Dev   │     │ Test Plan → │     │ Build App   │     │ Smoke Test  │
+ │   → PRD     │     │ (functional)│     │ UI Contract │     │  → Test Plan│     │    Plan     │     │ Red Tests   │     │ (green tests)│    │ Traceability│
+ └──────┬──────┘     └──────┬──────┘     └──────┬──────┘     └──────┬──────┘     └──────┬──────┘     └──────┬──────┘     └──────┬──────┘     └──────┬──────┘
+      GATE 1             GATE 2              GATE 3             GATE 4              GATE 5             GATE 6              GATE 7             GATE 8
+   PRD Approval     MANUAL: User         Contract +         Test Plan +          Dev Plan +         Red Count +        Per-PR Merge      Final Results
+   + Complexity     builds mock app      Brief x-ref        TP Summary          Conflict Log        Fake Tests          Approval          + Metrics
+     Assessment     in Figma AI
+```
+
+### Stage 1: PRD — `/req2prd` (reused)
+
+Reuses the existing `/req2prd` stage (see [Stage 1](#stage-1-requirement--prd--req2prd) above) with one addition:
+
+| Step | Action | Details |
+|------|--------|---------|
+| 1–7 | Standard `/req2prd` flow | Same as existing Stage 1: generate PRD, critic scoring Ralph Loop, write PRD |
+| 8 | Complexity assessment | Evaluate scope as Simple/Medium/Complex. Simple (single-file, config-only, docs-only, no UI, no data flow) → recommend `/fullpipeline` with user override option |
+| 9 | **GATE 1** — Human approval | Critic scores + complexity recommendation. User approves or overrides |
+
+### Stage 2: Design Brief — `/tdd-design-brief`
+
+**Input:** Approved PRD path
+**Output:** `docs/tdd/<slug>/design-brief.md`
+
+| Step | Action | Details |
+|------|--------|---------|
+| 1 | Read inputs | Approved PRD, `pipeline.config.yaml` TDD config settings |
+| 2 | Extract functional requirements | Route manifest (paths, descriptions), user flows (entry/exit), component inventory (name, purpose, data inputs, interactive elements), data shapes (fields, types, validation, examples), responsive requirements, accessibility requirements (WCAG 2.1 AA, keyboard nav, screen reader) |
+| 3 | Generate Design Brief | Functional-only brief — does NOT prescribe layouts, colors, spacing, typography, or visual hierarchy. Includes "Mock App Requirements" section: mock must be functional, navigable, with all routes, interactive elements, and form validation |
+| 4 | Critic review | 10-critic Ralph Loop (all applicable), max 5 iterations, 0 Critical + 0 Warnings |
+| 5 | Write output | Save to `docs/tdd/<slug>/design-brief.md` |
+| 6 | **GATE 2** — MANUAL | User builds mock app in Figma AI, deploys or runs locally, provides mock app URL |
+
+### Stage 3: Mock Analysis — `/tdd-mock-analysis`
+
+**Input:** Mock app URL (from Gate 2)
+**Output:** `docs/tdd/<slug>/ui-contract.md` + screenshots in `.pipeline/tdd/<slug>/mock-screenshots/`
+
+| Step | Action | Details |
+|------|--------|---------|
+| 1 | Validate input | URL must use `http://` or `https://`. Reject `file://`, `data:`, `javascript:`, private RFC 1918 ranges (except loopback: `localhost`, `127.0.0.0/8`, `::1`, `0.0.0.0`) |
+| 2 | Playwright version check | Verify Playwright >= 1.40, halt if below. Read `tdd.max_mock_routes` from config (default: 20) |
+| 3 | Route discovery | Navigate to entry page, discover routes via link traversal capped at `max_mock_routes`. Critical error + halt if entry page fails; Warning + continue for individual route failures |
+| 4 | Per-route extraction | Screenshots at 3 viewports (mobile 375x812, tablet 768x1024, desktop 1280x720). Extract: DOM structure, interactive elements, form fields, ARIA roles/labels, tab order, data-testid candidates (kebab-case, fallback `{element-type}-{sequential-index}`). 15s per-route timeout, 300s total budget |
+| 5 | Keyboard navigation testing | Tab through interactive elements, verify focus visibility, test Enter/Space activation. Shares per-route budget; partial results with Warning if exceeded |
+| 6 | Generate UI contract | Sections: Route Map, Component Inventory, Interactive Elements, Form Contracts, Accessibility Map, Data-Testid Registry, Screenshots. 50,000 char limit — truncate lowest-priority routes with Warning |
+| 7 | Critic review | 10-critic Ralph Loop, max 5 iterations, 0 Critical + 0 Warnings |
+| 8 | **GATE 3** — Human approval | Contract summary, cross-reference against Design Brief route manifest and component inventory. Flag missing routes/elements as Warnings. User can correct before proceeding |
+
+### Stage 4: Test Plan — `/tdd-test-plan`
+
+**Input:** PRD path + UI contract path + schema files
+**Output:** `docs/tdd/<slug>/test-plan.md`
+
+| Step | Action | Details |
+|------|--------|---------|
+| 1 | Read inputs | PRD, UI contract (`docs/tdd/<slug>/ui-contract.md`), schema files referenced in PRD |
+| 2 | Generate tiered test specifications | **Tier 1 (E2E/Playwright):** full specs from PRD + UI contract — test steps, selectors from data-testid registry, expected outcomes, assertions. **Tier 2 (integration/unit):** outlines only — TP-{N} ID, tier label, linked AC reference, test intent, expected test type. Every test item gets a unique `TP-{N}` traceability ID |
+| 3 | Mandatory contract sections | Performance Contracts (response times, rendering budgets), Accessibility Contracts (WCAG 2.1 AA, keyboard nav, screen reader), Error Contracts (error states, validation messages, fallbacks), Data Flow Contracts (data shapes, transformations, validation) |
+| 4 | Critic review | 10-critic Ralph Loop, max 5 iterations, 0 Critical + 0 Warnings |
+| 5 | Write output | Save to `docs/tdd/<slug>/test-plan.md` |
+| 6 | **GATE 4** — Human approval | TP count by tier, contract coverage summary, traceability overview |
+
+### Stage 5: Dev Plan — `/prd2plan` (reused)
+
+Reuses the existing `/prd2plan` stage (see [Stage 2](#stage-2-prd--dev-plan--prd2plan) above) with TDD extensions:
+
+| Step | Action | Details |
+|------|--------|---------|
+| 1–7 | Standard `/prd2plan` flow | Same as existing Stage 2: generate dev plan with Epic/Story/Task/Subtask structure, critic review |
+| 8 | Contract Negotiation Gate | Compare dev plan architecture against test plan contracts. Flag conflicts. Resolve with test plan as authority |
+| 9 | Complete Tier 2 specifications | Fill in Tier 2 test outlines with component boundaries from the dev plan |
+| 10 | 10-critic Ralph Loop | Full critic review of the final dev plan |
+| 11 | **GATE 5** — Human approval | Dev plan summary + conflict resolution log |
+
+### Stage 6: Develop Tests — `/tdd-develop-tests`
+
+**Input:** PRD path + UI contract path + test plan path + schema files
+**Output:** Tier 1 E2E test files committed to `tdd/{slug}/tests` branch
+
+| Step | Action | Details |
+|------|--------|---------|
+| 1 | Read inputs | PRD, UI contract, schema files, test plan. **Blind agent constraint:** dev plan is NOT read and application code is NOT accessed |
+| 2 | Develop Tier 1 E2E tests | Playwright test code for each Tier 1 specification. Each test maps to `TP-{N}` via code comment. Selectors from UI contract data-testid registry. Tests must assert behavior requiring application code to pass |
+| 3 | Critic review | 10-critic Ralph Loop, max 5 iterations, 0 Critical + 0 Warnings. QA Critic validates tests assert real behavior, not trivial conditions |
+| 4 | Self-health gate | Run all tests, verify `red_count = total_test_count`. Tests with exit code 0 but no assertions flagged as fake tests. Security tests auto-classified by keyword/directory matching |
+| 5 | Self-health fix loop | If any tests pass without app code, fix subagent corrects them. Re-run gate. Max 3 iterations, then escalate with fake test list |
+| 6 | Commit and branch | Commit to `tdd/{slug}/tests` branch (configurable via `tdd.tests_branch_pattern`). Apply `tdd-red-tests` label. Tier 2 tests developed in Stage 7 alongside app code |
+| 7 | **GATE 6** — Human approval | Total test count, red count, fake tests identified, Security test classification summary |
+
+### Stage 7: Develop App — `/execute` (reused)
+
+Reuses the existing `/execute` stage (see [Stage 4](#stage-4-execute-with-ralph-loop--execute) above) with TDD extensions:
+
+| Step | Action | Details |
+|------|--------|---------|
+| 1–5 | Standard `/execute` flow | Same as existing Stage 4: dependency graph, Ralph Loop (build/review/iterate), PR creation, smoke test |
+| + | Test adjustment taxonomy | **Structural** (imports, selectors, file moves): auto-approved. **Behavioral** (assertions, boundary conditions): QA re-review with TP-{N} citation required. **Security** (auth, injection, encryption tests): immutable, no modifications allowed |
+| + | Behavioral threshold halt | If >20% of Tier 1 E2E tests have Behavioral adjustments, halt pipeline. Threshold configurable via `tdd.max_test_adjustment_pct` |
+| + | QA Critic audit | Any change to `expect()` calls, assertion values, or test boundary conditions is flagged as Behavioral regardless of agent self-classification |
+| + | **GATE 7** — Per-PR approval | Same as existing Stage 4 Gate 4 |
+
+### Stage 8: Validate (TDD-specific)
+
+**Input:** All artifacts from Stages 1–7
+**Output:** Final validation report + pipeline metrics
+
+| Step | Action | Details |
+|------|--------|---------|
+| 1 | Smoke test | Uses `/execute` Step 5 infrastructure (dev server startup, health checks, SDK compatibility, core user flow, visual rendering) |
+| 2 | Traceability matrix | Map TP-{N} → test file path → test name → pass/fail. Bidirectional. Traceability key: `{file_path}::{describe/it block path}` |
+| 3 | Gap flagging | Flag any TP-{N} without a passing test |
+| 4 | Regression check | Compare against pre-pipeline baseline from `.pipeline/tdd/<slug>/baseline-results.json` |
+| 5 | Cumulative critic validation | 10-critic review on `main..HEAD` diff, max 3 iterations, escalate to user |
+| 6 | Pipeline metrics | Emit to `.pipeline/metrics/{slug}.json` (schema_version: 1): `red_test_count`, `green_pass_rate`, `test_adjustment_count`, `test_plan_accuracy`, `tdd_cycle_time_seconds`, `security_test_integrity`. Written only on successful completion; previous run preserved as `{slug}.prev.json` |
+| 7 | **GATE 8** — Human approval | Full results, traceability matrix summary, pipeline metrics summary, test adjustment summary, overall verdict |
+
+### Error Recovery (TDD Pipeline)
+
+| Interrupted At | Recovery Action | Behavior |
+|---------------|-----------------|----------|
+| Stage 1 (PRD) | Re-run `/tdd-fullpipeline` | Checks for existing PRD, asks to reuse or regenerate |
+| Stage 2 (Design Brief) | Re-run `/tdd-fullpipeline` | Detects existing brief, skips to Gate 2 |
+| Stage 3 (Mock Analysis) | Re-run `/tdd-fullpipeline` | Detects existing UI contract, asks to reuse or re-crawl |
+| Stage 4 (Test Plan) | Re-run `/tdd-fullpipeline` | Detects existing test plan, asks to reuse or regenerate |
+| Stage 5 (Dev Plan) | Re-run `/tdd-fullpipeline` | Checks if dev plan exists, resumes from contract negotiation if needed |
+| Stage 6 (Develop Tests) | Re-run `/tdd-fullpipeline` | Checks `tdd/{slug}/tests` branch for existing tests, resumes self-health gate |
+| Stage 7 (Develop App) | Re-run `/tdd-fullpipeline` | Reads task statuses, reconciles JIRA, resumes from where it left off |
+| Stage 8 (Validate) | Re-run `/tdd-fullpipeline` | Idempotent — scans everything from scratch, no persistent state |
+
+---
+
 ## Standalone Validation — `/validate`
 
 Run critics independently against any artifact.
@@ -585,3 +726,4 @@ project-root/
 | `/test @<plan>` | Dev plan file | Test verification report (PASS/FAIL) | Test results approval (Gate 5) |
 | `/validate @<file>` | Any artifact or `--diff` | Critic feedback | None (informational) |
 | `/fullpipeline <requirement>` | Requirement text | Everything above | All gates (including plan2jira validation) |
+| `/tdd-fullpipeline <requirement>` | Requirement text | Fully implemented feature with TDD (tests before code) | Gate 1–8 (Gate 2 is MANUAL: user builds mock app) |

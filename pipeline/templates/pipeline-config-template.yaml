@@ -46,6 +46,22 @@ pipeline:
       pre_merge:
         critics: [dev, devops, security, performance, data-integrity, observability, api-contract, designer]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend)
         mode: sequential        # DevOps reviews after Dev passes
+      # TDD pipeline stages (used by /tdd-fullpipeline)
+      tdd_design_brief:
+        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]
+        mode: parallel
+      tdd_mock_analysis:
+        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]
+        mode: parallel
+      tdd_test_plan:
+        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]
+        mode: parallel
+      tdd_develop_tests:
+        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]
+        mode: parallel
+      tdd_validate:
+        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]
+        mode: parallel
 
   # Execution settings
   execution:
@@ -124,6 +140,35 @@ pipeline:
   #   max_console_errors: 0                      # Maximum allowed console.error events across all page loads (0 = strict)
   #   visual_regression: false                   # Enable visual regression testing (deferred — not yet implemented)
   #   auto_install: false                        # Auto-install Playwright browsers in CI (default: false; never installs without consent)
+
+  # TDD Pipeline settings (/tdd-fullpipeline)
+  # Controls the TDD pipeline variant behavior. When omitted, defaults apply.
+  # Uncomment and customize to override defaults.
+  # tdd:
+  #   max_mock_routes: 20              # Maximum routes to crawl during Mock Analysis (default: 20)
+  #   self_health_gate: true           # Require all tests to fail before app code (default: true)
+  #   max_test_adjustment_pct: 20      # Maximum % of behavioral Tier 1 E2E adjustments before halt (default: 20)
+  #   metrics_dir: ".pipeline/metrics" # Directory for pipeline self-metrics JSON files
+  #   tests_branch_pattern: "tdd/{slug}/tests"  # Branch pattern for red test commits
+  #   tdd_stages:                      # Per-stage critic overrides for TDD pipeline
+  #     design_brief:
+  #       critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]
+  #       mode: parallel
+  #     mock_analysis:
+  #       critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]
+  #       mode: parallel
+  #     test_plan:
+  #       critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]
+  #       mode: parallel
+  #     develop_tests:
+  #       critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]
+  #       mode: parallel
+  #     develop_app:
+  #       critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]
+  #       mode: parallel
+  #     validate:
+  #       critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]
+  #       mode: parallel
 
   # Test verification stage (Stage 5 of /fullpipeline, or run standalone via /test)
   # Controls the /test command behavior. When omitted, /test uses defaults.

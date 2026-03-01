@@ -11,6 +11,18 @@ Requirement  -->  PRD  -->  Dev Plan  -->  JIRA  -->  Code (Ralph Loop)  -->  Te
 
 Each stage is a Claude Code slash command. Human approval gates sit between stages. Stage 5 (`/test`) performs comprehensive test verification: test existence audit, missing test generation, full test execution, coverage verification, CI/CD audit, and cumulative critic validation across the entire feature branch. Ten critic agents validate artifacts at each gate — 7 always-on (Product, Dev, DevOps, QA, Security, Performance, Data Integrity) and 3 conditional (Observability when `has_backend_service: true`, API Contract when `has_api: true`, Designer when `has_frontend: true`).
 
+### TDD Pipeline — `/tdd-fullpipeline`
+
+For medium and complex features, a test-driven variant writes and verifies tests before application code:
+
+```
+Requirement --> PRD --> Design Brief --> Mock Analysis --> Test Plan --> Dev Plan --> Develop Tests --> Develop App --> Validate
+             GATE 1     GATE 2           GATE 3           GATE 4       GATE 5       GATE 6           GATE 7          GATE 8
+                        (MANUAL)
+```
+
+Stage 2 produces a Design Brief from the PRD for mock app creation in Figma AI. Stage 3 crawls the mock with Playwright to extract a UI contract. Stage 4 generates a tiered test plan with `TP-{N}` traceability IDs. Stage 6 develops Tier 1 E2E tests and runs a self-health gate (all tests must fail before app code exists). Stages 1, 5, 7, and 8 reuse existing pipeline commands (`req2prd`, `prd2plan`, `execute`, smoke/critic validation) with TDD-specific extensions.
+
 ## Installation
 
 ### As a Claude Code Plugin (recommended)
@@ -69,6 +81,7 @@ Or run stages individually:
 | `/execute @<plan>` | Execute tasks with Ralph Loop (build/review cycles) |
 | `/test @<plan>` | Run test verification: audit, execute, coverage, CI/CD audit, critic validation |
 | `/fullpipeline <requirement>` | Run all stages end-to-end with gates |
+| `/tdd-fullpipeline <requirement>` | Run TDD pipeline: PRD, Design Brief, Mock Analysis, Test Plan, Dev Plan, Develop Tests, Develop App, Validate |
 | `/validate @<file>` | Run critic agents standalone on any artifact |
 
 ## Quality Loops
