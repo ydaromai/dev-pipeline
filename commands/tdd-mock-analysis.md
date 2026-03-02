@@ -424,6 +424,11 @@ After generating the full document, measure its character count. If it exceeds 5
 1. Create the directory `docs/tdd/<slug>/` if it does not exist.
 2. Write the UI contract to `docs/tdd/<slug>/ui-contract.md`.
 3. Verify the screenshots directory `.pipeline/tdd/<slug>/mock-screenshots/` exists and contains the expected files.
+4. **MANDATORY: Commit the artifact to git immediately after writing:**
+```bash
+git add docs/tdd/<slug>/ui-contract.md && git commit -m "docs: add UI contract for <slug>"
+```
+Pipeline artifacts must be committed the moment they are written. Do not defer this to a later step.
 
 ---
 

@@ -285,6 +285,12 @@ mkdir -p docs/tdd/<slug>
 
 Write the test plan to `docs/tdd/<slug>/test-plan.md`.
 
+**MANDATORY: Commit the artifact to git immediately after writing:**
+```bash
+git add docs/tdd/<slug>/test-plan.md && git commit -m "docs: add test plan for <slug>"
+```
+Pipeline artifacts must be committed the moment they are written. Do not defer this to a later step.
+
 The test plan document must include this header:
 
 ```markdown

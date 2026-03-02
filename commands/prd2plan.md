@@ -281,6 +281,12 @@ mkdir -p docs/dev_plans
 
 Write to `docs/dev_plans/<slug>.md` (slug from PRD title).
 
+**MANDATORY: Commit the artifact to git immediately after writing:**
+```bash
+git add docs/dev_plans/<slug>.md && git commit -m "docs: add dev plan for <slug>"
+```
+Pipeline artifacts must be committed the moment they are written. Do not defer this to a later step.
+
 ## Step 8: Human gate
 
 Present a summary to the user:

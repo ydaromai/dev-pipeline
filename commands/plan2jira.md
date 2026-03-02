@@ -194,6 +194,12 @@ Batch ID: <batch_id> (use for cleanup if needed)
 You can now run /execute @docs/dev_plans/<slug>.md to start implementation.
 ```
 
+4. **MANDATORY: Commit the updated dev plan to git immediately after JIRA keys are written:**
+```bash
+git add docs/dev_plans/<slug>.md jira-issue-mapping.json && git commit -m "docs: update dev plan with JIRA keys for <slug>"
+```
+Pipeline artifacts must be committed the moment they are written. Do not defer this to a later step.
+
 ## Cleanup (if needed)
 
 If the import fails partway through or creates wrong issues:

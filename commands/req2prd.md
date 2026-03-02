@@ -107,6 +107,12 @@ mkdir -p docs/prd
 
 Write the PRD to `docs/prd/<slug>.md`.
 
+**MANDATORY: Commit the artifact to git immediately after writing:**
+```bash
+git add docs/prd/<slug>.md && git commit -m "docs: add PRD for <slug>"
+```
+Pipeline artifacts must be committed the moment they are written. Do not defer this to a later step.
+
 ## Step 7: Human gate
 
 Present a summary to the user:

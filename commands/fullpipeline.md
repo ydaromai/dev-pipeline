@@ -7,6 +7,18 @@ You are executing the **full pipeline**. This chains all pipeline stages with hu
 
 ---
 
+## MANDATORY RULE: Commit Artifacts to Git
+
+**Every pipeline artifact (.md file) MUST be committed to git immediately after it is written to disk.** This applies to every stage that produces a document:
+
+- Stage 1: `docs/prd/<slug>.md` → `git add && git commit` right after writing
+- Stage 2: `docs/dev_plans/<slug>.md` → `git add && git commit` right after writing
+- Stage 3: `docs/dev_plans/<slug>.md` (updated with JIRA keys) → `git add && git commit` right after JIRA import
+
+**Why:** Session context can compress or be lost. Files can be overwritten. Git is the only durable store. If it's not committed, it doesn't exist.
+
+---
+
 ## Architecture: Fresh Context Per Stage
 
 ```

@@ -9,6 +9,21 @@ The TDD pipeline solves a structural problem: when the same agent writes both ap
 
 ---
 
+## MANDATORY RULE: Commit Artifacts to Git
+
+**Every pipeline artifact (.md file) MUST be committed to git immediately after it is written to disk.** This applies to every stage that produces a document:
+
+- Stage 1: `docs/prd/<slug>.md` → `git add && git commit` right after writing
+- Stage 2: `docs/tdd/<slug>/design-brief.md` → `git add && git commit` right after writing
+- Stage 3: `docs/tdd/<slug>/ui-contract.md` → `git add && git commit` right after writing
+- Stage 4: `docs/tdd/<slug>/test-plan.md` → `git add && git commit` right after writing
+- Stage 5: `docs/dev_plans/<slug>.md` → `git add && git commit` right after writing
+- After JIRA import: `docs/dev_plans/<slug>.md` (updated with keys) → `git add && git commit`
+
+**Why:** Session context can compress or be lost. Files can be overwritten. Git is the only durable store. If it's not committed, it doesn't exist.
+
+---
+
 ## Architecture: Fresh Context Per Stage
 
 ```

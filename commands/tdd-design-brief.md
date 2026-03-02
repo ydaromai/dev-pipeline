@@ -267,6 +267,12 @@ mkdir -p docs/tdd/<slug>
 
 Write the Design Brief to `docs/tdd/<slug>/design-brief.md`.
 
+**MANDATORY: Commit the artifact to git immediately after writing:**
+```bash
+git add docs/tdd/<slug>/design-brief.md && git commit -m "docs: add design brief for <slug>"
+```
+Pipeline artifacts must be committed the moment they are written. Do not defer this to a later step.
+
 ---
 
 ## Step 6: Human Gate (MANUAL)
