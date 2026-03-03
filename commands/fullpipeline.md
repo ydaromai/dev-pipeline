@@ -19,6 +19,18 @@ You are executing the **full pipeline**. This chains all pipeline stages with hu
 
 ---
 
+## MANDATORY RULE: Read and Paste Command Files — Never Paraphrase
+
+**Every subagent prompt that references a command file (execute.md, req2prd.md, prd2plan.md, plan2jira.md, test.md) MUST include the FULL file content pasted into the prompt.** The orchestrator must:
+
+1. **Read** the command file using the Read tool (path: `~/Projects/dev-pipeline/commands/<command>.md`)
+2. **Paste** the entire content into the subagent prompt where indicated
+3. **Never** summarize, paraphrase, or write instructions from memory
+
+**Why:** Command files contain precise workflow steps (JIRA transitions, branch naming, PR creation, critic review format, smoke test config, failure handling) that are silently skipped when paraphrased. Stage 4 (execute.md) is 638 lines with 6 mandatory JIRA touchpoints — paraphrasing from memory loses all of them.
+
+---
+
 ## Architecture: Fresh Context Per Stage
 
 ```
@@ -235,32 +247,53 @@ Important:
 
 ## Stage 4: Execute with Ralph Loop (fresh context)
 
+**CRITICAL: The orchestrator MUST read the full execute.md file and paste its ENTIRE content into the subagent prompt.** Do NOT paraphrase, summarize, or write from memory. The execute.md file contains 6 mandatory JIRA touchpoints, branch/PR workflow, critic review format, smoke test configuration, and failure handling that will be silently skipped if not included verbatim. This is the #1 cause of pipeline compliance failures.
+
+**Before spawning the subagent**, the orchestrator must:
+1. Read `${CLAUDE_PLUGIN_ROOT}/commands/execute.md` (or `~/Projects/dev-pipeline/commands/execute.md`)
+2. Paste the FULL file content into the subagent prompt below where indicated
+3. Verify the paste succeeded (the prompt should be 600+ lines)
+
 Spawn a subagent (Task tool, model: opus — Opus 4.6) to execute the `/execute` stage:
 
 **Subagent prompt:**
 ```
-You are executing the /execute pipeline stage. Read the full command instructions:
-<read and paste ${CLAUDE_PLUGIN_ROOT}/commands/execute.md>
+You are executing the /execute pipeline stage.
 
-Execute all steps for this dev plan:
+## FULL EXECUTE.MD INSTRUCTIONS — YOU MUST FOLLOW ALL STEPS
+
+<PASTE THE ENTIRE CONTENT OF execute.md HERE — DO NOT SUMMARIZE>
+
+## Execution Context
 
 Dev plan file: <plan_path>
 JIRA integration: <enabled/disabled based on user_prefs.skip_jira>
 
-Important:
-- Reconcile JIRA statuses first (if JIRA enabled)
-- Build the dependency graph and present pre-flight check
-- Execute tasks using the Ralph Loop (BUILD → REVIEW → ITERATE)
-- Each build/review uses fresh context subagents (already defined in execute.md)
-- Create PRs and wait for user approval per PR (Gate 4)
-- Update dev plan and JIRA statuses as tasks complete
-- Return the following in your final message:
+## Compliance Checklist (orchestrator verifies these in the subagent's response)
+
+The subagent MUST:
+- [ ] Step 1.5: Reconcile JIRA statuses on resume
+- [ ] Step 3a: Create branch per task, transition JIRA to "In Progress"
+- [ ] Step 3b-3d: Ralph Loop with fresh-context BUILD and REVIEW subagents
+- [ ] Step 3f: Push branch, create PR with critic results, post PR link to JIRA
+- [ ] Step 3g: Wait for user approval, merge PR, transition JIRA to "Done"
+- [ ] Step 4: Unlock dependent tasks, repeat
+- [ ] Step 5: Pre-delivery smoke test (MANDATORY)
+- [ ] Step 6: Final report with smoke test results table
+
+Return the following in your final message:
   1. Results table: task, status, PR number, iteration count, critic results
   2. Summary: completed/blocked counts, total iterations, PRs merged
   3. Smoke test results table (from Step 5 of /execute)
-  4. Any blocked tasks with their failure reasons
-  5. Next steps
+  4. JIRA transition summary (how many transitioned to In Progress / Done)
+  5. Any blocked tasks with their failure reasons
+  6. Next steps
 ```
+
+**Post-subagent verification:** When the Stage 4 subagent returns, the orchestrator MUST check:
+1. Does the response include a "Smoke Test Results" table? If not, the subagent skipped Step 5 — re-run.
+2. Does the response include PR numbers? If tasks were committed directly to main without PRs, flag as non-compliant.
+3. Does the response include JIRA transition counts? If zero, JIRA was skipped — run bulk transition as remediation.
 
 ### GATE 4: Per-PR Approval
 
