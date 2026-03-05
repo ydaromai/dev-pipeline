@@ -87,6 +87,8 @@ Or run stages individually:
 | `/tdd-test-plan @<prd> @<contract>` | PRD + UI Contract to tiered test plan with TP-{N} traceability |
 | `/tdd-develop-tests @<test-plan>` | Blind agent develops Tier 1 E2E tests with self-health gate |
 | `/validate @<file>` | Run critic agents standalone on any artifact |
+| `/clear_and_go` | Save pipeline checkpoint and prepare for context clear |
+| `/ask <question>` | Read-only Q&A — ask anything without modifying files |
 
 ## Quality Loops
 
@@ -97,7 +99,7 @@ The pipeline uses two distinct quality loops to ensure high-quality artifacts be
 All applicable critics (7 always-on + conditional: Observability, API Contract, Designer) score the PRD 1–10. The loop iterates until:
 - **Per-critic minimum**: > 8.5
 - **Overall average**: > 9.0
-- **Max iterations**: 5
+- **Max iterations**: 3
 
 N/A critics (e.g., Designer when `has_frontend: false`, Observability when `has_backend_service: false`, API Contract when `has_api: false`) are excluded from both numerator and denominator.
 
@@ -106,7 +108,7 @@ N/A critics (e.g., Designer when `has_frontend: false`, Observability when `has_
 All applicable critics review the dev plan. The loop iterates until:
 - **Zero Critical findings** AND **zero Warnings** across all critics
 - Notes (informational) are acceptable
-- **Max iterations**: 5
+- **Max iterations**: 3
 
 > **Why the asymmetry?** PRDs are living documents refined during implementation — minor warnings are acceptable if scores are high. Dev plans are the direct blueprint for code execution — unresolved warnings propagate into bugs, tech debt, or security gaps.
 
@@ -115,7 +117,7 @@ All applicable critics review the dev plan. The loop iterates until:
 The execution engine uses a build/review cycle with fresh context per iteration:
 
 ```
-BUILD (Opus 4.6)  -->  REVIEW (Opus 4.6, all critics)  -->  PASS? --> PR
+BUILD (Opus 4.6)  -->  REVIEW (Sonnet 4.6, all critics)  -->  PASS? --> PR
                         |
                        FAIL
                         |
@@ -125,7 +127,18 @@ BUILD (Opus 4.6)  -->  REVIEW (Opus 4.6, all critics)  -->  PASS? --> PR
 
 - **Simple tasks**: Built with Sonnet 4.6 (docs, config, small edits)
 - **Medium/Complex tasks**: Built with Opus 4.6
-- **All reviews**: Opus 4.6 with all applicable critics (7 always-on + 3 conditional: Observability, API Contract, Designer)
+- **All critics**: Sonnet 4.6 (structured checklist evaluation at ~1/5 Opus token cost)
+- **Build/synthesis subagents**: Opus 4.6 (deep reasoning tasks)
+
+## Pipeline State & Resume
+
+Both `/fullpipeline` and `/tdd-fullpipeline` write a JSON state file to `docs/pipeline-state/<slug>.json` at every gate transition. This enables:
+
+- **Automatic resume**: If context is cleared or the session crashes, re-running the same command detects the state file and offers to resume from the last completed stage
+- **Proactive checkpoint**: At ~70% context usage, the orchestrator auto-saves state and notifies the user — preventing data loss from auto-compaction
+- **`/clear_and_go`**: Manually save a checkpoint, copy the resume command to clipboard, and prepare for `/clear`
+
+State files are committed to git at every write, providing an audit trail of pipeline progress.
 
 ## Critic Agents
 
@@ -155,7 +168,9 @@ dev-pipeline/
     execute.md
     test.md
     fullpipeline.md
+    tdd-fullpipeline.md
     validate.md
+    clear_and_go.md
     pipeline-init.md
   pipeline/
     agents/             # Critic agent personas
@@ -187,6 +202,7 @@ dev-pipeline/
   docs/
     prd/                # Generated PRDs
     dev_plans/          # Generated dev plans
+    pipeline-state/     # Pipeline state files (JSON, git-tracked)
   WORKFLOW.md           # Detailed pipeline reference
 ```
 
@@ -218,9 +234,9 @@ See [scripts/jira/README.md](scripts/jira/README.md) for detailed usage.
 Each project gets a `pipeline.config.yaml` (created by `/pipeline-init`) that controls:
 
 - **JIRA settings**: project key, host, credentials path
-- **Validation**: which critics run at each stage, parallel vs sequential, max iterations (5)
+- **Validation**: which critics run at each stage, parallel vs sequential, max iterations (3)
 - **Scoring**: PRD quality thresholds (per-critic > 8.5, overall > 9.0)
-- **Execution**: build/review models, max iterations, branch pattern
+- **Execution**: build/review models, critic model (Sonnet), max iterations, branch pattern
 - **Test commands**: unit, integration, UI, E2E, component, all
 - **Test requirements**: file patterns mapped to required test types
 - **Test stage**: enabled, coverage thresholds, CI audit behavior, critic validation
