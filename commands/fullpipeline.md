@@ -118,13 +118,14 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
 ```
 
 **Field definitions:**
-- `schema_version` — always `1` (increment on breaking schema changes)
+- `schema_version` — always `1` (increment on breaking schema changes). Future schema changes increment this value; readers skip files with unrecognized versions (no forward-compatibility migration)
 - `pipeline_status` — `"active"` during execution, `"completed"` on success, `"aborted"` on user abort
-- `current_stage` — always an integer (1–5). Remains at the last active stage even after completion/abort
+- `current_stage` — always an integer (1–5). Remains at the last active stage even after completion/abort. Note: `stages` object uses string keys (`"1"`, `"2"`, ...) per JSON convention; `current_stage` is an integer for arithmetic comparisons
 - `stage_name` — human-readable name of the current stage (e.g., `"Execute with Ralph Loop"`). Informational; not validated on read
 - Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`
 - Stage `artifact` — optional; omitted for execution stages (Stage 4) where output is per-task PRs tracked in the `tasks` object
-- Task `status` — `"done"` | `"in_progress"` | `"pending"`
+- Task `status` — `"done"` | `"in_progress"` | `"pending"` (no `"aborted"` value — aborted pipelines stop execution; individual tasks remain at their last status)
+- Task `pr` — integer (PR number) when a PR has been created; omit the field entirely (not `null`) when no PR exists yet
 - `tasks` — object keyed by task ID (e.g., `"1.1"`); empty `{}` until execution stage begins
 - `test_result` — `null` until Stage 5 completes, then `"PASS"` | `"FAIL"` | `"SKIPPED"`
 - `known_issues` — array of strings; `[]` when no issues
@@ -142,8 +143,12 @@ If the git commit fails (e.g., nothing changed), continue — the state file on 
 
 **Design constraints:**
 - **Single-session:** The state file assumes one active session per slug. Concurrent runs with the same slug will overwrite each other. This is by design — pipeline execution is inherently sequential.
-- **Accumulation:** Completed state files remain in `docs/pipeline-state/`. The orchestrator only acts on files with `pipeline_status: "active"`, so completed/aborted files are inert. Delete them manually if cleanup is desired.
+- **Accumulation:** Completed state files remain in `docs/pipeline-state/` and are intentionally tracked in git as an audit trail. The orchestrator only acts on files with `pipeline_status: "active"`, so completed/aborted files are inert. Delete them manually if cleanup is desired.
 - **Atomic writes:** The state file is written and then committed. If the process crashes mid-write, the file may be truncated. Resume Detection handles this gracefully — corrupt JSON is skipped (step 2) and the orchestrator falls back to disk artifact detection. This is an accepted trade-off for simplicity.
+- **State file size:** Bounded by design — the file contains metadata only (stage statuses, task IDs, short summaries), not artifact content. Typical size is under 2 KB.
+- **Git-per-gate commits:** Each gate approval triggers a state file commit. This is intentional — it provides an audit trail of pipeline progress and enables bisecting pipeline state. The overhead is negligible (one small-file commit per gate).
+- **Resume file scan:** The directory scan in Resume Detection (step 2) reads all `*.json` files in `docs/pipeline-state/`. For typical usage (1–5 state files), this is fast. If the directory grows large, prune completed/aborted files periodically.
+- **`$ARGUMENTS` injection:** The requirement text from `$ARGUMENTS` is stored verbatim in the `requirement` field. This is user-provided input within the CLI session — no sanitization is applied. This is an accepted risk: the user controls their own CLI environment.
 
 ---
 
@@ -564,6 +569,8 @@ When all stages complete (Stage 5 subagent returns, or Stage 5 is skipped):
 
 1. **Mark the state file as completed** — update `docs/pipeline-state/<slug>.json`: set `pipeline_status` to `"completed"`, all stages to `"done"` (or `"skipped"`), and commit:
 ```bash
+mkdir -p docs/pipeline-state
+# (write/update docs/pipeline-state/<slug>.json)
 git add docs/pipeline-state/<slug>.json && git commit -m "pipeline: mark <slug> as completed"
 ```
 

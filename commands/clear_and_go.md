@@ -126,7 +126,9 @@ Wait for user response. If they correct anything, update before proceeding.
 
 Once the user approves, write the state file to `docs/pipeline-state/<slug>.json`.
 
-**Note:** If a state file already exists for this slug (written by the orchestrator at a prior gate), this write **overwrites** it with the current checkpoint. This is intentional — `/clear_and_go` captures the most up-to-date state from the conversation, which may include progress beyond the last gate commit. Log: `"Note: overwriting existing state file (previous current_stage: <N>, new current_stage: <M>)"`
+**Note:** If a state file already exists for this slug, check its `pipeline_status`:
+- If `"active"` — overwrite it. This is intentional — `/clear_and_go` captures the most up-to-date state from the conversation, which may include progress beyond the last gate commit. Log: `"Note: overwriting existing state file (previous current_stage: <N>, new current_stage: <M>)"`
+- If `"completed"` or `"aborted"` — warn the user before overwriting: `"WARNING: Existing state file is marked '<status>'. Overwriting with active checkpoint."` Proceed only if the user confirms.
 
 Create the `docs/pipeline-state/` directory if it doesn't exist.
 
@@ -198,7 +200,7 @@ Create the `docs/pipeline-state/` directory if it doesn't exist.
     "3": { "status": "done", "artifact": "docs/tdd/<slug>/ui-contract.md", "summary": "..." },
     "4": { "status": "done", "artifact": "docs/tdd/<slug>/test-plan.md", "summary": "..." },
     "5": { "status": "in_progress", "artifact": "docs/dev_plans/<slug>.md", "jira_epic": "<key>", "summary": "..." },
-    "6": { "status": "not_started", "artifact": "tdd/<slug>/tests (branch)", "summary": "" },
+    "6": { "status": "not_started", "artifact": "tdd/<slug>/tests", "summary": "" },
     "7": { "status": "not_started", "summary": "" },
     "8": { "status": "not_started", "artifact": ".pipeline/metrics/<slug>.json", "summary": "" }
   },
@@ -224,22 +226,25 @@ Create the `docs/pipeline-state/` directory if it doesn't exist.
 ```
 
 **Field definitions:**
-- `schema_version` — always `1`
+- `schema_version` — always `1`. Future schema changes increment this value; readers skip files with unrecognized versions (no forward-compatibility migration)
 - `pipeline_status` — always `"active"` when written by `/clear_and_go`. Canonical enum (set by orchestrators): `"active"` | `"completed"` | `"aborted"`
-- `current_stage` — always an integer (1–5 for fullpipeline, 1–8 for TDD)
+- `current_stage` — always an integer (1–5 for fullpipeline, 1–8 for TDD). Note: `stages` object uses string keys (`"1"`, `"2"`, ...) per JSON convention; `current_stage` is an integer for arithmetic comparisons
 - `stage_name` — human-readable name of the current stage. Informational; not validated on read
 - Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`
 - Stage `artifact` — optional; omitted for execution stages (Stage 4/7) where output is per-task PRs tracked in the `tasks` object
-- Task `status` — `"done"` | `"in_progress"` | `"pending"`
+- Task `status` — `"done"` | `"in_progress"` | `"pending"` (no `"aborted"` value — aborted pipelines stop execution; individual tasks remain at their last status)
+- Task `pr` — integer (PR number) when a PR has been created; omit the field entirely (not `null`) when no PR exists yet
 - `tasks` — object keyed by task ID (e.g., `"1.1"`); empty `{}` until execution stage begins
 - `test_result` — `null` until Stage 5/8 completes, then `"PASS"` | `"FAIL"` | `"SKIPPED"`
-- `test_adjustments` — TDD only: cumulative test adjustment counts from Stage 7, persisted across interruptions to enforce the 20% behavioral threshold. Always `{ "structural": 0, "behavioral": 0, "security": 0 }` as initial values before Stage 7
+- `test_adjustments` — TDD only: cumulative test adjustment counts from Stage 7, persisted across interruptions to enforce the 20% behavioral threshold. Always `{ "structural": 0, "behavioral": 0, "security": 0 }` as initial values before Stage 7. Must be an object with exactly these three integer keys; reject malformed values on resume
 - `known_issues` — array of strings; `[]` when no issues
 - `updated_at` — ISO 8601 timestamp; set on every write
 
 **Design constraints:**
 - **Single-session:** The state file assumes one active session per slug. Concurrent runs with the same slug will overwrite each other. This is by design — pipeline execution is inherently sequential.
-- **Accumulation:** Completed state files remain in `docs/pipeline-state/`. To clean up after a pipeline finishes, delete the state file manually or leave it as an audit trail. The orchestrator only acts on files with `pipeline_status: "active"`.
+- **Accumulation:** Completed state files remain in `docs/pipeline-state/` and are intentionally tracked in git as an audit trail. The orchestrator only acts on files with `pipeline_status: "active"`, so completed/aborted files are inert. Delete them manually if cleanup is desired.
+- **State file size:** Bounded by design — the file contains metadata only (stage statuses, task IDs, short summaries), not artifact content. Typical size is under 2 KB.
+- **`$ARGUMENTS` injection:** The requirement text from `$ARGUMENTS` is stored verbatim in the `requirement` field. This is user-provided input within the CLI session — no sanitization is applied. This is an accepted risk: the user controls their own CLI environment.
 
 After writing, commit immediately:
 
@@ -250,6 +255,7 @@ git add docs/pipeline-state/<slug>.json
 git commit -m "chore: save pipeline checkpoint for <slug> at stage <N>"
 ```
 
+If the state file write itself fails (e.g., permission error, disk full), log: `"ERROR: Failed to write state file docs/pipeline-state/<slug>.json — <error>"` and present the error to the user — the checkpoint cannot be saved without the state file.
 If the git commit fails (e.g., nothing changed), continue — the state file on disk is the source of truth.
 
 ---

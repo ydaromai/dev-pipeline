@@ -122,7 +122,7 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
     "3": { "status": "done", "artifact": "docs/tdd/<slug>/ui-contract.md", "summary": "..." },
     "4": { "status": "done", "artifact": "docs/tdd/<slug>/test-plan.md", "summary": "..." },
     "5": { "status": "in_progress", "artifact": "docs/dev_plans/<slug>.md", "jira_epic": "<key>", "summary": "..." },
-    "6": { "status": "not_started", "artifact": "tdd/<slug>/tests (branch)", "summary": "..." },
+    "6": { "status": "not_started", "artifact": "tdd/<slug>/tests", "summary": "..." },
     "7": { "status": "not_started", "summary": "..." },
     "8": { "status": "not_started", "artifact": ".pipeline/metrics/<slug>.json", "summary": "..." }
   },
@@ -145,16 +145,17 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
 ```
 
 **Field definitions:**
-- `schema_version` — always `1` (increment on breaking schema changes)
+- `schema_version` — always `1` (increment on breaking schema changes). Future schema changes increment this value; readers skip files with unrecognized versions (no forward-compatibility migration)
 - `pipeline_status` — `"active"` during execution, `"completed"` on success, `"aborted"` on user abort
-- `current_stage` — always an integer (1–8). Remains at the last active stage even after completion/abort
+- `current_stage` — always an integer (1–8). Remains at the last active stage even after completion/abort. Note: `stages` object uses string keys (`"1"`, `"2"`, ...) per JSON convention; `current_stage` is an integer for arithmetic comparisons
 - `stage_name` — human-readable name of the current stage (e.g., `"Execute with Test Adjustment"`). Informational; not validated on read
 - Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`
-- Stage `artifact` — optional; omitted for execution stages (Stage 7) where output is per-task PRs tracked in the `tasks` object
-- Task `status` — `"done"` | `"in_progress"` | `"pending"`
+- Stage `artifact` — optional; omitted for execution stages (Stage 7) where output is per-task PRs tracked in the `tasks` object. Stage 6 artifact `"tdd/<slug>/tests"` refers to a git branch name, not a file path
+- Task `status` — `"done"` | `"in_progress"` | `"pending"` (no `"aborted"` value — aborted pipelines stop execution; individual tasks remain at their last status)
+- Task `pr` — integer (PR number) when a PR has been created; omit the field entirely (not `null`) when no PR exists yet
 - `tasks` — object keyed by task ID (e.g., `"1.1"`); empty `{}` until execution stage begins
 - `test_result` — `null` until Stage 8 completes, then `"PASS"` | `"FAIL"` | `"SKIPPED"`
-- `test_adjustments` — TDD only: cumulative test adjustment counts from Stage 7, persisted across interruptions to enforce the 20% behavioral threshold. Always an object with `{ "structural": 0, "behavioral": 0, "security": 0 }` as initial values before Stage 7 begins
+- `test_adjustments` — cumulative test adjustment counts from Stage 7, persisted across interruptions to enforce the 20% behavioral threshold. Always an object with exactly three integer keys: `{ "structural": 0, "behavioral": 0, "security": 0 }` as initial values before Stage 7 begins. On resume, validate that the object has exactly these three keys with integer values; reject malformed values and reset to `{ "structural": 0, "behavioral": 0, "security": 0 }` with a warning
 - `known_issues` — array of strings; `[]` when no issues
 - `updated_at` — ISO 8601 timestamp; set on every write
 
@@ -169,8 +170,12 @@ If the git commit fails (e.g., nothing changed), continue — the state file on 
 
 **Design constraints:**
 - **Single-session:** The state file assumes one active session per slug. Concurrent runs with the same slug will overwrite each other. This is by design — pipeline execution is inherently sequential.
-- **Accumulation:** Completed state files remain in `docs/pipeline-state/`. The orchestrator only acts on files with `pipeline_status: "active"`, so completed/aborted files are inert. Delete them manually if cleanup is desired.
+- **Accumulation:** Completed state files remain in `docs/pipeline-state/` and are intentionally tracked in git as an audit trail. The orchestrator only acts on files with `pipeline_status: "active"`, so completed/aborted files are inert. Delete them manually if cleanup is desired.
 - **Atomic writes:** The state file is written and then committed. If the process crashes mid-write, the file may be truncated. Resume Detection handles this gracefully — corrupt JSON is skipped (step 3) and the orchestrator falls back to disk artifact detection. This is an accepted trade-off for simplicity.
+- **State file size:** Bounded by design — the file contains metadata only (stage statuses, task IDs, short summaries), not artifact content. Typical size is under 2 KB.
+- **Git-per-gate commits:** Each gate approval triggers a state file commit. This is intentional — it provides an audit trail of pipeline progress and enables bisecting pipeline state. The overhead is negligible (one small-file commit per gate).
+- **Resume file scan:** The directory scan in Resume Detection (step 2) reads all `*.json` files in `docs/pipeline-state/`. For typical usage (1–5 state files), this is fast. If the directory grows large, prune completed/aborted files periodically.
+- **`$ARGUMENTS` injection:** The requirement text from `$ARGUMENTS` is stored verbatim in the `requirement` field. This is user-provided input within the CLI session — no sanitization is applied. This is an accepted risk: the user controls their own CLI environment.
 
 ---
 
@@ -221,7 +226,7 @@ Options:
 - **restart** -> Discard saved state and start fresh from Stage 1
 ```
 
-12. If the user chooses **resume**: set orchestrator state from the state file (slug, prd_path, plan_path, brief_path, contract_path, test_plan_path, requirement, user_prefs, test_result, test_adjustments) and jump directly to the current stage. If git branch differs, warn but proceed. For execution stage, the subagent will run JIRA reconciliation (Step 1.5) automatically and load `test_adjustments` from the state file to preserve cumulative adjustment counts. Output: `"Checkpoint loaded: resuming from Stage <N>"`
+12. If the user chooses **resume**: set orchestrator state from the state file (slug, prd_path, plan_path, brief_path, contract_path, test_plan_path, requirement, user_prefs, test_result, test_adjustments) and jump directly to the current stage. If git branch differs, warn but proceed. Validate `test_adjustments`: must be an object with exactly keys `"structural"`, `"behavioral"`, `"security"`, each an integer >= 0. If malformed, reset to `{ "structural": 0, "behavioral": 0, "security": 0 }` and log: `"WARNING: test_adjustments malformed — reset to zeroes"`. For execution stage (Stage 7), the subagent will run JIRA reconciliation (Step 1.5) automatically and load `test_adjustments` from the state file to preserve cumulative adjustment counts. For Stage 8 resume, ensure `.pipeline/metrics/` directory exists: `mkdir -p .pipeline/metrics`. Output: `"Checkpoint loaded: resuming from Stage <N>"`
 13. If the user chooses **restart**: delete the state file, proceed with Pre-Flight Checks as normal.
 14. If no state file exists: proceed with Pre-Flight Checks as normal.
 
@@ -1337,6 +1342,8 @@ When all stages complete (Stage 8 subagent returns with PASS verdict):
 
 1. **Mark the state file as completed** — update `docs/pipeline-state/<slug>.json`: set `pipeline_status` to `"completed"`, all stages to `"done"` (or `"skipped"`), and commit:
 ```bash
+mkdir -p docs/pipeline-state
+# (write/update docs/pipeline-state/<slug>.json)
 git add docs/pipeline-state/<slug>.json && git commit -m "pipeline: mark <slug> as completed"
 ```
 
