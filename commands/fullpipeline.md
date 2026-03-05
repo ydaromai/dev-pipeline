@@ -214,7 +214,7 @@ Options:
 - **restart** → Discard saved state and start fresh from Stage 1
 ```
 
-11. If the user chooses **resume**: set orchestrator state from the state file (slug, prd_path, plan_path, requirement, user_prefs, test_result) and jump directly to the current stage. If git branch differs, warn but proceed. For execution stage, the subagent will run JIRA reconciliation (Step 1.5) automatically. Output: `"Checkpoint loaded [fullpipeline]: resuming from Stage <N>"`
+11. If the user chooses **resume**: set orchestrator state from the state file (slug, prd_path, plan_path, requirement, user_prefs, test_result) and jump directly to the current stage. If git branch differs, warn but proceed. For execution stage, the subagent will run JIRA reconciliation (Step 1.5) automatically. Clean up the pre-compact rule file if it exists: `rm -f .claude/rules/pipeline-resume.md`. Output: `"Checkpoint loaded [fullpipeline]: resuming from Stage <N>"`
 12. If the user chooses **restart**: delete the state file, proceed with Stage 1 as normal.
 13. If no state file exists: proceed with Stage 1 as normal. (This includes the case where active state files exist but none matched — disk artifact detection in the Error Recovery section still applies on a per-stage basis.)
 
