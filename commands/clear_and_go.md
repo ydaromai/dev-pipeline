@@ -51,8 +51,11 @@ Using the orchestrator's stage map, scan the current conversation to determine:
 4. **Current stage** — what was the orchestrator doing when `/clear_and_go` was called? Waiting for a gate? Mid-subagent? Between stages?
 5. **Task-level progress** (if in execution stage) — tasks marked `DONE`, `IN PROGRESS`, or pending. PR numbers, branch names, JIRA transitions.
 6. **Test adjustment counts** (TDD pipeline, Stage 7+) — structural, behavioral, and security adjustment counts from the conversation. If not available from context, read from the existing state file to carry forward.
-7. **User preferences** — skip JIRA? Skip stages? Special instructions?
-8. **Active issues** — errors, blocked tasks, pending decisions
+7. **Test result** — if Stage 5 (fullpipeline) or Stage 8 (TDD) has completed, extract the test result (`PASS`, `FAIL`, or `SKIPPED`). If not yet reached, leave as `null`.
+8. **User preferences** — skip JIRA? Skip stages? Special instructions?
+9. **Active issues** — errors, blocked tasks, pending decisions
+
+**Edge case — no slug yet:** If `/clear_and_go` is invoked during Stage 1 before the PRD subagent has returned (and thus before the slug is known), inform the user: `"Stage 1 is still in progress and no slug has been derived yet. Wait for Stage 1 to complete before running /clear_and_go, or abort and re-run the pipeline."` Do not proceed without a valid slug.
 
 ---
 
@@ -106,6 +109,8 @@ Present your understanding to the user using AskUserQuestion:
 | 4 | <name from orchestrator> | IN PROGRESS — 2/6 tasks done |
 | 5 | <name from orchestrator> | NOT STARTED |
 
+Note: The Status column uses uppercase display labels (`DONE`, `IN PROGRESS`, `NOT STARTED`, `SKIPPED`) for readability. The JSON state file stores lowercase with underscores (`"done"`, `"in_progress"`, `"not_started"`, `"skipped"`).
+
 ### Task Progress (if in execution stage):
 | Task | Status | JIRA | PR | Branch |
 |------|--------|------|----|--------|
@@ -135,12 +140,16 @@ Once the user approves, validate before writing:
 2. **Validate slug** — must match `^[a-z0-9][a-z0-9_-]{0,63}$`. If invalid, halt and ask the user.
 3. **Validate `test_adjustments`** (TDD only) — must be an object with exactly keys `"structural"`, `"behavioral"`, `"security"`, each a non-negative integer (>= 0). Reject negative values, non-integer values, or extra keys — halt and ask the user to correct. If `current_stage >= 7` and values cannot be determined from conversation context or an existing state file, halt and ask the user to provide the counts rather than defaulting to zeroes (which would bypass the 20% behavioral threshold). If `current_stage < 7`, default to zeroes is safe.
 4. **Validate stage consistency** — all stages before `current_stage` should have status `"done"` or `"skipped"`, not `"not_started"`. If inconsistent, warn the user and ask for correction before writing.
+5. **Validate `test_result`** (if non-null) — must be one of `"PASS"`, `"FAIL"`, `"SKIPPED"`. If any other value, halt and ask the user to correct.
 
 Write the state file to `docs/pipeline-state/<slug>.json`.
 
-**Note:** If a state file already exists for this slug, check its `pipeline_status`:
-- If `"active"` — overwrite it. This is intentional — `/clear_and_go` captures the most up-to-date state from the conversation, which may include progress beyond the last gate commit. Log: `"Note: overwriting existing state file (previous current_stage: <N>, new current_stage: <M>)"`
-- If `"completed"` or `"aborted"` — warn the user before overwriting: `"WARNING: Existing state file is marked '<status>'. Overwriting with active checkpoint."` Proceed only if the user confirms.
+**Note:** If a state file already exists for this slug, first check its `pipeline` field:
+- If the existing file's `pipeline` field does not match the current pipeline type (e.g., existing is `"fullpipeline"` but current run is `"tdd-fullpipeline"`), warn the user: `"WARNING: [clear_and_go] Existing state file is for pipeline '<existing_pipeline>' but current run is '<current_pipeline>'. Overwriting will destroy the other pipeline's state."` Proceed only if the user explicitly confirms.
+
+Then check its `pipeline_status`:
+- If `"active"` — overwrite it. This is intentional — `/clear_and_go` captures the most up-to-date state from the conversation, which may include progress beyond the last gate commit. Log: `"INFO: [clear_and_go] Overwriting existing state file (previous current_stage: <N>, new current_stage: <M>)"`
+- If `"completed"` or `"aborted"` — warn the user before overwriting: `"WARNING: [clear_and_go] Existing state file is marked '<status>'. Overwriting with active checkpoint. This is a manual override — the standard transition rules (active→completed, active→aborted) do not apply to /clear_and_go manual checkpoints."` Proceed only if the user confirms.
 
 Create the `docs/pipeline-state/` directory if it doesn't exist.
 
@@ -216,11 +225,7 @@ Create the `docs/pipeline-state/` directory if it doesn't exist.
     "7": { "status": "not_started", "summary": "" },
     "8": { "status": "not_started", "artifact": ".pipeline/metrics/<slug>.json", "summary": "" }
   },
-  "tasks": {
-    "1.1": { "status": "done", "jira": "PIPE-3", "pr": 42, "branch": "feat/story-1-task-1-slug" },
-    "1.2": { "status": "in_progress", "jira": "PIPE-4" },
-    "2.1": { "status": "pending", "jira": "PIPE-5" }
-  },
+  "tasks": {},
   "test_result": null,
   "test_adjustments": {
     "structural": 0,
@@ -239,7 +244,7 @@ Create the `docs/pipeline-state/` directory if it doesn't exist.
 
 **Field definitions:**
 - `schema_version` — always `1`. Future schema changes increment this value; readers skip files with unrecognized versions (no forward-compatibility migration)
-- `pipeline_status` — always `"active"` when written by `/clear_and_go`. Canonical enum (set by orchestrators): `"active"` | `"completed"` | `"aborted"`. Valid transitions: `active → completed`, `active → aborted`. No other transitions are valid — a completed or aborted pipeline cannot return to active (start a new pipeline instead)
+- `pipeline_status` — always `"active"` when written by `/clear_and_go`. Canonical enum (set by orchestrators): `"active"` | `"completed"` | `"aborted"`. Valid transitions: `active → completed`, `active → aborted`. Exception: `/clear_and_go` may overwrite a `"completed"` or `"aborted"` file with `"active"` after explicit user confirmation (see Step 5 mismatch check). This is a manual override, not a standard transition — the orchestrators never perform this transition automatically
 - `current_stage` — always an integer (1–5 for fullpipeline, 1–8 for TDD). Validate range against pipeline type before writing. Note: `stages` object uses string keys (`"1"`, `"2"`, ...) per JSON convention; `current_stage` is an integer for arithmetic comparisons
 - `stage_name` — human-readable name of the current stage, taken from the orchestrator's stage map. Informational; not validated on read. Canonical names: fullpipeline: "Requirement → PRD", "PRD → Dev Plan", "Dev Plan → JIRA", "Execute with Ralph Loop", "Test Verification". TDD: "Requirement → PRD", "PRD → Design Brief", "Mock App → UI Contract", "PRD + UI Contract → Test Plan", "PRD + Test Plan → Dev Plan", "Test Plan → Develop Tests", "Execute with Test Adjustment", "Validate"
 - Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`
@@ -251,17 +256,19 @@ Create the `docs/pipeline-state/` directory if it doesn't exist.
 - `test_result` — `null` until Stage 5/8 completes, then `"PASS"` | `"FAIL"` | `"SKIPPED"`. Note: on abort, the orchestrator sets `"FAIL"` — there is no separate `"ABORTED"` enum value; check `pipeline_status` to distinguish test failure from user abort
 - `test_adjustments` — TDD only; not present in fullpipeline state files. Cumulative test adjustment counts from Stage 7, persisted across interruptions to enforce the 20% behavioral threshold. Always `{ "structural": 0, "behavioral": 0, "security": 0 }` as initial values before Stage 7. Must be an object with exactly these three integer keys; on resume, if malformed and `current_stage >= 7`, halt and ask the user (see orchestrator resume step 12)
 - `user_prefs` — object with known keys: `skip_jira` (boolean, both pipelines), `mock_url` (string, TDD only). Additional keys may be added; readers should ignore unknown keys
-- `known_issues` — array of strings; `[]` when no issues. Do not include secrets, API keys, or PII in entries — they are committed to git history
-- `updated_at` — ISO 8601 timestamp; set on every write
+- `known_issues` — array of strings; `[]` when no issues. Keep individual entries concise (under 200 characters) and the array small (under 10 entries) to stay within the 2 KB state file target. Do not include secrets, API keys, or PII in entries — they are committed to git history
+- `updated_at` — ISO 8601 timestamp in UTC (e.g., `"2026-03-05T14:30:00Z"`); set on every write. Always use UTC to ensure comparability across sessions and machines
 
 **Important:** Do not include secrets, API keys, or PII in the requirement text — it is stored verbatim in the state file and committed to git history. Keep requirement text concise (recommended: under 2 KB) — excessively long text bloats the state file and git history without benefit.
 
 **Design constraints:**
-- **Single-session:** The state file assumes one active session per slug. Concurrent runs with the same slug will overwrite each other. This is by design — pipeline execution is inherently sequential.
-- **Accumulation:** Completed state files remain in `docs/pipeline-state/` and are intentionally tracked in git as an audit trail. The orchestrator only acts on files with `pipeline_status: "active"`, so completed/aborted files are inert. Delete them manually if cleanup is desired.
+- **Single-session:** The state file assumes one active session per slug. Concurrent runs with the same slug will overwrite each other — there is no file-level advisory lock. If you have multiple terminal tabs running pipelines for the same slug, the last write wins and earlier state is silently lost. This is by design — pipeline execution is inherently sequential and single-user.
+- **Cross-pipeline collision:** State files use `<slug>.json` naming without a pipeline-type prefix. If the same slug is used for both `/fullpipeline` and `/tdd-fullpipeline`, the second run's state file overwrites the first. Resume Detection filters by the `pipeline` field, so the overwritten pipeline becomes invisible. Step 5 includes a pipeline-type mismatch check to warn before overwriting.
+- **Accumulation:** Completed state files remain in `docs/pipeline-state/` and are intentionally tracked in git as an audit trail. The orchestrator only acts on files with `pipeline_status: "active"`, so completed/aborted files are inert. **Cleanup:** Delete completed/aborted files manually when no longer needed (e.g., `git rm docs/pipeline-state/<slug>.json && git commit`). For projects with many pipeline runs, prune periodically to avoid repo bloat.
 - **State file size:** Bounded by design — the file contains metadata only (stage statuses, task IDs, short summaries), not artifact content. Typical size is under 2 KB.
-- **Atomic writes:** The state file is written and then committed. If the process crashes mid-write, the file may be truncated. This is an accepted trade-off — the orchestrator's Resume Detection handles corrupt JSON gracefully (skips the file and falls back to disk artifact detection).
-- **`$ARGUMENTS` injection:** The requirement text from `$ARGUMENTS` is stored verbatim in the `requirement` field. This is user-provided input within the CLI session — no sanitization is applied. This is an accepted risk: the user controls their own CLI environment.
+- **Atomic writes:** The state file is written and then committed. If the process crashes mid-write, the file may be truncated. This is an accepted trade-off — the orchestrator's Resume Detection handles corrupt JSON gracefully (skips the file and falls back to disk artifact detection). A write-to-temp-then-rename approach would be atomic on POSIX but adds complexity; not implemented in v1.
+- **Write failure asymmetry:** `/clear_and_go` treats state file write failure as fatal (the entire purpose is to produce the checkpoint). The orchestrators treat it as non-fatal (checkpoint creation is secondary to pipeline execution). If `/clear_and_go` fails, the orchestrator can still reconstruct state from disk artifacts on next run, but task-level progress and `test_adjustments` may be lost.
+- **`$ARGUMENTS` injection:** The requirement text from `$ARGUMENTS` is stored verbatim in the `requirement` field. This is user-provided input within the CLI session — no sanitization is applied. This is an accepted risk: the user controls their own CLI environment. Do not pipe untrusted input into pipeline commands.
 
 After writing, commit immediately:
 
@@ -289,21 +296,24 @@ Build the exact command the user needs to type after clearing:
 
 For example: `/fullpipeline Build a marketplace plugin system that allows third-party developers to extend the platform`
 
-Copy it to the clipboard. The requirement text MUST be wrapped in single quotes (not double quotes) to prevent shell expansion — single-quoted strings in POSIX shell suppress all interpretation except `'` itself. Do not change the quoting style without a security review. Escape single quotes in the requirement text by replacing `'` with `'\''`. Requirement text is expected to be printable UTF-8; control characters (null bytes, escape sequences) are not supported and may cause clipboard or shell errors:
+Copy it to the clipboard. The requirement text MUST be wrapped in single quotes (not double quotes) to prevent shell expansion — single-quoted strings in POSIX shell suppress all interpretation except `'` itself. Do not change the quoting style without a security review. **POSIX-only safety:** The single-quote escaping is safe for POSIX-compliant shells (bash, zsh, sh). If the user pastes the command into a non-POSIX shell (PowerShell, fish, nushell), the quoting may not prevent expansion — the user is responsible for shell-appropriate quoting in those contexts. Escape single quotes in the requirement text by replacing `'` with `'\''`. Requirement text is expected to be printable UTF-8; control characters (null bytes, escape sequences) are not supported and may cause clipboard or shell errors:
 ```bash
 # macOS — capture exit code to check success
 printf '%s' '/<pipeline-command> <escaped requirement text>' | pbcopy 2>/dev/null
 CLIP_OK=$?
-# Linux fallback (if pbcopy unavailable)
+# Linux fallback — try xclip, then xsel (each with 2s timeout to avoid hangs on missing X11 display)
 if [ $CLIP_OK -ne 0 ]; then
-  printf '%s' '...' | xclip -selection clipboard 2>/dev/null && CLIP_OK=$? || \
-  printf '%s' '...' | xsel --clipboard --input 2>/dev/null && CLIP_OK=$?
+  timeout 2 sh -c "printf '%s' '...' | xclip -selection clipboard" 2>/dev/null && CLIP_OK=$? || \
+  timeout 2 sh -c "printf '%s' '...' | xsel --clipboard --input" 2>/dev/null && CLIP_OK=$?
 fi
 # Windows (WSL) fallback: use clip.exe if available
 if [ $CLIP_OK -ne 0 ]; then
   printf '%s' '...' | clip.exe 2>/dev/null && CLIP_OK=$?
 fi
 ```
+
+If clipboard copy failed, log: `"WARNING: [clear_and_go] Clipboard copy failed — user must copy the resume command manually"`.
+
 
 Then output — adjust the clipboard line based on `$CLIP_OK`:
 
