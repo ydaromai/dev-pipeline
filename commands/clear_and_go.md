@@ -109,7 +109,7 @@ Present your understanding to the user using AskUserQuestion:
 | 4 | <name from orchestrator> | IN PROGRESS — 2/6 tasks done |
 | 5 | <name from orchestrator> | NOT STARTED |
 
-Note: The Status column uses uppercase display labels (`DONE`, `IN PROGRESS`, `NOT STARTED`, `SKIPPED`) for readability. The JSON state file stores lowercase with underscores (`"done"`, `"in_progress"`, `"not_started"`, `"skipped"`).
+Note: The Status column uses uppercase display labels for readability. Display label mapping: `"done"` → `DONE`, `"in_progress"` → `IN PROGRESS`, `"not_started"` → `NOT STARTED`, `"skipped"` → `SKIPPED`, `"aborted"` → `ABORTED`, `"pending"` (tasks) → `PENDING`. The JSON state file stores lowercase with underscores.
 
 ### Task Progress (if in execution stage):
 | Task | Status | JIRA | PR | Branch |
@@ -126,6 +126,8 @@ Note: The Status column uses uppercase display labels (`DONE`, `IN PROGRESS`, `N
 
 Is this correct? If anything is wrong, tell me what to fix.
 Options: **confirm** | **fix** (tell me what to change) | **cancel** (abort checkpoint)
+
+(Gate options convention: "edit" for document-stage gates where the user modifies artifacts; "fix" for code/test-stage gates where the user fixes implementation issues. /clear_and_go uses "confirm"/"fix"/"cancel" because it is a checkpoint confirmation, not a stage gate.)
 ```
 
 Wait for user response. If they correct anything, update before proceeding. If they cancel, stop without writing the state file.
@@ -248,9 +250,10 @@ Create the `docs/pipeline-state/` directory if it doesn't exist.
 - `current_stage` — always an integer (1–5 for fullpipeline, 1–8 for TDD). On completion, set to the final stage (5 or 8). On abort, remains at the stage where abort occurred. Validate range against pipeline type before writing. Note: `stages` object uses string keys (`"1"`, `"2"`, ...) per JSON convention; `current_stage` is an integer for arithmetic comparisons
 - `stage_name` — human-readable name of the current stage, taken from the orchestrator's stage map. On write, MUST match the canonical name for `current_stage`. Informational; not validated on read (future schema versions may add new names). Canonical names — fullpipeline: stage 1 = "Requirement → PRD", stage 2 = "PRD → Dev Plan", stage 3 = "Dev Plan → JIRA", stage 4 = "Execute with Ralph Loop", stage 5 = "Test Verification". TDD: stage 1 = "Requirement → PRD", stage 2 = "PRD → Design Brief", stage 3 = "Mock App → UI Contract", stage 4 = "PRD + UI Contract → Test Plan", stage 5 = "PRD + Test Plan → Dev Plan", stage 6 = "Test Plan → Develop Tests", stage 7 = "Execute with Test Adjustment", stage 8 = "Validate"
 - Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`. On read, reject unknown values. `"aborted"` means the user chose to stop the pipeline at this stage — stages after the aborted stage remain `"not_started"`, and the aborted stage itself was not completed
+- Stage `jira_epic` — optional string; present on Stage 3 (fullpipeline) or Stage 5 (TDD pipeline) when JIRA import has completed. Contains the JIRA epic key (e.g., `"PIPE-35"`). Omitted when JIRA is skipped or stage not yet reached
 - Stage `summary` — string; brief human-readable outcome of the stage. Empty string `""` for `not_started` stages. Informational; not validated on read
 - Stage `artifact` — optional; omitted for execution stages (Stage 4/7) where output is per-task PRs tracked in the `tasks` object. When present on `not_started` stages, it is the expected output path (informational), not a claim of existence on disk. Stage 6 (TDD) artifact `"tdd/<slug>/tests"` is a git branch name, not a file path. Stage 8 (TDD) artifact `".pipeline/metrics/<slug>.json"` is gitignored and local-only — do not flag as missing after clone. Readers must check the `pipeline` field before accessing pipeline-specific fields
-- Task `status` — `"done"` | `"in_progress"` | `"pending"` (no `"aborted"` value — aborted pipelines stop execution; individual tasks remain at their last status). On read, reject unknown values
+- Task `status` — `"done"` | `"in_progress"` | `"pending"` (no `"aborted"` value — aborted pipelines stop execution; individual tasks remain at their last status). On read, reject unknown values. Note: tasks use `"pending"` while stages use `"not_started"` — this is intentional: `"pending"` indicates a task is queued for execution within an active stage, while `"not_started"` indicates a stage the pipeline has not reached yet
 - Task `pr` — integer (PR number) when a PR has been created; omit the field entirely (not `null`) when no PR exists yet
 - `tasks` — object keyed by task ID (e.g., `"1.1"`); empty `{}` until Stage 4 begins (fullpipeline) or Stage 7 begins (TDD pipeline). Writers MUST NOT populate `tasks` before the execution stage starts. On read, validate that each task entry has a `status` field with a valid enum value
 - `test_result` — `null` until Stage 5/8 completes, then `"PASS"` | `"FAIL"` | `"SKIPPED"`. On read, reject unknown non-null values. Note: on abort, the orchestrator sets `"FAIL"` — there is no separate `"ABORTED"` enum value; check `pipeline_status` to distinguish test failure from user abort
@@ -269,6 +272,8 @@ Create the `docs/pipeline-state/` directory if it doesn't exist.
 - **Atomic writes:** The state file is written and then committed. If the process crashes mid-write, the file may be truncated. This is an accepted trade-off — the orchestrator's Resume Detection handles corrupt JSON gracefully (skips the file and falls back to disk artifact detection). A write-to-temp-then-rename approach would be atomic on POSIX but adds complexity; not implemented in v1.
 - **Write failure asymmetry:** `/clear_and_go` treats state file write failure as fatal (the entire purpose is to produce the checkpoint). The orchestrators treat it as non-fatal (checkpoint creation is secondary to pipeline execution). If `/clear_and_go` fails, the orchestrator can still reconstruct state from disk artifacts on next run, but task-level progress and `test_adjustments` may be lost.
 - **`$ARGUMENTS` injection:** The requirement text from `$ARGUMENTS` is stored verbatim in the `requirement` field. This is user-provided input within the CLI session — no sanitization is applied. This is an accepted risk: the user controls their own CLI environment. Do not pipe untrusted input into pipeline commands.
+- **Schema migration:** When `schema_version` is incremented to 2, a migration path will be defined in the new schema's documentation. Until then, readers skip files with unrecognized versions. This is by-design — forward migration complexity is deferred until a second schema version actually exists.
+- **Field duplication across files:** The state file schema and field definitions are intentionally repeated in `clear_and_go.md`, `fullpipeline.md`, and `tdd-fullpipeline.md`. Each file is self-contained so subagents can operate without reading other orchestrator files. This trades maintenance burden for execution reliability.
 
 After writing, commit immediately:
 
@@ -303,12 +308,17 @@ printf '%s' '/<pipeline-command> <escaped requirement text>' | pbcopy 2>/dev/nul
 CLIP_OK=$?
 # Linux fallback — try xclip, then xsel (each with 2s timeout to avoid hangs on missing X11 display)
 if [ $CLIP_OK -ne 0 ]; then
-  timeout 2 sh -c "printf '%s' '...' | xclip -selection clipboard" 2>/dev/null && CLIP_OK=$? || \
-  timeout 2 sh -c "printf '%s' '...' | xsel --clipboard --input" 2>/dev/null && CLIP_OK=$?
+  timeout 2 sh -c "printf '%s' '...' | xclip -selection clipboard" 2>/dev/null
+  CLIP_OK=$?
+fi
+if [ $CLIP_OK -ne 0 ]; then
+  timeout 2 sh -c "printf '%s' '...' | xsel --clipboard --input" 2>/dev/null
+  CLIP_OK=$?
 fi
 # Windows (WSL) fallback: use clip.exe if available
 if [ $CLIP_OK -ne 0 ]; then
-  printf '%s' '...' | clip.exe 2>/dev/null && CLIP_OK=$?
+  printf '%s' '...' | clip.exe 2>/dev/null
+  CLIP_OK=$?
 fi
 ```
 
@@ -325,7 +335,7 @@ State file: docs/pipeline-state/<slug>.json (committed to git)
 
 **Resume command** (copied to clipboard):
 
-/<pipeline-command> <original requirement text>
+`/<pipeline-command> <original requirement text>`
 
 **Steps:**
 1. Clear context: press Escape, type `/clear`, press Enter
@@ -341,7 +351,7 @@ State file: docs/pipeline-state/<slug>.json (committed to git)
 
 **Resume command** (copy manually):
 
-/<pipeline-command> <original requirement text>
+`/<pipeline-command> <original requirement text>`
 
 **Steps:**
 1. Clear context: press Escape, type `/clear`, press Enter
