@@ -20,8 +20,8 @@ Determine which pipeline is active from conversation context (look for `/fullpip
 
 Then read the corresponding orchestrator file to get the authoritative stage map:
 
-- **Standard pipeline:** Read `~/Projects/dev-pipeline/commands/fullpipeline.md`
-- **TDD pipeline:** Read `~/Projects/dev-pipeline/commands/tdd-fullpipeline.md`
+- **Standard pipeline:** Read `${CLAUDE_PLUGIN_ROOT}/commands/fullpipeline.md`
+- **TDD pipeline:** Read `${CLAUDE_PLUGIN_ROOT}/commands/tdd-fullpipeline.md`
 
 Use the orchestrator's stage definitions (names, numbers, artifacts, gates) as the reference for all stage mapping below. Do NOT guess stage names or numbers from memory.
 
@@ -81,8 +81,8 @@ Cross-check conversation understanding against actual disk state.
 Also run: `git rev-parse --abbrev-ref HEAD` and `git log --oneline -5`
 
 Flag any discrepancies between conversation state and disk state using structured messages:
-- `"WARNING: Stage <N> marked done in conversation but <artifact_path> not found on disk"`
-- `"WARNING: Conversation says stage <N> is <status> but disk artifact exists at <path>"`
+- `"WARNING: [clear_and_go] Stage <N> marked done in conversation but <artifact_path> not found on disk"`
+- `"WARNING: [clear_and_go] Conversation says stage <N> is <status> but disk artifact exists at <path>"`
 
 ---
 
@@ -100,18 +100,18 @@ Present your understanding to the user using AskUserQuestion:
 ### Stage Progress
 | Stage | Name | Status |
 |-------|------|--------|
-| 1 | <name from orchestrator> | done |
-| 2 | <name from orchestrator> | done |
-| 3 | <name from orchestrator> | done (or skipped) |
-| 4 | <name from orchestrator> | in_progress — 2/6 tasks done |
-| 5 | <name from orchestrator> | not_started |
+| 1 | <name from orchestrator> | DONE |
+| 2 | <name from orchestrator> | DONE |
+| 3 | <name from orchestrator> | DONE (or SKIPPED) |
+| 4 | <name from orchestrator> | IN PROGRESS — 2/6 tasks done |
+| 5 | <name from orchestrator> | NOT STARTED |
 
 ### Task Progress (if in execution stage):
 | Task | Status | JIRA | PR | Branch |
 |------|--------|------|----|--------|
-| TASK 1.1 | done | PIPE-3 | #42 | feat/story-1-task-1-slug |
-| TASK 1.2 | in_progress | PIPE-4 | — | — |
-| TASK 2.1 | pending | PIPE-5 | — | — |
+| TASK 1.1 | DONE | PIPE-3 | #42 | feat/story-1-task-1-slug |
+| TASK 1.2 | IN PROGRESS | PIPE-4 | — | — |
+| TASK 2.1 | PENDING | PIPE-5 | — | — |
 
 ### Active Context
 - Current branch: <branch>
@@ -129,7 +129,14 @@ Wait for user response. If they correct anything, update before proceeding. If t
 
 ## Step 5: Write State File
 
-Once the user approves, write the state file to `docs/pipeline-state/<slug>.json`.
+Once the user approves, validate before writing:
+
+1. **Validate `current_stage` range** — must be an integer: 1–5 for fullpipeline, 1–8 for tdd-fullpipeline. If out of range, halt and ask the user to correct.
+2. **Validate slug** — must match `^[a-z0-9][a-z0-9_-]{0,63}$`. If invalid, halt and ask the user.
+3. **Validate `test_adjustments`** (TDD only) — must be an object with exactly keys `"structural"`, `"behavioral"`, `"security"`, each a non-negative integer (>= 0). Reject negative values, non-integer values, or extra keys — halt and ask the user to correct. If `current_stage >= 7` and values cannot be determined from conversation context or an existing state file, halt and ask the user to provide the counts rather than defaulting to zeroes (which would bypass the 20% behavioral threshold). If `current_stage < 7`, default to zeroes is safe.
+4. **Validate stage consistency** — all stages before `current_stage` should have status `"done"` or `"skipped"`, not `"not_started"`. If inconsistent, warn the user and ask for correction before writing.
+
+Write the state file to `docs/pipeline-state/<slug>.json`.
 
 **Note:** If a state file already exists for this slug, check its `pipeline_status`:
 - If `"active"` — overwrite it. This is intentional — `/clear_and_go` captures the most up-to-date state from the conversation, which may include progress beyond the last gate commit. Log: `"Note: overwriting existing state file (previous current_stage: <N>, new current_stage: <M>)"`
@@ -232,27 +239,28 @@ Create the `docs/pipeline-state/` directory if it doesn't exist.
 
 **Field definitions:**
 - `schema_version` — always `1`. Future schema changes increment this value; readers skip files with unrecognized versions (no forward-compatibility migration)
-- `pipeline_status` — always `"active"` when written by `/clear_and_go`. Canonical enum (set by orchestrators): `"active"` | `"completed"` | `"aborted"`
+- `pipeline_status` — always `"active"` when written by `/clear_and_go`. Canonical enum (set by orchestrators): `"active"` | `"completed"` | `"aborted"`. Valid transitions: `active → completed`, `active → aborted`. No other transitions are valid — a completed or aborted pipeline cannot return to active (start a new pipeline instead)
 - `current_stage` — always an integer (1–5 for fullpipeline, 1–8 for TDD). Validate range against pipeline type before writing. Note: `stages` object uses string keys (`"1"`, `"2"`, ...) per JSON convention; `current_stage` is an integer for arithmetic comparisons
 - `stage_name` — human-readable name of the current stage, taken from the orchestrator's stage map. Informational; not validated on read. Canonical names: fullpipeline: "Requirement → PRD", "PRD → Dev Plan", "Dev Plan → JIRA", "Execute with Ralph Loop", "Test Verification". TDD: "Requirement → PRD", "PRD → Design Brief", "Mock App → UI Contract", "PRD + UI Contract → Test Plan", "PRD + Test Plan → Dev Plan", "Test Plan → Develop Tests", "Execute with Test Adjustment", "Validate"
 - Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`
 - Stage `summary` — string; brief human-readable outcome of the stage. Empty string `""` for `not_started` stages. Informational; not validated on read
-- Stage `artifact` — optional; omitted for execution stages (Stage 4/7) where output is per-task PRs tracked in the `tasks` object. Omit or leave empty for `not_started` stages. Stage 6 (TDD) artifact `"tdd/<slug>/tests"` is a git branch name, not a file path. Stage 8 (TDD) artifact `".pipeline/metrics/<slug>.json"` is gitignored and local-only — do not flag as missing after clone. Readers must check the `pipeline` field before accessing pipeline-specific fields
+- Stage `artifact` — optional; omitted for execution stages (Stage 4/7) where output is per-task PRs tracked in the `tasks` object. When present on `not_started` stages, it is the expected output path (informational), not a claim of existence on disk. Stage 6 (TDD) artifact `"tdd/<slug>/tests"` is a git branch name, not a file path. Stage 8 (TDD) artifact `".pipeline/metrics/<slug>.json"` is gitignored and local-only — do not flag as missing after clone. Readers must check the `pipeline` field before accessing pipeline-specific fields
 - Task `status` — `"done"` | `"in_progress"` | `"pending"` (no `"aborted"` value — aborted pipelines stop execution; individual tasks remain at their last status)
 - Task `pr` — integer (PR number) when a PR has been created; omit the field entirely (not `null`) when no PR exists yet
 - `tasks` — object keyed by task ID (e.g., `"1.1"`); empty `{}` until Stage 4 begins (fullpipeline) or Stage 7 begins (TDD pipeline)
 - `test_result` — `null` until Stage 5/8 completes, then `"PASS"` | `"FAIL"` | `"SKIPPED"`. Note: on abort, the orchestrator sets `"FAIL"` — there is no separate `"ABORTED"` enum value; check `pipeline_status` to distinguish test failure from user abort
 - `test_adjustments` — TDD only; not present in fullpipeline state files. Cumulative test adjustment counts from Stage 7, persisted across interruptions to enforce the 20% behavioral threshold. Always `{ "structural": 0, "behavioral": 0, "security": 0 }` as initial values before Stage 7. Must be an object with exactly these three integer keys; on resume, if malformed and `current_stage >= 7`, halt and ask the user (see orchestrator resume step 12)
 - `user_prefs` — object with known keys: `skip_jira` (boolean, both pipelines), `mock_url` (string, TDD only). Additional keys may be added; readers should ignore unknown keys
-- `known_issues` — array of strings; `[]` when no issues
+- `known_issues` — array of strings; `[]` when no issues. Do not include secrets, API keys, or PII in entries — they are committed to git history
 - `updated_at` — ISO 8601 timestamp; set on every write
 
-**Important:** Do not include secrets, API keys, or PII in the requirement text — it is stored verbatim in the state file and committed to git history.
+**Important:** Do not include secrets, API keys, or PII in the requirement text — it is stored verbatim in the state file and committed to git history. Keep requirement text concise (recommended: under 2 KB) — excessively long text bloats the state file and git history without benefit.
 
 **Design constraints:**
 - **Single-session:** The state file assumes one active session per slug. Concurrent runs with the same slug will overwrite each other. This is by design — pipeline execution is inherently sequential.
 - **Accumulation:** Completed state files remain in `docs/pipeline-state/` and are intentionally tracked in git as an audit trail. The orchestrator only acts on files with `pipeline_status: "active"`, so completed/aborted files are inert. Delete them manually if cleanup is desired.
 - **State file size:** Bounded by design — the file contains metadata only (stage statuses, task IDs, short summaries), not artifact content. Typical size is under 2 KB.
+- **Atomic writes:** The state file is written and then committed. If the process crashes mid-write, the file may be truncated. This is an accepted trade-off — the orchestrator's Resume Detection handles corrupt JSON gracefully (skips the file and falls back to disk artifact detection).
 - **`$ARGUMENTS` injection:** The requirement text from `$ARGUMENTS` is stored verbatim in the `requirement` field. This is user-provided input within the CLI session — no sanitization is applied. This is an accepted risk: the user controls their own CLI environment.
 
 After writing, commit immediately:
@@ -279,7 +287,7 @@ Build the exact command the user needs to type after clearing:
 
 For example: `/fullpipeline Build a marketplace plugin system that allows third-party developers to extend the platform`
 
-Copy it to the clipboard. Escape single quotes in the requirement text by replacing `'` with `'\''`:
+Copy it to the clipboard. The requirement text MUST be wrapped in single quotes (not double quotes) to prevent shell expansion — single-quoted strings in POSIX shell suppress all interpretation except `'` itself. Do not change the quoting style without a security review. Escape single quotes in the requirement text by replacing `'` with `'\''`:
 ```bash
 # macOS — capture exit code to check success
 printf '%s' '/<pipeline-command> <escaped requirement text>' | pbcopy 2>/dev/null
@@ -288,6 +296,10 @@ CLIP_OK=$?
 if [ $CLIP_OK -ne 0 ]; then
   printf '%s' '...' | xclip -selection clipboard 2>/dev/null && CLIP_OK=$? || \
   printf '%s' '...' | xsel --clipboard --input 2>/dev/null && CLIP_OK=$?
+fi
+# Windows (WSL) fallback: use clip.exe if available
+if [ $CLIP_OK -ne 0 ]; then
+  printf '%s' '...' | clip.exe 2>/dev/null && CLIP_OK=$?
 fi
 ```
 

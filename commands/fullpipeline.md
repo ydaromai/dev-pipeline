@@ -102,7 +102,7 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
     "2": { "status": "done", "artifact": "docs/dev_plans/<slug>.md", "summary": "..." },
     "3": { "status": "done", "jira_epic": "<key>", "summary": "..." },
     "4": { "status": "in_progress", "summary": "..." },
-    "5": { "status": "not_started", "summary": "..." }
+    "5": { "status": "not_started", "summary": "" }
   },
   "tasks": {
     "1.1": { "status": "done", "jira": "<key>", "pr": 42, "branch": "<name>" },
@@ -119,22 +119,22 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
 
 **Field definitions:**
 - `schema_version` — always `1` (increment on breaking schema changes). Future schema changes increment this value; readers skip files with unrecognized versions (no forward-compatibility migration)
-- `pipeline_status` — `"active"` during execution, `"completed"` on success, `"aborted"` on user abort
+- `pipeline_status` — `"active"` during execution, `"completed"` on success, `"aborted"` on user abort. Valid transitions: `active → completed`, `active → aborted`. No other transitions are valid — a completed or aborted pipeline cannot return to active (start a new pipeline instead)
 - `current_stage` — always an integer (1–5). On completion, set to the final stage number (5). Note: `stages` object uses string keys (`"1"`, `"2"`, ...) per JSON convention; `current_stage` is an integer for arithmetic comparisons
 - `stage_name` — human-readable name of the current stage. Informational; not validated on read. Canonical names: "Requirement → PRD", "PRD → Dev Plan", "Dev Plan → JIRA", "Execute with Ralph Loop", "Test Verification"
 - Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`
 - Stage `summary` — string; brief human-readable outcome of the stage. Empty string `""` for `not_started` stages. Informational; not validated on read
-- Stage `artifact` — optional; omitted for execution stages (Stage 4) where output is per-task PRs tracked in the `tasks` object. Omit or leave empty for `not_started` stages
+- Stage `artifact` — optional; omitted for execution stages (Stage 4) where output is per-task PRs tracked in the `tasks` object. When present on `not_started` stages, it is the expected output path (informational), not a claim of existence on disk
 - Task `status` — `"done"` | `"in_progress"` | `"pending"` (no `"aborted"` value — aborted pipelines stop execution; individual tasks remain at their last status)
 - Task `pr` — integer (PR number) when a PR has been created; omit the field entirely (not `null`) when no PR exists yet
 - `tasks` — object keyed by task ID (e.g., `"1.1"`); empty `{}` until Stage 4 begins
 - `test_result` — `null` until Stage 5 completes, then `"PASS"` | `"FAIL"` | `"SKIPPED"`. Note: on abort, the orchestrator sets `"FAIL"` — there is no separate `"ABORTED"` enum value; check `pipeline_status` to distinguish test failure from user abort
 - `user_prefs` — object with known keys: `skip_jira` (boolean). Additional keys may be added; readers should ignore unknown keys
-- `known_issues` — array of strings; `[]` when no issues
+- `known_issues` — array of strings; `[]` when no issues. Do not include secrets, API keys, or PII in entries — they are committed to git history
 - `updated_at` — ISO 8601 timestamp; set on every write
 - `test_adjustments` — not present in fullpipeline state files (TDD pipeline only). If found during resume, log a warning and ignore
 
-**Important:** Do not include secrets, API keys, or PII in the requirement text — it is stored verbatim in the state file and committed to git history.
+**Important:** Do not include secrets, API keys, or PII in the requirement text — it is stored verbatim in the state file and committed to git history. Keep requirement text concise (recommended: under 2 KB) — excessively long text bloats the state file and git history without benefit.
 
 **Write rule:** After every gate approval or abort, update the state file and commit:
 ```bash
@@ -172,7 +172,7 @@ Before any stage begins, validate the slug (derived from PRD title or provided b
 
 Before starting Stage 1, check if any state file exists for this pipeline type.
 
-1. **Fast path** — derive slug from `$ARGUMENTS` (same kebab-case logic as Stage 1) and check if `docs/pipeline-state/<derived-slug>.json` exists. If it does, read and validate it directly (skip full directory scan). If not, proceed to step 2.
+1. **Fast path** — derive slug from `$ARGUMENTS` (same kebab-case logic as Stage 1), validate it against `^[a-z0-9][a-z0-9_-]{0,63}$` (reject if invalid — log: `"Resume fast-path: derived slug '<value>' failed validation — skipping fast path"`), and check if `docs/pipeline-state/<derived-slug>.json` exists. If it does, read and validate it directly (skip full directory scan). Log: `"Resume fast-path: found docs/pipeline-state/<slug>.json — skipping directory scan"`. If not, proceed to step 2.
 2. List all files in `docs/pipeline-state/*.json`
 3. For each file, read and validate:
    - Well-formed JSON (skip files that fail parsing — log: `"Warning: <filename> is not valid JSON — skipping"`)
@@ -182,6 +182,7 @@ Before starting Stage 1, check if any state file exists for this pipeline type.
    - `stages` object contains keys `"1"` through `"5"` (skip if missing keys — log: `"Warning: <filename> has incomplete stages object — skipping"`)
    - `slug` matches the validation pattern `^[a-z0-9][a-z0-9_-]{0,63}$` (skip if not — log: `"Warning: <filename> has invalid slug '<value>' — skipping"`)
    - Each stage entry has a `status` field with a valid enum value (`"done"`, `"in_progress"`, `"not_started"`, `"skipped"`, `"aborted"`) — log: `"Warning: <filename> has invalid stage status '<value>' for stage <N> — skipping"`
+   - **Cross-field consistency**: all stages before `current_stage` should be `"done"` or `"skipped"` (not `"not_started"`). If inconsistent, log: `"Warning: <filename> has stage <N> as '<status>' but current_stage is <M> — accepting with warning"` (do not skip — allow the user to decide during the resume prompt)
    After the scan completes, log: `"Resume scan: <N> files scanned, <M> valid, <K> skipped"`
 4. Filter to files where `pipeline` equals `"fullpipeline"` and `pipeline_status` equals `"active"`. If a fullpipeline file unexpectedly contains `test_adjustments`, log: `"Warning: <filename> contains test_adjustments (fullpipeline-only) — ignoring field"`. If exactly one match is found, use it. If multiple matches, present all and ask the user which to resume.
 5. **Match by slug** — derive a simplified slug from `$ARGUMENTS` (first N content words, kebab-case — this is a heuristic and may not match the PRD-derived slug exactly). Match against the `slug` field. If slug matching fails, log: `"INFO: slug '<derived>' did not match any active state file — falling back to requirement substring match"` and fall back to case-insensitive substring match of `$ARGUMENTS` against the `requirement` field. If neither matches any active state file but active state files exist, present the unmatched files and ask the user if any is the intended pipeline. If no active state files exist at all, proceed to step 13 (start fresh). Log: `"Resume match: slug=<slug>, file=<filename>, method=slug|requirement_substring"`
@@ -541,9 +542,12 @@ When a pipeline is aborted at any gate, present a structured abort report:
 ## Pipeline Aborted at Stage <N> — <stage_name>
 
 ### Residual Artifacts
+The following artifacts were created during this pipeline run.
+You may clean them up manually or re-run /fullpipeline to resume.
+
 | Artifact | Path | Status |
 |----------|------|--------|
-| PRD | docs/prd/<slug>.md | Complete |
+| PRD | docs/prd/<slug>.md | Complete / Not created |
 | Dev Plan | docs/dev_plans/<slug>.md | Complete / Not created |
 | JIRA Issues | jira-issue-mapping.json | Created / Not created |
 | State File | docs/pipeline-state/<slug>.json | Saved (aborted) |
