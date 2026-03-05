@@ -82,7 +82,7 @@ Fix any validation errors and re-run until it passes.
 
 Spawn all applicable critic subagents in parallel using the Task tool:
 
-**Product Critic (model: opus — Opus 4.6):**
+**Product Critic (model: sonnet — Sonnet 4.6):**
 ```
 You are the Product Critic. Read:
 1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/product-critic.md (your persona)
@@ -98,7 +98,7 @@ Review whether the dev plan fully covers the PRD:
 Produce your structured output.
 ```
 
-**Dev Critic (model: opus — Opus 4.6):**
+**Dev Critic (model: sonnet — Sonnet 4.6):**
 ```
 You are the Dev Critic. Read:
 1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/dev-critic.md (your persona)
@@ -115,7 +115,7 @@ Dev plan content:
 <paste plan content>
 ```
 
-**DevOps Critic (model: opus — Opus 4.6):**
+**DevOps Critic (model: sonnet — Sonnet 4.6):**
 ```
 You are the DevOps Critic. Read:
 1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/devops-critic.md (your persona)
@@ -131,7 +131,7 @@ Dev plan content:
 <paste plan content>
 ```
 
-**QA Critic (model: opus — Opus 4.6):**
+**QA Critic (model: sonnet — Sonnet 4.6):**
 ```
 You are the QA Critic. Read:
 1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/qa-critic.md (your persona)
@@ -148,7 +148,7 @@ Dev plan content:
 <paste plan content>
 ```
 
-**Security Critic (model: opus — Opus 4.6):**
+**Security Critic (model: sonnet — Sonnet 4.6):**
 ```
 You are the Security Critic. Read:
 1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/security-critic.md (your persona)
@@ -165,7 +165,7 @@ Dev plan content:
 <paste plan content>
 ```
 
-**Performance Critic (model: opus — Opus 4.6):**
+**Performance Critic (model: sonnet — Sonnet 4.6):**
 ```
 You are the Performance Critic. Read:
 1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/performance-critic.md (your persona)
@@ -183,7 +183,7 @@ Dev plan content:
 <paste plan content>
 ```
 
-**Data Integrity Critic (model: opus — Opus 4.6):**
+**Data Integrity Critic (model: sonnet — Sonnet 4.6):**
 ```
 You are the Data Integrity Critic. Read:
 1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/data-integrity-critic.md (your persona)
@@ -201,7 +201,7 @@ Dev plan content:
 <paste plan content>
 ```
 
-**Observability Critic (model: opus — Opus 4.6) — Only spawn if pipeline.config.yaml has `has_backend_service: true`:**
+**Observability Critic (model: sonnet — Sonnet 4.6) — Only spawn if pipeline.config.yaml has `has_backend_service: true`:**
 ```
 You are the Observability Critic. Read:
 1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/observability-critic.md (your persona)
@@ -219,7 +219,7 @@ Dev plan content:
 <paste plan content>
 ```
 
-**API Contract Critic (model: opus — Opus 4.6) — Only spawn if pipeline.config.yaml has `has_api: true`:**
+**API Contract Critic (model: sonnet — Sonnet 4.6) — Only spawn if pipeline.config.yaml has `has_api: true`:**
 ```
 You are the API Contract Critic. Read:
 1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/api-contract-critic.md (your persona)
@@ -237,7 +237,7 @@ Dev plan content:
 <paste plan content>
 ```
 
-**Designer Critic (model: opus — Opus 4.6) — Only spawn if pipeline.config.yaml has `has_frontend: true`:**
+**Designer Critic (model: sonnet — Sonnet 4.6) — Only spawn if pipeline.config.yaml has `has_frontend: true`:**
 ```
 You are the Designer Critic. Read:
 1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/designer-critic.md (your persona)

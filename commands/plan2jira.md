@@ -31,7 +31,7 @@ Before creating JIRA issues, validate the dev plan with Dev and Product critics.
 
 Spawn two critic subagents in parallel using the Task tool:
 
-**Product Critic (model: opus — Opus 4.6):**
+**Product Critic (model: sonnet — Sonnet 4.6):**
 ```
 You are the Product Critic. Read:
 1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/product-critic.md (your persona)
@@ -47,7 +47,7 @@ Review whether the dev plan fully covers the PRD:
 Produce your structured output.
 ```
 
-**Dev Critic (model: opus — Opus 4.6):**
+**Dev Critic (model: sonnet — Sonnet 4.6):**
 ```
 You are the Dev Critic. Read:
 1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/dev-critic.md (your persona)

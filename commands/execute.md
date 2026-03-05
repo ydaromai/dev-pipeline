@@ -148,7 +148,7 @@ You are implementing a task from a dev plan. Follow all agent constraints.
 
 ### 3c. Ralph Loop — REVIEW phase (fresh context, different model)
 
-After the build phase completes, spawn a **review subagent** (Task tool, model: opus — Opus 4.6) with all applicable critic personas (7 always-on + conditional: Observability if `has_backend_service: true`, API Contract if `has_api: true`, Designer if `has_frontend: true`):
+After the build phase completes, spawn a **review subagent** (Task tool, model: sonnet — Sonnet 4.6, or `execution.ralph_loop.critic_model` from config) with all applicable critic personas (7 always-on + conditional: Observability if `has_backend_service: true`, API Contract if `has_api: true`, Designer if `has_frontend: true`):
 
 **Review subagent prompt:**
 ```

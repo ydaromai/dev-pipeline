@@ -32,6 +32,14 @@ Parse `$ARGUMENTS` to identify:
 
 Read `pipeline.config.yaml` for stage-specific overrides if available.
 
+### Review scope enforcement:
+- **Code diffs** (`--diff`): Critics review the diff only, not the full file. This is the default and preferred mode for iterative reviews.
+- **PRD/dev plan files**: Critics review the full document on first pass. On subsequent iterations (ralph loop), pass `--diff` to scope reviews to changes since the last iteration — full-file re-reviews generate noise proportional to file length.
+- **Spec/orchestration files** (non-code `.md` outside `docs/prd/` and `docs/dev_plans/`): Use at most 3 critics (product, dev, qa) unless `--critics=` explicitly requests more. Full 10-critic reviews on spec files produce diminishing returns — most findings after the first pass are design opinions, not quality gaps.
+
+### Cost optimization:
+Critics use Sonnet by default (`execution.ralph_loop.critic_model` in config). This is intentional — critic evaluation follows structured checklists and produces templated output, which Sonnet handles well at ~1/5 the token cost of Opus. Reserve Opus for build and synthesis subagents that require deep reasoning.
+
 ## Step 2: Gather context
 
 Depending on target type, read:
@@ -66,7 +74,7 @@ Depending on target type, read:
 
 Read `pipeline.config.yaml` for mode (parallel vs sequential). Default: parallel.
 
-For each critic, spawn a subagent (Task tool, model: opus — Opus 4.6) with the appropriate persona:
+For each critic, spawn a subagent (Task tool, model: sonnet — Sonnet 4.6, or `execution.ralph_loop.critic_model` from config) with the appropriate persona:
 
 **Subagent prompt template:**
 ```

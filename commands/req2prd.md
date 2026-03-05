@@ -38,7 +38,7 @@ Derive the slug from the PRD title (kebab-case, e.g., "Daily Revenue Trends" →
 
 ## Step 4: PRD critic review (all applicable critics, parallel)
 
-Spawn all applicable critic subagents in parallel using the Task tool. Each critic reviews the PRD from their domain perspective using their **PRD Review Focus** checklist, and produces a **score (1–10)** in addition to findings.
+Spawn all applicable critic subagents in parallel using the Task tool (model: sonnet — Sonnet 4.6, or `execution.ralph_loop.critic_model` from config). Each critic reviews the PRD from their domain perspective using their **PRD Review Focus** checklist, and produces a **score (1–10)** in addition to findings.
 
 Read `pipeline.config.yaml` for the `req2prd.critics` list. Default: `[product, dev, devops, qa, security, performance, data-integrity]` + `observability` if `has_backend_service: true` + `api-contract` if `has_api: true` + `designer` if `has_frontend: true`. **Skip conditional critics entirely** when their flag is `false` or absent — do not spawn their subagent, and mark them as N/A in the score table.
 
@@ -68,9 +68,9 @@ Produce your structured output. Include:
 - Per-critic minimum score: `scoring.per_critic_min` (default: **8.5**)
 - Overall minimum score: `scoring.overall_min` (default: **9.0**)
 - **Overall score formula:** `overall = sum(scores) / count(scored critics)` — N/A critics (e.g., Designer when `has_frontend: false`) are excluded from both numerator and denominator
-- Max iterations: `validation.max_iterations` (default: **5**)
+- Max iterations: `validation.max_iterations` (default: **3**)
 
-**Expected duration:** Each iteration spawns up to 10 parallel critic subagents. A full 5-iteration loop may take 10–20 minutes depending on PRD size and model latency. Most PRDs converge within 2–3 iterations. If the session is interrupted mid-loop, re-running `/req2prd` will detect the existing PRD file and ask whether to regenerate or resume validation.
+**Expected duration:** Each iteration spawns up to 10 parallel critic subagents using Sonnet. A full 3-iteration loop typically takes 5–10 minutes. Most PRDs converge within 2 iterations. If thresholds are not met after 3 iterations, the remaining findings are likely design opinions rather than quality gaps — escalate to the user rather than continuing to iterate. If the session is interrupted mid-loop, re-running `/req2prd` will detect the existing PRD file and ask whether to regenerate or resume validation.
 
 **Loop logic:**
 1. Collect scores from all critics
@@ -80,7 +80,7 @@ Produce your structured output. Include:
    b. Read their findings and improvement suggestions
    c. Revise the PRD to address findings from lowest-scoring critics first
    d. Re-run ALL critics (not just low-scoring ones — revisions can affect other scores)
-   e. Repeat (max 5 total iterations)
+   e. Repeat (max 3 total iterations)
 4. If thresholds not met after max iterations:
    - Present current scores to user
    - **If Security Critic scored below threshold:** flag explicitly — "⚠ Security score is below 8.5. Approving as-is accepts identified security risks. Review Security findings before proceeding."

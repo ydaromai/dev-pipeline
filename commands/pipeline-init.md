@@ -195,7 +195,8 @@ pipeline:
         simple: sonnet          # Sonnet 4.6
         medium: opus            # Opus 4.6
         complex: opus           # Opus 4.6
-      review_model: opus        # Opus 4.6
+      review_model: opus        # Opus 4.6 — for review subagents that synthesize critic results
+      critic_model: sonnet      # Sonnet 4.6 — for individual critic subagents (structured checklist evaluation)
       fresh_context: true
       max_iterations: 3
       escalation: user

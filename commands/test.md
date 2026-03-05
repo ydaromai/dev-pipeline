@@ -137,7 +137,7 @@ You are generating missing tests for a feature branch. Follow all agent constrai
 
 ### 3b. REVIEW phase (fresh context)
 
-After the build phase completes, spawn a review subagent (Task tool, model: opus) with QA + Dev critic personas:
+After the build phase completes, spawn a review subagent (Task tool, model: sonnet, or `execution.ralph_loop.critic_model` from config) with QA + Dev critic personas:
 
 ```
 You are reviewing generated tests. Read the following critic persona files:
@@ -519,7 +519,7 @@ git diff main..HEAD
 
 ### 9b. Spawn critic review (fresh context)
 
-Spawn a review subagent (Task tool, model: opus) with ALL applicable critic personas:
+Spawn a review subagent (Task tool, model: sonnet, or `execution.ralph_loop.critic_model` from config) with ALL applicable critic personas:
 
 ```
 You are the Cumulative Review Agent for the /test pipeline stage. You will review the
