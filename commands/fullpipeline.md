@@ -130,7 +130,7 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
 - `stages` — object keyed by stage number as string (`"1"` through `"5"`). Each entry contains `status` and optional fields (`artifact`, `jira_epic`, `summary`). All 5 keys must be present even for stages not yet reached
 - Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`. On read, reject unknown values. `"aborted"` means the user chose to stop the pipeline at this stage — stages after the aborted stage remain `"not_started"`, and the aborted stage itself was not completed
 - Stage `jira_epic` — optional string; present on Stage 3 when JIRA import has completed. Contains the JIRA epic key (e.g., `"PIPE-35"`). Omitted when JIRA is skipped or stage not yet reached
-- Stage `summary` — string; brief human-readable outcome of the stage. Empty string `""` for `not_started` stages. Informational; not validated on read
+- Stage `summary` — string; brief human-readable outcome of the stage (recommended: under 500 characters). Empty string `""` for `not_started` stages. Informational; not validated on read
 - Stage `artifact` — optional; omitted for execution stages (Stage 4) where output is per-task PRs tracked in the `tasks` object. When present on `not_started` stages, it is the expected output path (informational), not a claim of existence on disk
 - Task `status` — `"done"` | `"in_progress"` | `"pending"` (no `"aborted"` value — aborted pipelines stop execution; individual tasks remain at their last status). On read, reject unknown values. Note: tasks use `"pending"` while stages use `"not_started"` — this is intentional: `"pending"` indicates a task is queued for execution within an active stage, while `"not_started"` indicates a stage the pipeline has not reached yet
 - Task `jira` — string; JIRA issue key (e.g., `"PIPE-42"`) for this task. Present when JIRA is enabled; omitted when JIRA is skipped
@@ -170,6 +170,8 @@ If the git commit fails (e.g., nothing changed), continue — the state file on 
 - **Git-per-gate commits:** Each gate approval triggers a state file commit. This is intentional — it provides an audit trail of pipeline progress and enables bisecting pipeline state. The overhead is negligible (one small-file commit per gate).
 - **Resume file scan:** The directory scan in Resume Detection reads all `*.json` files in `docs/pipeline-state/`, capped at 50 files. For typical usage (1–5 state files), this is fast. If more than 50 files exist, warn: `"WARNING: [fullpipeline] docs/pipeline-state/ contains <N> files — scanning first 50 by modification time. Prune completed/aborted files to improve performance."` and scan only the 50 most recently modified.
 - **`$ARGUMENTS` injection:** The requirement text from `$ARGUMENTS` is stored verbatim in the `requirement` field. This is user-provided input within the CLI session — no sanitization is applied. This is an accepted risk: the user controls their own CLI environment. Do not pipe untrusted input into pipeline commands.
+- **No correlation ID (v1 scope):** Log messages use `[source_tag]` and include the slug, but there is no pipeline-wide UUID or `run_id`. The slug is unique per pipeline run for the current single-user CLI context. A correlation ID would be needed if pipelines are aggregated across users or CI systems — deferred to v2.
+- **Staleness detection:** There is no timeout or staleness threshold for `pipeline_status: "active"` state files. The `updated_at` field can be used to assess staleness manually, but no automated threshold is enforced. For CLI usage, the user is the staleness detector. For CI/CD integration, consider defining a staleness threshold (e.g., 30 minutes).
 
 ---
 
@@ -224,7 +226,7 @@ Found saved state for slug "<slug>" at Stage <N> — <stage_name>.
 | 4 | Execute with Ralph Loop | IN PROGRESS — 2/6 tasks done |
 | 5 | Test Verification | NOT STARTED |
 
-Display label mapping: `"done"` → `DONE`, `"in_progress"` → `IN PROGRESS`, `"not_started"` → `NOT STARTED`, `"skipped"` → `SKIPPED`, `"aborted"` → `ABORTED`.
+Display label mapping: `"done"` → `DONE`, `"in_progress"` → `IN PROGRESS`, `"not_started"` → `NOT STARTED`, `"skipped"` → `SKIPPED`, `"aborted"` → `ABORTED`, `"pending"` (tasks) → `PENDING`.
 
 Known issues: <from known_issues field, or "none">
 Branch: <git_branch from state> (current: <actual branch>)
@@ -415,7 +417,7 @@ Important:
 
 **If user chose skip-jira** → record `user_prefs.skip_jira = true`, update state file (stage 3 status: `"skipped"`, current_stage: 4, user_prefs.skip_jira: true) and commit. Output: `"INFO: [fullpipeline] Checkpoint saved: slug=<slug>, stage 3 skipped"` → proceed to Stage 4
 
-When Stage 3 subagent completes successfully → update state file (stage 3 status: `"done"`, current_stage: 4, jira_epic from mapping) and commit. Output: `"INFO: [fullpipeline] Checkpoint saved: slug=<slug>, stage 3 done"`
+When Stage 3 subagent completes successfully → update state file (stage 3 status: `"done"`, current_stage: 4, stage 3 `jira_epic`: extract from subagent response if JIRA was enabled) and commit. Output: `"INFO: [fullpipeline] Checkpoint saved: slug=<slug>, stage 3 done"`
 
 ---
 

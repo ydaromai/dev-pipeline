@@ -128,14 +128,14 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
   "pipeline_status": "active",
   "slug": "<slug>",
   "requirement": "<original requirement text>",
-  "current_stage": 5,
+  "current_stage": 6,
   "stage_name": "<stage name>",
   "stages": {
     "1": { "status": "done", "artifact": "docs/prd/<slug>.md", "summary": "..." },
     "2": { "status": "done", "artifact": "docs/tdd/<slug>/design-brief.md", "summary": "..." },
     "3": { "status": "done", "artifact": "docs/tdd/<slug>/ui-contract.md", "summary": "..." },
     "4": { "status": "done", "artifact": "docs/tdd/<slug>/test-plan.md", "summary": "..." },
-    "5": { "status": "in_progress", "artifact": "docs/dev_plans/<slug>.md", "jira_epic": "<key>", "summary": "..." },
+    "5": { "status": "done", "artifact": "docs/dev_plans/<slug>.md", "jira_epic": "<key>", "summary": "..." },
     "6": { "status": "not_started", "artifact": "tdd/<slug>/tests", "summary": "" },
     "7": { "status": "not_started", "summary": "" },
     "8": { "status": "not_started", "artifact": ".pipeline/metrics/<slug>.json", "summary": "" }
@@ -169,7 +169,7 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
 - `stages` — object keyed by stage number as string (`"1"` through `"8"`). Each entry contains `status` and optional fields (`artifact`, `jira_epic`, `summary`). All 8 keys must be present even for stages not yet reached
 - Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`. On read, reject unknown values. `"aborted"` means the user chose to stop the pipeline at this stage — stages after the aborted stage remain `"not_started"`, and the aborted stage itself was not completed
 - Stage `jira_epic` — optional string; present on Stage 5 when JIRA import has completed. Contains the JIRA epic key (e.g., `"PIPE-35"`). Omitted when JIRA is skipped or stage not yet reached
-- Stage `summary` — string; brief human-readable outcome of the stage. Empty string `""` for `not_started` stages. Informational; not validated on read
+- Stage `summary` — string; brief human-readable outcome of the stage (recommended: under 500 characters). Empty string `""` for `not_started` stages. Informational; not validated on read
 - Stage `artifact` — optional; omitted for execution stages (Stage 7) where output is per-task PRs tracked in the `tasks` object. When present on `not_started` stages, it is the expected output path (informational), not a claim of existence on disk. Stage 6 artifact `"tdd/<slug>/tests"` is a git branch name, not a file path — verify via `git branch --list`, not filesystem stat. Stage 8 artifact `".pipeline/metrics/<slug>.json"` is gitignored and local-only — do not flag as missing after clone. Readers must check the `pipeline` field before accessing pipeline-specific fields
 - Task `status` — `"done"` | `"in_progress"` | `"pending"` (no `"aborted"` value — aborted pipelines stop execution; individual tasks remain at their last status). On read, reject unknown values. Note: tasks use `"pending"` while stages use `"not_started"` — this is intentional: `"pending"` indicates a task is queued for execution within an active stage, while `"not_started"` indicates a stage the pipeline has not reached yet
 - Task `jira` — string; JIRA issue key (e.g., `"PIPE-42"`) for this task. Present when JIRA is enabled; omitted when JIRA is skipped
@@ -211,6 +211,9 @@ If the git commit fails (e.g., nothing changed), continue — the state file on 
 - **Schema migration:** When `schema_version` is incremented to 2, a migration path will be defined in the new schema's documentation. Until then, readers skip files with unrecognized versions. This is by-design — forward migration complexity is deferred until a second schema version actually exists.
 - **Field duplication across files:** The state file schema and field definitions are intentionally repeated in `clear_and_go.md`, `fullpipeline.md`, and `tdd-fullpipeline.md`. Each file is self-contained so subagents can operate without reading other orchestrator files. This trades maintenance burden for execution reliability.
 - **Baseline capture timing:** Check 4 (Baseline Test Capture) runs eagerly at startup before any pipeline stage begins. This is intentional — capturing the baseline before changes ensures an accurate regression comparison at Stage 8. The cost is one test suite run at startup, which is acceptable for the accuracy it provides.
+- **No correlation ID (v1 scope):** Log messages use `[source_tag]` and include the slug, but there is no pipeline-wide UUID or `run_id`. The slug is unique per pipeline run for the current single-user CLI context. A correlation ID would be needed if pipelines are aggregated across users or CI systems — deferred to v2.
+- **Metrics only on success:** `.pipeline/metrics/<slug>.json` is written only after successful Stage 8 completion. Aborted/failed runs emit no metrics. This is an accepted survivorship bias — partial-run metrics would add complexity without clear value for the current CLI usage. If CI/CD integration is added, partial metrics should be revisited.
+- **Staleness detection:** There is no timeout or staleness threshold for `pipeline_status: "active"` state files. The `updated_at` field can be used to assess staleness manually, but no automated threshold is enforced. For CLI usage, the user is the staleness detector (they know when they abandoned a run). For CI/CD integration, consider defining a staleness threshold (e.g., 30 minutes).
 
 ---
 
@@ -256,7 +259,7 @@ Found saved state for slug "<slug>" at Stage <N> — <stage_name>.
 | 7 | Execute with Test Adjustment | NOT STARTED |
 | 8 | Validate | NOT STARTED |
 
-Display label mapping: `"done"` → `DONE`, `"in_progress"` → `IN PROGRESS`, `"not_started"` → `NOT STARTED`, `"skipped"` → `SKIPPED`, `"aborted"` → `ABORTED`.
+Display label mapping: `"done"` → `DONE`, `"in_progress"` → `IN PROGRESS`, `"not_started"` → `NOT STARTED`, `"skipped"` → `SKIPPED`, `"aborted"` → `ABORTED`, `"pending"` (tasks) → `PENDING`.
 
 Known issues: <from known_issues field, or "none">
 Branch: <git_branch from state> (current: <actual branch>)
@@ -566,6 +569,8 @@ Design Brief generated: docs/tdd/<slug>/design-brief.md
 5. Provide the mock app URL to continue
 
 Options: provide mock URL | edit brief | abort
+
+(Gate options convention: Gate 2 uses unique options because it is a manual gate — the user builds an external artifact and provides a URL, rather than reviewing a generated document. "edit brief" allows modifying the design brief before rebuilding the mock.)
 ```
 
 **When user provides mock URL** → validate the URL at orchestrator level before proceeding: scheme must be `http` or `https` (reject `file:`, `data:`, `javascript:`); reject non-loopback RFC 1918 addresses; reject `0.0.0.0` (binds all interfaces — use `127.0.0.1` or `localhost` instead); reject IPv6 addresses other than `::1`. DNS rebinding is an accepted risk for this local-only tool. If validation fails, ask the user for a corrected URL. Then store in `user_prefs.mock_url`, update state file (stage 2 status: `"done"`, current_stage: 3, user_prefs.mock_url: `<url>`) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 2 done"` → proceed to Stage 3
@@ -888,7 +893,7 @@ Options: approve | edit | abort
 (Gate options convention: "edit" for document-stage gates where the user modifies artifacts; "fix" for code/test-stage gates where the user fixes implementation issues.)
 ```
 
-**If approved** → update state file (stage 5 status: `"done"`, current_stage: 6, stage 5 `jira_epic`: extract from JIRA mapping if JIRA was enabled) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 5 done"` → proceed to Stage 6
+**If approved** → update state file (stage 5 status: `"done"`, current_stage: 6, stage 5 `jira_epic`: extract from subagent response if JIRA was enabled) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 5 done"` → proceed to Stage 6
 **If edit requested** → wait for user edits, then re-validate
 **If aborted** → update state file (stage 5 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, log residual artifacts (AC 1.10)
 
@@ -1274,7 +1279,7 @@ Overall Verdict: PASS / FAIL
 
 Options: approve | fix | abort
 
-(Gate options convention: "edit" for document-stage gates where the user modifies artifacts; "fix" for code/test-stage gates where the user fixes implementation issues.)
+(Gate options convention: "edit" for document-stage gates where the user modifies artifacts; "fix" for code/test-stage gates where the user fixes implementation issues. Gate 8 "fix" means: go fix the underlying code or tests, then re-run Stage 8 validation.)
 ```
 
 **If approved** → update state file (stage 8 status: `"done"`, test_result: `"PASS"`) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 8 done"` → proceed to Completion

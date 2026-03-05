@@ -255,15 +255,15 @@ Create the `docs/pipeline-state/` directory if it doesn't exist.
 - `stages` — object keyed by stage number as string (`"1"` through `"5"` for fullpipeline, `"1"` through `"8"` for TDD). Each entry contains `status` and optional fields (`artifact`, `jira_epic`, `summary`). All keys must be present even for stages not yet reached
 - Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`. On read, reject unknown values. `"aborted"` means the user chose to stop the pipeline at this stage — stages after the aborted stage remain `"not_started"`, and the aborted stage itself was not completed
 - Stage `jira_epic` — optional string; present on Stage 3 (fullpipeline) or Stage 5 (TDD pipeline) when JIRA import has completed. Contains the JIRA epic key (e.g., `"PIPE-35"`). Omitted when JIRA is skipped or stage not yet reached
-- Stage `summary` — string; brief human-readable outcome of the stage. Empty string `""` for `not_started` stages. Informational; not validated on read
+- Stage `summary` — string; brief human-readable outcome of the stage (recommended: under 500 characters). Empty string `""` for `not_started` stages. Informational; not validated on read
 - Stage `artifact` — optional; omitted for execution stages (Stage 4/7) where output is per-task PRs tracked in the `tasks` object. When present on `not_started` stages, it is the expected output path (informational), not a claim of existence on disk. Stage 6 (TDD) artifact `"tdd/<slug>/tests"` is a git branch name, not a file path. Stage 8 (TDD) artifact `".pipeline/metrics/<slug>.json"` is gitignored and local-only — do not flag as missing after clone. Readers must check the `pipeline` field before accessing pipeline-specific fields
 - Task `status` — `"done"` | `"in_progress"` | `"pending"` (no `"aborted"` value — aborted pipelines stop execution; individual tasks remain at their last status). On read, reject unknown values. Note: tasks use `"pending"` while stages use `"not_started"` — this is intentional: `"pending"` indicates a task is queued for execution within an active stage, while `"not_started"` indicates a stage the pipeline has not reached yet
 - Task `jira` — string; JIRA issue key (e.g., `"PIPE-42"`) for this task. Present when JIRA is enabled; omitted when JIRA is skipped
 - Task `branch` — string; git branch name for this task (e.g., `"feat/<slug>/task-1.1"`). Present when a branch has been created; omitted before task execution begins
 - Task `pr` — integer (PR number) when a PR has been created; omit the field entirely (not `null`) when no PR exists yet
 - `tasks` — object keyed by task ID (e.g., `"1.1"`); empty `{}` until Stage 4 begins (fullpipeline) or Stage 7 begins (TDD pipeline). Writers MUST NOT populate `tasks` before the execution stage starts. On read, validate that each task entry has a `status` field with a valid enum value
-- `test_result` — `null` until Stage 5/8 completes, then `"PASS"` | `"FAIL"` | `"SKIPPED"`. On read, reject unknown non-null values. Note: on abort, the orchestrator sets `"FAIL"` — there is no separate `"ABORTED"` enum value; check `pipeline_status` to distinguish test failure from user abort
-- `test_adjustments` — TDD only; not present in fullpipeline state files. Cumulative test adjustment counts from Stage 7, persisted across interruptions to enforce the 20% behavioral threshold. Always `{ "structural": 0, "behavioral": 0, "security": 0 }` as initial values before Stage 7. Must be an object with exactly these three integer keys; on resume, if malformed and `current_stage >= 7`, halt and ask the user (see orchestrator resume step 12)
+- `test_result` — `null` until Stage 5/8 completes, then `"PASS"` | `"FAIL"` | `"SKIPPED"`. On read, reject unknown non-null values. Note: on abort, the orchestrator sets `"FAIL"` — there is no separate `"ABORTED"` enum value; check `pipeline_status` to distinguish test failure from user abort. `/clear_and_go` preserves whatever `test_result` value exists in conversation context without re-logging the reason — the originating orchestrator is responsible for FAIL reason logging
+- `test_adjustments` — TDD only; not present in fullpipeline state files. Cumulative test adjustment counts from Stage 7, persisted across interruptions to enforce the 20% behavioral threshold. Always an object with exactly three keys: `{ "structural": 0, "behavioral": 0, "security": 0 }`, each a non-negative integer (>= 0). Reject negative values, non-integer values, or extra keys beyond these three. Initial values are zeroes before Stage 7. On resume, if malformed and `current_stage >= 7`, halt and ask the user (see orchestrator resume step 12)
 - `user_prefs` — object with known keys: `skip_jira` (boolean, both pipelines), `mock_url` (string, TDD only). Additional keys may be added; readers MUST ignore unknown keys (forward-compatible). Writers MUST NOT remove keys they don't recognize when updating the state file
 - `known_issues` — array of strings; `[]` when no issues. Writers MUST enforce: individual entries under 200 characters (truncate with `"…"` suffix if needed), array under 10 entries (keep most recent). Do not include secrets, API keys, or PII in entries — they are committed to git history
 - `git_branch` — string; the git branch name when the state file was last written. Used by Resume Detection to warn if the current branch differs from the saved branch. Informational; not validated on read
@@ -315,16 +315,16 @@ printf '%s' '/<pipeline-command> <escaped requirement text>' | pbcopy 2>/dev/nul
 CLIP_OK=$?
 # Linux fallback — try xclip, then xsel (each with 2s timeout to avoid hangs on missing X11 display)
 if [ $CLIP_OK -ne 0 ]; then
-  timeout 2 sh -c "printf '%s' '...' | xclip -selection clipboard" 2>/dev/null
+  timeout 2 sh -c "printf '%s' '<escaped requirement text>' | xclip -selection clipboard" 2>/dev/null
   CLIP_OK=$?
 fi
 if [ $CLIP_OK -ne 0 ]; then
-  timeout 2 sh -c "printf '%s' '...' | xsel --clipboard --input" 2>/dev/null
+  timeout 2 sh -c "printf '%s' '<escaped requirement text>' | xsel --clipboard --input" 2>/dev/null
   CLIP_OK=$?
 fi
-# Windows (WSL) fallback: use clip.exe if available
+# Windows (WSL) fallback: use clip.exe if available (2s timeout to avoid hangs on broken WSL interop)
 if [ $CLIP_OK -ne 0 ]; then
-  printf '%s' '...' | clip.exe 2>/dev/null
+  timeout 2 sh -c "printf '%s' '<escaped requirement text>' | clip.exe" 2>/dev/null
   CLIP_OK=$?
 fi
 ```
