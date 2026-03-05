@@ -90,20 +90,24 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
 **Schema:**
 ```json
 {
+  "schema_version": 1,
   "pipeline": "fullpipeline",
+  "pipeline_status": "active",
   "slug": "<slug>",
   "requirement": "<original requirement text>",
-  "current_stage": <N>,
+  "current_stage": 4,
   "stage_name": "<stage name>",
   "stages": {
-    "1": { "status": "done|in_progress|not_started", "artifact": "<path>", "summary": "<one-line>" },
-    "2": { "status": "...", "artifact": "<path>", "summary": "..." },
-    "3": { "status": "...", "jira_epic": "<key>", "summary": "..." },
-    "4": { "status": "...", "summary": "..." },
-    "5": { "status": "...", "summary": "..." }
+    "1": { "status": "done", "artifact": "docs/prd/<slug>.md", "summary": "<one-line>" },
+    "2": { "status": "done", "artifact": "docs/dev_plans/<slug>.md", "summary": "..." },
+    "3": { "status": "done", "jira_epic": "<key>", "summary": "..." },
+    "4": { "status": "in_progress", "summary": "..." },
+    "5": { "status": "not_started", "summary": "..." }
   },
   "tasks": {
-    "1.1": { "status": "done|in_progress|pending", "jira": "<key>", "pr": <number>, "branch": "<name>" }
+    "1.1": { "status": "done", "jira": "<key>", "pr": 42, "branch": "<name>" },
+    "1.2": { "status": "in_progress", "jira": "<key>" },
+    "2.1": { "status": "pending", "jira": "<key>" }
   },
   "test_result": "PASS|FAIL|SKIPPED",
   "user_prefs": { "skip_jira": false },
@@ -113,12 +117,32 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
 }
 ```
 
-**Write rule:** After every gate approval and before every stage subagent spawn, update the state file and commit it alongside other artifacts:
+**Field definitions:**
+- `schema_version` — always `1` (increment on breaking schema changes)
+- `pipeline_status` — `"active"` during execution, `"completed"` on success, `"aborted"` on user abort
+- `current_stage` — always an integer (1–5). Remains at the last active stage even after completion/abort
+- Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`
+- Task `status` — `"done"` | `"in_progress"` | `"pending"`
+
+**Write rule:** After every gate approval or abort, update the state file and commit:
 ```bash
 mkdir -p docs/pipeline-state
 # (write/update docs/pipeline-state/<slug>.json)
 git add docs/pipeline-state/<slug>.json && git commit -m "pipeline: update state for <slug> — stage <N>"
 ```
+If the git commit fails (e.g., nothing changed), continue — the state file on disk is the source of truth.
+
+---
+
+## Slug Validation
+
+Before any stage begins, validate the slug (derived from PRD title or provided by user) against the pattern:
+
+```
+^[a-z0-9][a-z0-9_-]{0,63}$
+```
+
+**Reject** slugs containing forward slash (`/`), backslash (`\`), double dot (`..`), null bytes (`\0`), or spaces. These prevent path traversal via `docs/prd/<slug>.md` and `docs/pipeline-state/<slug>.json`.
 
 ---
 
@@ -127,10 +151,17 @@ git add docs/pipeline-state/<slug>.json && git commit -m "pipeline: update state
 Before starting Stage 1, check if any state file exists for this pipeline type.
 
 1. List all files in `docs/pipeline-state/*.json`
-2. For each state file found, read it and validate it is well-formed JSON with required fields (`pipeline`, `slug`, `requirement`, `current_stage`, `stages`). Skip any file that fails JSON parsing or is missing required fields — log a warning.
-3. Check if `pipeline` equals `"fullpipeline"` and `current_stage` is NOT `"completed"`. If exactly one match is found, use it. If multiple matches, present all and ask the user which to resume. Also try to match the requirement text from `$ARGUMENTS` against the `requirement` field in each state file.
-4. **Verify disk artifacts** — for the matched state file, confirm that artifacts referenced in `stages` actually exist on disk (e.g., if Stage 1 is "done", check `docs/prd/<slug>.md` exists). If any claimed artifact is missing, warn the user before offering resume.
-5. If a matching state file is found, present the resume offer:
+2. For each file, read and validate:
+   - Well-formed JSON (skip files that fail parsing — log: `"Warning: <filename> is not valid JSON — skipping"`)
+   - Required fields present: `pipeline`, `slug`, `requirement`, `current_stage`, `stages`, `pipeline_status` (skip if missing — log: `"Warning: <filename> missing required field '<field>' — skipping"`)
+   - `current_stage` is an integer between 1 and 5 (skip if out of range — log: `"Warning: <filename> has invalid current_stage <value> — skipping"`)
+3. Filter to files where `pipeline` equals `"fullpipeline"` and `pipeline_status` equals `"active"`. If exactly one match is found, use it. If multiple matches, present all and ask the user which to resume.
+4. **Match by slug** — derive slug from `$ARGUMENTS` (same kebab-case logic as Stage 1) and match against the `slug` field. If slug matching fails, fall back to case-insensitive substring match of `$ARGUMENTS` against the `requirement` field.
+5. **Verify disk artifacts** — for the matched state file, confirm that artifacts referenced in `stages` actually exist on disk (e.g., if Stage 1 is "done", check `docs/prd/<slug>.md` exists). If any claimed artifact is missing, include it in the resume offer.
+6. **Check git branch** — if `git_branch` in the state file differs from the current branch, note it in the resume offer.
+7. If all stages in the state file are `"not_started"`, treat as equivalent to "no state file" — skip the resume prompt and proceed fresh.
+8. If this was the only state file and it was corrupt (step 2 rejected it), warn: `"Found corrupt state file <filename>. Falling back to disk artifact detection."` Then check disk artifacts as described in the Error Recovery section.
+9. If a valid matching state file is found, present the resume offer:
 
 ```
 ## Existing Pipeline Detected
@@ -145,14 +176,18 @@ Found saved state for slug "<slug>" at Stage <N> — <stage_name>.
 | 4 | Execute with Ralph Loop | IN PROGRESS — 2/6 tasks done |
 | 5 | Test Verification | NOT STARTED |
 
+Known issues: <from known_issues field, or "none">
+Branch: <git_branch from state> (current: <actual branch>)
+Artifact warnings: <list any missing artifacts, or "all verified">
+
 Options:
 - **resume** → Skip to Stage <N> and continue from where it left off
 - **restart** → Discard saved state and start fresh from Stage 1
 ```
 
-6. If the user chooses **resume**: set orchestrator state from the state file (slug, prd_path, plan_path, requirement, user_prefs) and jump directly to the current stage. For execution stage, the subagent will run JIRA reconciliation (Step 1.5) automatically.
-7. If the user chooses **restart**: delete the state file, proceed with Stage 1 as normal.
-8. If no state file exists: proceed with Stage 1 as normal.
+10. If the user chooses **resume**: set orchestrator state from the state file (slug, prd_path, plan_path, requirement, user_prefs, test_result) and jump directly to the current stage. If git branch differs, warn but proceed. For execution stage, the subagent will run JIRA reconciliation (Step 1.5) automatically. Output: `"Checkpoint loaded: resuming from Stage <N>"`
+11. If the user chooses **restart**: delete the state file, proceed with Stage 1 as normal.
+12. If no state file exists: proceed with Stage 1 as normal.
 
 ---
 
@@ -216,9 +251,9 @@ Please review and approve to proceed to dev planning.
 Options: approve | edit | abort
 ```
 
-**If approved** → update state file (Stage 1 done, current_stage: 2) and commit → proceed to Stage 2
+**If approved** → update state file (stage 1 status: `"done"`, current_stage: 2) and commit. Output: `"Checkpoint saved: Stage 1 done"` → proceed to Stage 2
 **If edit requested** → wait for user edits, then re-validate with `/validate`
-**If aborted** → update state file (aborted at Gate 1) and commit → stop pipeline, report where files are saved
+**If aborted** → update state file (stage 1 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, present abort report (see "Pipeline Abort" section)
 
 ---
 
@@ -283,8 +318,8 @@ Please review and approve to proceed to JIRA creation.
 Options: approve | edit | abort
 ```
 
-**If approved** → update state file (Stage 2 done, current_stage: 3) and commit → proceed to Stage 3
-**If aborted** → update state file (aborted at Gate 2) and commit → stop pipeline
+**If approved** → update state file (stage 2 status: `"done"`, current_stage: 3) and commit. Output: `"Checkpoint saved: Stage 2 done"` → proceed to Stage 3
+**If aborted** → update state file (stage 2 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, present abort report
 
 ---
 
@@ -317,9 +352,9 @@ Important:
 
 **Note:** This stage includes its own user interaction (Gate 3a critic validation and Gate 3b JIRA confirmation) — the subagent handles both gates directly since they are tightly coupled to the JIRA creation flow.
 
-**If user chose skip-jira** → record `user_prefs.skip_jira = true`, update state file (Stage 3 skipped, current_stage: 4, user_prefs.skip_jira: true) and commit → proceed to Stage 4
+**If user chose skip-jira** → record `user_prefs.skip_jira = true`, update state file (stage 3 status: `"skipped"`, current_stage: 4, user_prefs.skip_jira: true) and commit. Output: `"Checkpoint saved: Stage 3 skipped"` → proceed to Stage 4
 
-When Stage 3 subagent completes successfully → update state file (Stage 3 done, current_stage: 4, jira_epic from mapping) and commit.
+When Stage 3 subagent completes successfully → update state file (stage 3 status: `"done"`, current_stage: 4, jira_epic from mapping) and commit. Output: `"Checkpoint saved: Stage 3 done"`
 
 ---
 
@@ -377,7 +412,7 @@ Return the following in your final message:
 
 Gate 4 is handled inside the Stage 4 subagent — each task's PR requires user approval before merge. The subagent interacts with the user directly for these approvals since they are tightly coupled to the execution loop.
 
-When Stage 4 subagent completes → update state file (Stage 4 done, current_stage: 5, update tasks object with final statuses/PRs from subagent response) and commit.
+When Stage 4 subagent completes → update state file (stage 4 status: `"done"`, current_stage: 5, update tasks object with final statuses/PRs from subagent response) and commit. Output: `"Checkpoint saved: Stage 4 done"`
 
 ---
 
@@ -448,9 +483,9 @@ Ralph Loop iterations: N
 Options: approve | fix | abort
 ```
 
-**If approved** → update state file (Stage 5 done, test_result: PASS) and commit → proceed to Completion
+**If approved** → update state file (stage 5 status: `"done"`, test_result: `"PASS"`) and commit. Output: `"Checkpoint saved: Stage 5 done"` → proceed to Completion
 **If fix requested** → wait for user fixes, then re-run `/test`
-**If aborted** → update state file (aborted at Gate 5, test_result: FAIL) and commit → stop pipeline, report where artifacts are saved
+**If aborted** → update state file (stage 5 status: `"aborted"`, pipeline_status: `"aborted"`, test_result: `"FAIL"`) and commit → stop pipeline, present abort report
 
 ---
 
@@ -467,6 +502,27 @@ Throughout the pipeline, state is persisted in two places:
 - `slug`, `prd_path`, `plan_path`, `requirement`, `user_prefs`, `test_result`
 
 This separation means the pipeline can be resumed at any stage by reading file state — no conversational context is needed.
+
+---
+
+## Pipeline Abort
+
+When a pipeline is aborted at any gate, present a structured abort report:
+
+```
+## Pipeline Aborted at Stage <N> — <stage_name>
+
+### Residual Artifacts
+| Artifact | Path | Status |
+|----------|------|--------|
+| PRD | docs/prd/<slug>.md | Complete |
+| Dev Plan | docs/dev_plans/<slug>.md | Complete / Not created |
+| JIRA Issues | jira-issue-mapping.json | Created / Not created |
+| State File | docs/pipeline-state/<slug>.json | Saved (aborted) |
+
+To resume: Run /fullpipeline with the same requirement.
+The orchestrator will detect existing artifacts and offer to skip completed stages.
+```
 
 ---
 
@@ -489,7 +545,7 @@ If the pipeline is interrupted at any stage:
 
 When all stages complete (Stage 5 subagent returns, or Stage 5 is skipped):
 
-1. **Mark the state file as completed** — update `docs/pipeline-state/<slug>.json`: set `current_stage` to `"completed"`, all stages to `"done"` (or `"skipped"`), and commit:
+1. **Mark the state file as completed** — update `docs/pipeline-state/<slug>.json`: set `pipeline_status` to `"completed"`, all stages to `"done"` (or `"skipped"`), and commit:
 ```bash
 git add docs/pipeline-state/<slug>.json && git commit -m "pipeline: mark <slug> as completed"
 ```

@@ -32,6 +32,13 @@ No active pipeline detected in this conversation.
 /clear_and_go is designed to be used mid-pipeline during a /fullpipeline or /tdd-fullpipeline run.
 ```
 
+**If all stages are completed** (all gates passed, pipeline is in the Completion section), stop and tell the user:
+
+```
+Pipeline is already complete — nothing to checkpoint.
+The state file has been marked as completed. No resume is needed.
+```
+
 ---
 
 ## Step 2: Read Conversation Context
@@ -67,7 +74,7 @@ Cross-check conversation understanding against actual disk state.
 - `.jira-import-history.json`
 - `jira-issue-mapping.json`
 
-Also run: `git branch --show-current` and `git log --oneline -5`
+Also run: `git rev-parse --abbrev-ref HEAD` and `git log --oneline -5`
 
 Flag any discrepancies between conversation state and disk state.
 
@@ -87,17 +94,17 @@ Present your understanding to the user using AskUserQuestion:
 ### Stage Progress
 | Stage | Name | Status |
 |-------|------|--------|
-| 1 | <name from orchestrator> | DONE |
-| 2 | <name from orchestrator> | DONE |
-| 3 | <name from orchestrator> | DONE (or SKIPPED) |
-| 4 | <name from orchestrator> | IN PROGRESS — 2/6 tasks done |
-| 5 | <name from orchestrator> | NOT STARTED |
+| 1 | <name from orchestrator> | done |
+| 2 | <name from orchestrator> | done |
+| 3 | <name from orchestrator> | done (or skipped) |
+| 4 | <name from orchestrator> | in_progress — 2/6 tasks done |
+| 5 | <name from orchestrator> | not_started |
 
 ### Task Progress (if in execution stage):
 | Task | Status | JIRA | PR | Branch |
 |------|--------|------|----|--------|
-| TASK 1.1 | DONE | PIPE-3 | #42 | feat/story-1-task-1-slug |
-| TASK 1.2 | IN PROGRESS | PIPE-4 | — | — |
+| TASK 1.1 | done | PIPE-3 | #42 | feat/story-1-task-1-slug |
+| TASK 1.2 | in_progress | PIPE-4 | — | — |
 | TASK 2.1 | pending | PIPE-5 | — | — |
 
 ### Active Context
@@ -117,13 +124,17 @@ Wait for user response. If they correct anything, update before proceeding.
 
 Once the user approves, write the state file to `docs/pipeline-state/<slug>.json`.
 
+**Note:** If a state file already exists for this slug (written by the orchestrator at a prior gate), this write **overwrites** it with the current checkpoint. This is intentional — `/clear_and_go` captures the most up-to-date state from the conversation, which may include progress beyond the last gate commit.
+
 Create the `docs/pipeline-state/` directory if it doesn't exist.
 
-### State File Schema:
+### Standard Pipeline (`/fullpipeline`) Schema:
 
 ```json
 {
+  "schema_version": 1,
   "pipeline": "fullpipeline",
+  "pipeline_status": "active",
   "slug": "<slug>",
   "requirement": "<full original requirement text>",
   "current_stage": 4,
@@ -147,6 +158,10 @@ Create the `docs/pipeline-state/` directory if it doesn't exist.
     "4": {
       "status": "in_progress",
       "summary": "2/6 tasks done"
+    },
+    "5": {
+      "status": "not_started",
+      "summary": ""
     }
   },
   "tasks": {
@@ -154,6 +169,7 @@ Create the `docs/pipeline-state/` directory if it doesn't exist.
     "1.2": { "status": "in_progress", "jira": "PIPE-4" },
     "2.1": { "status": "pending", "jira": "PIPE-5" }
   },
+  "test_result": null,
   "user_prefs": {
     "skip_jira": false
   },
@@ -163,7 +179,56 @@ Create the `docs/pipeline-state/` directory if it doesn't exist.
 }
 ```
 
-For TDD pipeline, the `stages` object includes all 8 stages, and artifacts include `brief_path`, `contract_path`, `test_plan_path`.
+### TDD Pipeline (`/tdd-fullpipeline`) Schema:
+
+```json
+{
+  "schema_version": 1,
+  "pipeline": "tdd-fullpipeline",
+  "pipeline_status": "active",
+  "slug": "<slug>",
+  "requirement": "<full original requirement text>",
+  "current_stage": 5,
+  "stage_name": "<name from orchestrator>",
+  "stages": {
+    "1": { "status": "done", "artifact": "docs/prd/<slug>.md", "summary": "..." },
+    "2": { "status": "done", "artifact": "docs/tdd/<slug>/design-brief.md", "summary": "..." },
+    "3": { "status": "done", "artifact": "docs/tdd/<slug>/ui-contract.md", "summary": "..." },
+    "4": { "status": "done", "artifact": "docs/tdd/<slug>/test-plan.md", "summary": "..." },
+    "5": { "status": "in_progress", "artifact": "docs/dev_plans/<slug>.md", "jira_epic": "<key>", "summary": "..." },
+    "6": { "status": "not_started", "artifact": "tdd/<slug>/tests (branch)", "summary": "" },
+    "7": { "status": "not_started", "summary": "" },
+    "8": { "status": "not_started", "artifact": ".pipeline/metrics/<slug>.json", "summary": "" }
+  },
+  "tasks": {
+    "1.1": { "status": "done", "jira": "PIPE-3", "pr": 42, "branch": "feat/story-1-task-1-slug" },
+    "1.2": { "status": "in_progress", "jira": "PIPE-4" },
+    "2.1": { "status": "pending", "jira": "PIPE-5" }
+  },
+  "test_result": null,
+  "test_adjustments": {
+    "structural": 0,
+    "behavioral": 0,
+    "security": 0
+  },
+  "user_prefs": {
+    "skip_jira": false,
+    "mock_url": "<url>"
+  },
+  "known_issues": ["<any active errors or blockers>"],
+  "git_branch": "<current branch>",
+  "updated_at": "<ISO timestamp>"
+}
+```
+
+**Field definitions:**
+- `schema_version` — always `1`
+- `pipeline_status` — always `"active"` when written by `/clear_and_go`
+- `current_stage` — always an integer (1–5 for fullpipeline, 1–8 for TDD)
+- Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`
+- Task `status` — `"done"` | `"in_progress"` | `"pending"`
+- `test_result` — `null` until Stage 5/8 completes, then `"PASS"` | `"FAIL"` | `"SKIPPED"`
+- `test_adjustments` — TDD only: cumulative test adjustment counts from Stage 7
 
 After writing, commit immediately:
 
@@ -173,6 +238,8 @@ mkdir -p docs/pipeline-state
 git add docs/pipeline-state/<slug>.json
 git commit -m "chore: save pipeline checkpoint for <slug> at stage <N>"
 ```
+
+If the git commit fails (e.g., nothing changed), continue — the state file on disk is the source of truth.
 
 ---
 
@@ -186,30 +253,28 @@ Build the exact command the user needs to type after clearing:
 
 For example: `/fullpipeline Build a marketplace plugin system that allows third-party developers to extend the platform`
 
-Copy it to the clipboard using platform-appropriate command:
+Copy it to the clipboard. Escape single quotes in the requirement text by replacing `'` with `'\''`:
 ```bash
 # macOS
-printf '%s' '/<pipeline-command> <original requirement text>' | pbcopy
-# Linux (fallback if pbcopy unavailable)
-# printf '%s' '...' | xclip -selection clipboard
-# printf '%s' '...' | xsel --clipboard --input
+printf '%s' '/<pipeline-command> <escaped requirement text>' | pbcopy 2>/dev/null
+# Linux fallback (if pbcopy unavailable)
+# printf '%s' '...' | xclip -selection clipboard 2>/dev/null
+# printf '%s' '...' | xsel --clipboard --input 2>/dev/null
 ```
 
-If clipboard copy fails (e.g., no clipboard tool available), skip silently — the command is displayed below for manual copy.
-
-Then output:
+Then output — adjust the clipboard message based on whether the copy succeeded:
 
 ```
 ## Checkpoint Saved
 
 State file: docs/pipeline-state/<slug>.json (committed to git)
 
-**Resume command (already copied to your clipboard):**
+**Resume command:**
 
 /<pipeline-command> <original requirement text>
 
 **Steps:**
 1. Clear context: press Escape, type `/clear`, press Enter
-2. Paste from clipboard (Cmd+V) and press Enter
+2. Copy the command above and paste it (Cmd+V / Ctrl+V), press Enter
 3. The orchestrator will detect the state file and offer to resume from Stage <N>
 ```
