@@ -150,6 +150,7 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
 - `current_stage` — always an integer (1–8). Remains at the last active stage even after completion/abort
 - Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`
 - Task `status` — `"done"` | `"in_progress"` | `"pending"`
+- Stage `artifact` — optional; omitted for execution stages (Stage 7) where output is per-task PRs tracked in the `tasks` object
 - `test_adjustments` — cumulative test adjustment counts from Stage 7, persisted across interruptions to enforce the 20% behavioral threshold
 
 **Write rule:** After every gate approval or abort, update the state file and commit:
@@ -159,6 +160,10 @@ mkdir -p docs/pipeline-state
 git add docs/pipeline-state/<slug>.json && git commit -m "pipeline: update state for <slug> — stage <N>"
 ```
 If the git commit fails (e.g., nothing changed), continue — the state file on disk is the source of truth.
+
+**Design constraints:**
+- **Single-session:** The state file assumes one active session per slug. Concurrent runs with the same slug will overwrite each other. This is by design — pipeline execution is inherently sequential.
+- **Accumulation:** Completed state files remain in `docs/pipeline-state/`. The orchestrator only acts on files with `pipeline_status: "active"`, so completed/aborted files are inert. Delete them manually if cleanup is desired.
 
 ---
 
@@ -265,8 +270,9 @@ Verify that `.gitignore` contains entries for TDD artifacts:
 Capture the current test suite results as a baseline before any pipeline work begins:
 
 1. Read `pipeline.config.yaml` for the project's test command.
-2. Run the test command and capture results.
-3. Persist to `.pipeline/tdd/<slug>/baseline-results.json` with schema:
+2. Create required directories: `mkdir -p .pipeline/tdd/<slug> .pipeline/metrics`
+3. Run the test command and capture results.
+4. Persist to `.pipeline/tdd/<slug>/baseline-results.json` with schema:
 
 ```json
 {
@@ -285,7 +291,7 @@ Capture the current test suite results as a baseline before any pipeline work be
 }
 ```
 
-4. If no tests exist yet, record an empty baseline:
+5. If no tests exist yet, record an empty baseline:
 
 ```json
 {
@@ -1306,6 +1312,7 @@ You may clean them up manually or re-run /tdd-fullpipeline to resume.
 | Test Branch | tdd/<slug>/tests | Not created |
 | Baseline | .pipeline/tdd/<slug>/baseline-results.json | Complete |
 | Metrics | .pipeline/metrics/<slug>.json | Not created |
+| State File | docs/pipeline-state/<slug>.json | Saved (aborted) |
 
 To resume: Run /tdd-fullpipeline with the same requirement.
 The orchestrator will detect existing artifacts and offer to skip completed stages.

@@ -122,6 +122,7 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
 - `pipeline_status` — `"active"` during execution, `"completed"` on success, `"aborted"` on user abort
 - `current_stage` — always an integer (1–5). Remains at the last active stage even after completion/abort
 - Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`
+- Stage `artifact` — optional; omitted for execution stages (Stage 4) where output is per-task PRs tracked in the `tasks` object
 - Task `status` — `"done"` | `"in_progress"` | `"pending"`
 
 **Write rule:** After every gate approval or abort, update the state file and commit:
@@ -131,6 +132,10 @@ mkdir -p docs/pipeline-state
 git add docs/pipeline-state/<slug>.json && git commit -m "pipeline: update state for <slug> — stage <N>"
 ```
 If the git commit fails (e.g., nothing changed), continue — the state file on disk is the source of truth.
+
+**Design constraints:**
+- **Single-session:** The state file assumes one active session per slug. Concurrent runs with the same slug will overwrite each other. This is by design — pipeline execution is inherently sequential.
+- **Accumulation:** Completed state files remain in `docs/pipeline-state/`. The orchestrator only acts on files with `pipeline_status: "active"`, so completed/aborted files are inert. Delete them manually if cleanup is desired.
 
 ---
 

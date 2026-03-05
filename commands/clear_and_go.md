@@ -226,9 +226,14 @@ Create the `docs/pipeline-state/` directory if it doesn't exist.
 - `pipeline_status` — always `"active"` when written by `/clear_and_go`
 - `current_stage` — always an integer (1–5 for fullpipeline, 1–8 for TDD)
 - Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`
+- Stage `artifact` — optional; omitted for execution stages (Stage 4/7) where output is per-task PRs tracked in the `tasks` object
 - Task `status` — `"done"` | `"in_progress"` | `"pending"`
 - `test_result` — `null` until Stage 5/8 completes, then `"PASS"` | `"FAIL"` | `"SKIPPED"`
 - `test_adjustments` — TDD only: cumulative test adjustment counts from Stage 7
+
+**Design constraints:**
+- **Single-session:** The state file assumes one active session per slug. Concurrent runs with the same slug will overwrite each other. This is by design — pipeline execution is inherently sequential.
+- **Accumulation:** Completed state files remain in `docs/pipeline-state/`. To clean up after a pipeline finishes, delete the state file manually or leave it as an audit trail. The orchestrator only acts on files with `pipeline_status: "active"`.
 
 After writing, commit immediately:
 
@@ -255,26 +260,46 @@ For example: `/fullpipeline Build a marketplace plugin system that allows third-
 
 Copy it to the clipboard. Escape single quotes in the requirement text by replacing `'` with `'\''`:
 ```bash
-# macOS
+# macOS — capture exit code to check success
 printf '%s' '/<pipeline-command> <escaped requirement text>' | pbcopy 2>/dev/null
+CLIP_OK=$?
 # Linux fallback (if pbcopy unavailable)
-# printf '%s' '...' | xclip -selection clipboard 2>/dev/null
-# printf '%s' '...' | xsel --clipboard --input 2>/dev/null
+if [ $CLIP_OK -ne 0 ]; then
+  printf '%s' '...' | xclip -selection clipboard 2>/dev/null && CLIP_OK=$? || \
+  printf '%s' '...' | xsel --clipboard --input 2>/dev/null && CLIP_OK=$?
+fi
 ```
 
-Then output — adjust the clipboard message based on whether the copy succeeded:
+Then output — adjust the clipboard line based on `$CLIP_OK`:
 
+**If clipboard copy succeeded ($CLIP_OK = 0):**
 ```
 ## Checkpoint Saved
 
 State file: docs/pipeline-state/<slug>.json (committed to git)
 
-**Resume command:**
+**Resume command** (copied to clipboard):
 
 /<pipeline-command> <original requirement text>
 
 **Steps:**
 1. Clear context: press Escape, type `/clear`, press Enter
-2. Copy the command above and paste it (Cmd+V / Ctrl+V), press Enter
+2. Paste the command (Cmd+V / Ctrl+V), press Enter
+3. The orchestrator will detect the state file and offer to resume from Stage <N>
+```
+
+**If clipboard copy failed ($CLIP_OK != 0):**
+```
+## Checkpoint Saved
+
+State file: docs/pipeline-state/<slug>.json (committed to git)
+
+**Resume command** (copy manually):
+
+/<pipeline-command> <original requirement text>
+
+**Steps:**
+1. Clear context: press Escape, type `/clear`, press Enter
+2. Copy the command above and paste it, press Enter
 3. The orchestrator will detect the state file and offer to resume from Stage <N>
 ```
