@@ -50,8 +50,9 @@ Using the orchestrator's stage map, scan the current conversation to determine:
 3. **Completed stages** — which gates were passed? Match against the orchestrator's gate definitions (Gate 1, Gate 2, etc.)
 4. **Current stage** — what was the orchestrator doing when `/clear_and_go` was called? Waiting for a gate? Mid-subagent? Between stages?
 5. **Task-level progress** (if in execution stage) — tasks marked `DONE`, `IN PROGRESS`, or pending. PR numbers, branch names, JIRA transitions.
-6. **User preferences** — skip JIRA? Skip stages? Special instructions?
-7. **Active issues** — errors, blocked tasks, pending decisions
+6. **Test adjustment counts** (TDD pipeline, Stage 7+) — structural, behavioral, and security adjustment counts from the conversation. If not available from context, read from the existing state file to carry forward.
+7. **User preferences** — skip JIRA? Skip stages? Special instructions?
+8. **Active issues** — errors, blocked tasks, pending decisions
 
 ---
 
@@ -73,6 +74,9 @@ Cross-check conversation understanding against actual disk state.
 - `docs/dev_plans/<slug>.md`
 - `.jira-import-history.json`
 - `jira-issue-mapping.json`
+- `tdd/<slug>/tests` branch — verify via `git branch --list tdd/<slug>/tests` (Stage 6 artifact is a branch name, not a file path)
+- `.pipeline/tdd/<slug>/baseline-results.json` — local-only (gitignored); skip if not found after clone
+- `.pipeline/metrics/<slug>.json` — local-only (gitignored); skip if not found after clone
 
 Also run: `git rev-parse --abbrev-ref HEAD` and `git log --oneline -5`
 
@@ -116,9 +120,10 @@ Present your understanding to the user using AskUserQuestion:
 - Known issues: <any errors or blockers>
 
 Is this correct? If anything is wrong, tell me what to fix.
+Options: **confirm** | **fix** (tell me what to change) | **cancel** (abort checkpoint)
 ```
 
-Wait for user response. If they correct anything, update before proceeding.
+Wait for user response. If they correct anything, update before proceeding. If they cancel, stop without writing the state file.
 
 ---
 
@@ -228,17 +233,21 @@ Create the `docs/pipeline-state/` directory if it doesn't exist.
 **Field definitions:**
 - `schema_version` — always `1`. Future schema changes increment this value; readers skip files with unrecognized versions (no forward-compatibility migration)
 - `pipeline_status` — always `"active"` when written by `/clear_and_go`. Canonical enum (set by orchestrators): `"active"` | `"completed"` | `"aborted"`
-- `current_stage` — always an integer (1–5 for fullpipeline, 1–8 for TDD). Note: `stages` object uses string keys (`"1"`, `"2"`, ...) per JSON convention; `current_stage` is an integer for arithmetic comparisons
-- `stage_name` — human-readable name of the current stage. Informational; not validated on read
+- `current_stage` — always an integer (1–5 for fullpipeline, 1–8 for TDD). Validate range against pipeline type before writing. Note: `stages` object uses string keys (`"1"`, `"2"`, ...) per JSON convention; `current_stage` is an integer for arithmetic comparisons
+- `stage_name` — human-readable name of the current stage, taken from the orchestrator's stage map. Informational; not validated on read. Canonical names: fullpipeline: "Requirement → PRD", "PRD → Dev Plan", "Dev Plan → JIRA", "Execute with Ralph Loop", "Test Verification". TDD: "Requirement → PRD", "PRD → Design Brief", "Mock App → UI Contract", "PRD + UI Contract → Test Plan", "PRD + Test Plan → Dev Plan", "Test Plan → Develop Tests", "Execute with Test Adjustment", "Validate"
 - Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`
-- Stage `artifact` — optional; omitted for execution stages (Stage 4/7) where output is per-task PRs tracked in the `tasks` object
+- Stage `summary` — string; brief human-readable outcome of the stage. Empty string `""` for `not_started` stages. Informational; not validated on read
+- Stage `artifact` — optional; omitted for execution stages (Stage 4/7) where output is per-task PRs tracked in the `tasks` object. Omit or leave empty for `not_started` stages. Stage 6 (TDD) artifact `"tdd/<slug>/tests"` is a git branch name, not a file path. Stage 8 (TDD) artifact `".pipeline/metrics/<slug>.json"` is gitignored and local-only — do not flag as missing after clone. Readers must check the `pipeline` field before accessing pipeline-specific fields
 - Task `status` — `"done"` | `"in_progress"` | `"pending"` (no `"aborted"` value — aborted pipelines stop execution; individual tasks remain at their last status)
 - Task `pr` — integer (PR number) when a PR has been created; omit the field entirely (not `null`) when no PR exists yet
-- `tasks` — object keyed by task ID (e.g., `"1.1"`); empty `{}` until execution stage begins
-- `test_result` — `null` until Stage 5/8 completes, then `"PASS"` | `"FAIL"` | `"SKIPPED"`
-- `test_adjustments` — TDD only: cumulative test adjustment counts from Stage 7, persisted across interruptions to enforce the 20% behavioral threshold. Always `{ "structural": 0, "behavioral": 0, "security": 0 }` as initial values before Stage 7. Must be an object with exactly these three integer keys; reject malformed values on resume
+- `tasks` — object keyed by task ID (e.g., `"1.1"`); empty `{}` until Stage 4 begins (fullpipeline) or Stage 7 begins (TDD pipeline)
+- `test_result` — `null` until Stage 5/8 completes, then `"PASS"` | `"FAIL"` | `"SKIPPED"`. Note: on abort, the orchestrator sets `"FAIL"` — there is no separate `"ABORTED"` enum value; check `pipeline_status` to distinguish test failure from user abort
+- `test_adjustments` — TDD only; not present in fullpipeline state files. Cumulative test adjustment counts from Stage 7, persisted across interruptions to enforce the 20% behavioral threshold. Always `{ "structural": 0, "behavioral": 0, "security": 0 }` as initial values before Stage 7. Must be an object with exactly these three integer keys; on resume, if malformed and `current_stage >= 7`, halt and ask the user (see orchestrator resume step 12)
+- `user_prefs` — object with known keys: `skip_jira` (boolean, both pipelines), `mock_url` (string, TDD only). Additional keys may be added; readers should ignore unknown keys
 - `known_issues` — array of strings; `[]` when no issues
 - `updated_at` — ISO 8601 timestamp; set on every write
+
+**Important:** Do not include secrets, API keys, or PII in the requirement text — it is stored verbatim in the state file and committed to git history.
 
 **Design constraints:**
 - **Single-session:** The state file assumes one active session per slug. Concurrent runs with the same slug will overwrite each other. This is by design — pipeline execution is inherently sequential.
@@ -255,7 +264,7 @@ git add docs/pipeline-state/<slug>.json
 git commit -m "chore: save pipeline checkpoint for <slug> at stage <N>"
 ```
 
-If the state file write itself fails (e.g., permission error, disk full), log: `"ERROR: Failed to write state file docs/pipeline-state/<slug>.json — <error>"` and present the error to the user — the checkpoint cannot be saved without the state file.
+If the state file write itself fails (e.g., permission error, disk full), log: `"ERROR: [clear_and_go] Failed to write state file docs/pipeline-state/<slug>.json — <error>"` and present the error to the user — the checkpoint cannot be saved without the state file. Unlike the orchestrator gate writes (which continue on write failure because the pipeline can fall back to disk artifact detection), `/clear_and_go` treats write failure as fatal because the entire purpose of the command is to produce this checkpoint. Inform the user: `"If you clear context anyway, the orchestrator will attempt to reconstruct state from disk artifacts on next run, but task-level progress and user preferences may be lost."`
 If the git commit fails (e.g., nothing changed), continue — the state file on disk is the source of truth.
 
 ---

@@ -1,8 +1,8 @@
-# /tdd-fullpipeline -- Test-Driven Development Pipeline Orchestration
+# /tdd-fullpipeline — Test-Driven Development Pipeline Orchestration
 
-You are executing the **TDD full pipeline**. This chains 8 pipeline stages with human gates between each stage, reordering the development process so that **tests are written before application code**. Each stage runs in a **fresh-context subagent** to keep the orchestrator lightweight -- all artifacts are persisted on disk, so no conversational history needs to carry between stages.
+You are executing the **TDD full pipeline**. This chains 8 pipeline stages with human gates between each stage, reordering the development process so that **tests are written before application code**. Each stage runs in a **fresh-context subagent** to keep the orchestrator lightweight — all artifacts are persisted on disk, so no conversational history needs to carry between stages.
 
-The TDD pipeline solves a structural problem: when the same agent writes both application code and tests, the tests confirm what was built rather than what should have been built. By writing tests first -- from requirements and a real UI contract -- tests define expected behavior independently of implementation.
+The TDD pipeline solves a structural problem: when the same agent writes both application code and tests, the tests confirm what was built rather than what should have been built. By writing tests first — from requirements and a real UI contract — tests define expected behavior independently of implementation.
 
 **Input:** Raw requirement text via `$ARGUMENTS`
 **Output:** Fully implemented feature with tests written before code, traceability matrix, pipeline metrics
@@ -27,7 +27,7 @@ The TDD pipeline solves a structural problem: when the same agent writes both ap
 ## Architecture: Fresh Context Per Stage
 
 ```
-ORCHESTRATOR (this agent -- lightweight coordinator)
+ORCHESTRATOR (this agent — lightweight coordinator)
   |
   |  << PRE-FLIGHT CHECKS: slug validation, Playwright, .gitignore, baseline >>
   |
@@ -39,7 +39,7 @@ ORCHESTRATOR (this agent -- lightweight coordinator)
   |- Stage 2 subagent (fresh context) --> docs/tdd/<slug>/design-brief.md
   |    +- critic subagents (parallel)
   |
-  |  <-- GATE 2: MANUAL -- user builds mock app in Figma AI, provides URL -->
+  |  <-- GATE 2: MANUAL — user builds mock app in Figma AI, provides URL -->
   |
   |- Stage 3 subagent (fresh context) --> docs/tdd/<slug>/ui-contract.md
   |    +- critic subagents (parallel)
@@ -64,7 +64,7 @@ ORCHESTRATOR (this agent -- lightweight coordinator)
   |  <-- GATE 6: user approves test code + red count -->
   |
   |- Stage 7 subagent (fresh context) --> Code implemented, PRs merged
-  |    +- per-task: build subagent -> review subagent -> critic subagents
+  |    +- per-task: build subagent → review subagent → critic subagents
   |    +- test adjustment taxonomy enforcement
   |
   |  <-- GATE 7: per-PR approval -->
@@ -76,9 +76,9 @@ ORCHESTRATOR (this agent -- lightweight coordinator)
   <-- GATE 8: final validation approval -->
 ```
 
-**Why fresh context?** By Gate 8, the orchestrator would be carrying the full PRD generation conversation, Design Brief extraction, Mock Analysis crawl data, test plan generation, all critic scoring iterations, dev plan generation, test development dialogue, execution loop -- none of which later stages need. Each stage's meaningful output lives on disk (PRD file, design brief, UI contract, test plan, dev plan, test files). The orchestrator only tracks file paths, the slug, and user decisions.
+**Why fresh context?** By Gate 8, the orchestrator would be carrying the full PRD generation conversation, Design Brief extraction, Mock Analysis crawl data, test plan generation, all critic scoring iterations, dev plan generation, test development dialogue, execution loop — none of which later stages need. Each stage's meaningful output lives on disk (PRD file, design brief, UI contract, test plan, dev plan, test files). The orchestrator only tracks file paths, the slug, and user decisions.
 
-**Subagent depth:** Max depth is 3 (orchestrator -> stage -> build/review -> critics). Claude Code handles this natively.
+**Subagent depth:** Max depth is 3 (orchestrator → stage → build/review → critics). Claude Code handles this natively.
 
 ---
 
@@ -147,17 +147,21 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
 **Field definitions:**
 - `schema_version` — always `1` (increment on breaking schema changes). Future schema changes increment this value; readers skip files with unrecognized versions (no forward-compatibility migration)
 - `pipeline_status` — `"active"` during execution, `"completed"` on success, `"aborted"` on user abort
-- `current_stage` — always an integer (1–8). Remains at the last active stage even after completion/abort. Note: `stages` object uses string keys (`"1"`, `"2"`, ...) per JSON convention; `current_stage` is an integer for arithmetic comparisons
-- `stage_name` — human-readable name of the current stage (e.g., `"Execute with Test Adjustment"`). Informational; not validated on read
+- `current_stage` — always an integer (1–8). On completion, set to 8. Note: `stages` object uses string keys (`"1"`, `"2"`, ...) per JSON convention; `current_stage` is an integer for arithmetic comparisons
+- `stage_name` — human-readable name of the current stage. Informational; not validated on read. Canonical names: "Requirement → PRD", "PRD → Design Brief", "Mock App → UI Contract", "PRD + UI Contract → Test Plan", "PRD + Test Plan → Dev Plan", "Test Plan → Develop Tests", "Execute with Test Adjustment", "Validate"
 - Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`
-- Stage `artifact` — optional; omitted for execution stages (Stage 7) where output is per-task PRs tracked in the `tasks` object. Stage 6 artifact `"tdd/<slug>/tests"` refers to a git branch name, not a file path
+- Stage `summary` — string; brief human-readable outcome of the stage. Empty string `""` for `not_started` stages. Informational; not validated on read
+- Stage `artifact` — optional; omitted for execution stages (Stage 7) where output is per-task PRs tracked in the `tasks` object. Omit or leave empty for `not_started` stages. Stage 6 artifact `"tdd/<slug>/tests"` is a git branch name, not a file path — verify via `git branch --list`, not filesystem stat. Stage 8 artifact `".pipeline/metrics/<slug>.json"` is gitignored and local-only — do not flag as missing after clone. Readers must check the `pipeline` field before accessing pipeline-specific fields
 - Task `status` — `"done"` | `"in_progress"` | `"pending"` (no `"aborted"` value — aborted pipelines stop execution; individual tasks remain at their last status)
 - Task `pr` — integer (PR number) when a PR has been created; omit the field entirely (not `null`) when no PR exists yet
-- `tasks` — object keyed by task ID (e.g., `"1.1"`); empty `{}` until execution stage begins
-- `test_result` — `null` until Stage 8 completes, then `"PASS"` | `"FAIL"` | `"SKIPPED"`
-- `test_adjustments` — cumulative test adjustment counts from Stage 7, persisted across interruptions to enforce the 20% behavioral threshold. Always an object with exactly three integer keys: `{ "structural": 0, "behavioral": 0, "security": 0 }` as initial values before Stage 7 begins. On resume, validate that the object has exactly these three keys with integer values; reject malformed values and reset to `{ "structural": 0, "behavioral": 0, "security": 0 }` with a warning
+- `tasks` — object keyed by task ID (e.g., `"1.1"`); empty `{}` until Stage 7 begins
+- `test_result` — `null` until Stage 8 completes, then `"PASS"` | `"FAIL"` | `"SKIPPED"`. Note: on abort, the orchestrator sets `"FAIL"` — there is no separate `"ABORTED"` enum value; check `pipeline_status` to distinguish test failure from user abort
+- `test_adjustments` — cumulative test adjustment counts from Stage 7, persisted across interruptions to enforce the 20% behavioral threshold. Always an object with exactly three integer keys: `{ "structural": 0, "behavioral": 0, "security": 0 }` as initial values before Stage 7 begins. On resume: if malformed and `current_stage < 7`, reset to zeroes with a warning; if malformed and `current_stage >= 7`, halt and ask the user (see resume step 12)
+- `user_prefs` — object with known keys: `skip_jira` (boolean), `mock_url` (string). Additional keys may be added; readers should ignore unknown keys
 - `known_issues` — array of strings; `[]` when no issues
 - `updated_at` — ISO 8601 timestamp; set on every write
+
+**Important:** Do not include secrets, API keys, or PII in the requirement text — it is stored verbatim in the state file and committed to git history. `.pipeline/` paths referenced in the state file are gitignored and local-only — they are not recoverable from git history.
 
 **Write rule:** After every gate approval or abort, update the state file and commit:
 ```bash
@@ -165,7 +169,7 @@ mkdir -p docs/pipeline-state
 # (write/update docs/pipeline-state/<slug>.json)
 git add docs/pipeline-state/<slug>.json && git commit -m "pipeline: update state for <slug> — stage <N>"
 ```
-If the state file write itself fails (e.g., permission error, disk full), log: `"ERROR: Failed to write state file docs/pipeline-state/<slug>.json — <error>"` and continue — the pipeline can still be resumed via disk artifact detection.
+If the state file write itself fails (e.g., permission error, disk full), log: `"ERROR: [tdd-fullpipeline] Failed to write state file docs/pipeline-state/<slug>.json — <error>"` and continue — the pipeline can still be resumed via disk artifact detection. (Unlike `/clear_and_go`, which halts on write failure because its sole purpose is to produce the checkpoint, the orchestrator continues because checkpoint creation is secondary to pipeline execution.)
 If the git commit fails (e.g., nothing changed), continue — the state file on disk is the source of truth.
 
 **Design constraints:**
@@ -192,8 +196,10 @@ Before Pre-Flight Checks, check if any state file exists for this pipeline type.
    - `current_stage` is an integer between 1 and 8 (skip if out of range — log: `"Warning: <filename> has invalid current_stage <value> — skipping"`)
    - `stages` object contains keys `"1"` through `"8"` (skip if missing keys — log: `"Warning: <filename> has incomplete stages object — skipping"`)
    - `slug` matches the validation pattern `^[a-z0-9][a-z0-9_-]{0,63}$` (skip if not — log: `"Warning: <filename> has invalid slug '<value>' — skipping"`)
-4. Filter to files where `pipeline` equals `"tdd-fullpipeline"` and `pipeline_status` equals `"active"`. If exactly one match is found, use it. If multiple matches, present all and ask the user which to resume.
-5. **Match by slug** — match the derived slug (from step 1) against the `slug` field. If slug matching fails (slug derivation may not reproduce the original PRD-derived slug), fall back to case-insensitive substring match of `$ARGUMENTS` against the `requirement` field. If neither matches any active state file, proceed to step 14 (start fresh). Log: `"Resume match: slug=<slug>, file=<filename>, method=slug|requirement_substring"`
+   - Each stage entry has a `status` field with a valid enum value (`"done"`, `"in_progress"`, `"not_started"`, `"skipped"`, `"aborted"`) — log: `"Warning: <filename> has invalid stage status '<value>' for stage <N> — skipping"`
+   After the scan completes, log: `"Resume scan: <N> files scanned, <M> valid, <K> skipped"`
+4. Filter to files where `pipeline` equals `"tdd-fullpipeline"` and `pipeline_status` equals `"active"`. If a TDD file lacks `test_adjustments`, log: `"Warning: <filename> missing test_adjustments — will use zeroes on resume"`. If exactly one match is found, use it. If multiple matches, present all and ask the user which to resume.
+5. **Match by slug** — derive a simplified slug from `$ARGUMENTS` (first N content words, kebab-case — this is a heuristic and may not match the PRD-derived slug exactly). Match against the `slug` field. If slug matching fails, log: `"INFO: slug '<derived>' did not match any active state file — falling back to requirement substring match"` and fall back to case-insensitive substring match of `$ARGUMENTS` against the `requirement` field. If neither matches any active state file but active state files exist, present the unmatched files and ask the user if any is the intended pipeline. If no active state files exist at all, proceed to step 14 (start fresh). Log: `"Resume match: slug=<slug>, file=<filename>, method=slug|requirement_substring"`
 6. **Verify disk artifacts** — for the matched state file, confirm that artifacts referenced in `stages` actually exist on disk (e.g., if Stage 1 is "done", check `docs/prd/<slug>.md` exists). If any claimed artifact is missing, include it in the resume offer. For Stage 6, verify the test branch exists (`git branch --list tdd/<slug>/tests`).
 7. **Check git branch** — if `git_branch` in the state file differs from the current branch, note it in the resume offer.
 8. **Re-validate user inputs** — if `user_prefs.mock_url` is present, re-run URL validation (scheme check, RFC 1918 check) before resuming.
@@ -208,12 +214,12 @@ Found saved state for slug "<slug>" at Stage <N> — <stage_name>.
 
 | Stage | Name | Status |
 |-------|------|--------|
-| 1 | Requirement -> PRD | DONE |
-| 2 | PRD -> Design Brief | DONE |
-| 3 | Mock App -> UI Contract | DONE |
-| 4 | PRD + UI Contract -> Test Plan | DONE |
-| 5 | PRD + Test Plan -> Dev Plan | IN PROGRESS |
-| 6 | Test Plan -> Develop Tests | NOT STARTED |
+| 1 | Requirement → PRD | DONE |
+| 2 | PRD → Design Brief | DONE |
+| 3 | Mock App → UI Contract | DONE |
+| 4 | PRD + UI Contract → Test Plan | DONE |
+| 5 | PRD + Test Plan → Dev Plan | IN PROGRESS |
+| 6 | Test Plan → Develop Tests | NOT STARTED |
 | 7 | Execute with Test Adjustment | NOT STARTED |
 | 8 | Validate | NOT STARTED |
 
@@ -222,13 +228,13 @@ Branch: <git_branch from state> (current: <actual branch>)
 Artifact warnings: <list any missing artifacts, or "all verified">
 
 Options:
-- **resume** -> Skip to Stage <N> and continue from where it left off
-- **restart** -> Discard saved state and start fresh from Stage 1
+- **resume** → Skip to Stage <N> and continue from where it left off
+- **restart** → Discard saved state and start fresh from Stage 1
 ```
 
-12. If the user chooses **resume**: set orchestrator state from the state file (slug, prd_path, plan_path, brief_path, contract_path, test_plan_path, requirement, user_prefs, test_result, test_adjustments) and jump directly to the current stage. If git branch differs, warn but proceed. Validate `test_adjustments`: must be an object with exactly keys `"structural"`, `"behavioral"`, `"security"`, each an integer >= 0. If malformed, reset to `{ "structural": 0, "behavioral": 0, "security": 0 }` and log: `"WARNING: test_adjustments malformed — reset to zeroes"`. For execution stage (Stage 7), the subagent will run JIRA reconciliation (Step 1.5) automatically and load `test_adjustments` from the state file to preserve cumulative adjustment counts. For Stage 8 resume, ensure `.pipeline/metrics/` directory exists: `mkdir -p .pipeline/metrics`. Output: `"Checkpoint loaded: resuming from Stage <N>"`
+12. If the user chooses **resume**: set orchestrator state from the state file (slug, prd_path, plan_path, brief_path, contract_path, test_plan_path, requirement, user_prefs, test_result, test_adjustments) and jump directly to the current stage. If git branch differs, warn but proceed. Validate `test_adjustments`: must be an object with exactly keys `"structural"`, `"behavioral"`, `"security"`, each an integer >= 0. If malformed **and** `current_stage < 7`, reset to `{ "structural": 0, "behavioral": 0, "security": 0 }` and log: `"WARNING: test_adjustments malformed — reset to zeroes"`. If malformed **and** `current_stage >= 7`, **halt and present the raw value to the user** — resetting would lose cumulative adjustment counts that enforce the 20% behavioral threshold. Ask the user to confirm the reset or provide correct values before proceeding. For execution stage (Stage 7), the subagent will run JIRA reconciliation (Step 1.5) automatically and load `test_adjustments` from the state file to preserve cumulative adjustment counts. For Stage 8 resume, ensure `.pipeline/metrics/` directory exists: `mkdir -p .pipeline/metrics`. Log: `"Resume scan: <N> files scanned, <M> valid, <K> skipped"` after the scan completes. Output: `"Checkpoint loaded [tdd-fullpipeline]: resuming from Stage <N>"`
 13. If the user chooses **restart**: delete the state file, proceed with Pre-Flight Checks as normal.
-14. If no state file exists: proceed with Pre-Flight Checks as normal.
+14. If no state file exists: proceed with Pre-Flight Checks as normal. (This includes the case where active state files exist but none matched — disk artifact detection in the Error Recovery section still applies on a per-stage basis.)
 
 ---
 
@@ -244,11 +250,7 @@ Validate the slug (derived from the requirement or provided by the user) against
 ^[a-z0-9][a-z0-9_-]{0,63}$
 ```
 
-**Reject** slugs containing:
-- Forward slash (`/`)
-- Backslash (`\`)
-- Double dot (`..`)
-- Null bytes (`\0`)
+**Reject** slugs containing forward slash (`/`), backslash (`\`), double dot (`..`), null bytes (`\0`), or spaces. These prevent path traversal via `docs/prd/<slug>.md` and `docs/pipeline-state/<slug>.json`. The regex also guarantees shell safety — the slug is interpolated into git commit messages and shell commands. Any future relaxation of this regex must be reviewed for shell injection risk.
 
 If the slug fails validation, halt with a clear error message showing the pattern and the invalid characters found.
 
@@ -277,8 +279,8 @@ npx playwright --version
 Verify that `.gitignore` contains entries for TDD artifacts:
 
 1. If `.gitignore` does not exist, create it.
-2. Check for `.pipeline/tdd/` entry -- add if missing.
-3. Check for `.pipeline/metrics/` entry -- add if missing.
+2. Check for `.pipeline/tdd/` entry — add if missing.
+3. Check for `.pipeline/metrics/` entry — add if missing.
 4. Do NOT add duplicate entries (idempotent).
 
 ### Check 4: Baseline Test Capture (AC 1.8)
@@ -337,9 +339,9 @@ All pre-flight checks passed. Starting Stage 1.
 
 ---
 
-## Stage 1: Requirement -> PRD (fresh context)
+## Stage 1: Requirement → PRD (fresh context)
 
-Spawn a subagent (Task tool, model: opus -- Opus 4.6) to execute the `/req2prd` stage:
+Spawn a subagent (Task tool, model: opus — Opus 4.6) to execute the `/req2prd` stage:
 
 **Subagent prompt:**
 ```
@@ -444,15 +446,15 @@ Please review and approve to proceed to Design Brief generation.
 Options: approve | edit | abort
 ```
 
-**If approved** -> update state file (stage 1 status: `"done"`, current_stage: 2) and commit. Output: `"Checkpoint saved: Stage 1 done"` -> proceed to Stage 2
-**If edit requested** -> wait for user edits, then re-validate with `/validate`
-**If aborted** -> update state file (stage 1 status: `"aborted"`, pipeline_status: `"aborted"`) and commit -> stop pipeline, log residual artifacts (AC 1.10)
+**If approved** → update state file (stage 1 status: `"done"`, current_stage: 2) and commit. Output: `"Checkpoint saved: Stage 1 done"` → proceed to Stage 2
+**If edit requested** → wait for user edits, then re-validate with `/validate`
+**If aborted** → update state file (stage 1 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, log residual artifacts (AC 1.10)
 
 ---
 
-## Stage 2: PRD -> Design Brief (fresh context)
+## Stage 2: PRD → Design Brief (fresh context)
 
-Spawn a subagent (Task tool, model: opus -- Opus 4.6) to execute the `/tdd-design-brief` stage:
+Spawn a subagent (Task tool, model: opus — Opus 4.6) to execute the `/tdd-design-brief` stage:
 
 **Subagent prompt:**
 ```
@@ -481,7 +483,7 @@ Important:
 
 When the subagent completes, extract the brief path. Store as orchestrator state.
 
-### GATE 2: Design Brief Review -- MANUAL (AC 3.7)
+### GATE 2: Design Brief Review — MANUAL (AC 3.7)
 
 Present the subagent's summary to the user:
 
@@ -518,15 +520,15 @@ Design Brief generated: docs/tdd/<slug>/design-brief.md
 Options: provide mock URL | edit brief | abort
 ```
 
-**When user provides mock URL** -> store in `user_prefs.mock_url`, update state file (stage 2 status: `"done"`, current_stage: 3, user_prefs.mock_url: `<url>`) and commit. Output: `"Checkpoint saved: Stage 2 done"` -> proceed to Stage 3
-**If edit requested** -> wait for user edits, then re-validate
-**If aborted** -> update state file (stage 2 status: `"aborted"`, pipeline_status: `"aborted"`) and commit -> stop pipeline, log residual artifacts (AC 1.10)
+**When user provides mock URL** → store in `user_prefs.mock_url`, update state file (stage 2 status: `"done"`, current_stage: 3, user_prefs.mock_url: `<url>`) and commit. Output: `"Checkpoint saved: Stage 2 done"` → proceed to Stage 3
+**If edit requested** → wait for user edits, then re-validate
+**If aborted** → update state file (stage 2 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, log residual artifacts (AC 1.10)
 
 ---
 
-## Stage 3: Mock App -> UI Contract (fresh context)
+## Stage 3: Mock App → UI Contract (fresh context)
 
-Spawn a subagent (Task tool, model: opus -- Opus 4.6) to execute the `/tdd-mock-analysis` stage:
+Spawn a subagent (Task tool, model: opus — Opus 4.6) to execute the `/tdd-mock-analysis` stage:
 
 **Subagent prompt:**
 ```
@@ -607,15 +609,15 @@ You can correct any misidentified elements or missing routes before proceeding.
 Options: approve | edit | abort
 ```
 
-**If approved** -> update state file (stage 3 status: `"done"`, current_stage: 4) and commit. Output: `"Checkpoint saved: Stage 3 done"` -> proceed to Stage 4
-**If edit requested** -> user corrects the UI contract, then re-validate
-**If aborted** -> update state file (stage 3 status: `"aborted"`, pipeline_status: `"aborted"`) and commit -> stop pipeline, log residual artifacts (AC 1.10)
+**If approved** → update state file (stage 3 status: `"done"`, current_stage: 4) and commit. Output: `"Checkpoint saved: Stage 3 done"` → proceed to Stage 4
+**If edit requested** → user corrects the UI contract, then re-validate
+**If aborted** → update state file (stage 3 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, log residual artifacts (AC 1.10)
 
 ---
 
-## Stage 4: PRD + UI Contract -> Test Plan (fresh context)
+## Stage 4: PRD + UI Contract → Test Plan (fresh context)
 
-Spawn a subagent (Task tool, model: opus -- Opus 4.6) to execute the `/tdd-test-plan` stage:
+Spawn a subagent (Task tool, model: opus — Opus 4.6) to execute the `/tdd-test-plan` stage:
 
 **Subagent prompt:**
 ```
@@ -690,15 +692,15 @@ Please review and approve to proceed to dev plan generation.
 Options: approve | edit | abort
 ```
 
-**If approved** -> update state file (stage 4 status: `"done"`, current_stage: 5) and commit. Output: `"Checkpoint saved: Stage 4 done"` -> proceed to Stage 5
-**If edit requested** -> wait for user edits, then re-validate
-**If aborted** -> update state file (stage 4 status: `"aborted"`, pipeline_status: `"aborted"`) and commit -> stop pipeline, log residual artifacts (AC 1.10)
+**If approved** → update state file (stage 4 status: `"done"`, current_stage: 5) and commit. Output: `"Checkpoint saved: Stage 4 done"` → proceed to Stage 5
+**If edit requested** → wait for user edits, then re-validate
+**If aborted** → update state file (stage 4 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, log residual artifacts (AC 1.10)
 
 ---
 
-## Stage 5: PRD + Test Plan -> Dev Plan (fresh context)
+## Stage 5: PRD + Test Plan → Dev Plan (fresh context)
 
-Spawn a subagent (Task tool, model: opus -- Opus 4.6) to execute the `/prd2plan` stage, extended with test plan integration:
+Spawn a subagent (Task tool, model: opus — Opus 4.6) to execute the `/prd2plan` stage, extended with test plan integration:
 
 **Subagent prompt:**
 ```
@@ -709,7 +711,7 @@ Execute all steps (1 through 7) for this PRD:
 
 PRD file: <prd_path>
 
-IMPORTANT TDD EXTENSION -- Test Plan Integration:
+IMPORTANT TDD EXTENSION — Test Plan Integration:
 In addition to the standard /prd2plan process, you must also:
 
 1. Read the test plan: <test_plan_path>
@@ -752,7 +754,7 @@ After dev plan generation, the orchestrator compares the dev plan architecture a
    - The conflicting TP-{N} contract
    - The dev plan proposal
    - A recommended resolution
-   - **The test plan is the authority document** -- the dev plan adjusts unless the user explicitly overrides
+   - **The test plan is the authority document** — the dev plan adjusts unless the user explicitly overrides
 
 ```
 ## Contract Negotiation
@@ -818,15 +820,15 @@ Please review and approve to proceed to test development.
 Options: approve | edit | abort
 ```
 
-**If approved** -> update state file (stage 5 status: `"done"`, current_stage: 6) and commit. Output: `"Checkpoint saved: Stage 5 done"` -> proceed to Stage 6
-**If edit requested** -> wait for user edits, then re-validate
-**If aborted** -> update state file (stage 5 status: `"aborted"`, pipeline_status: `"aborted"`) and commit -> stop pipeline, log residual artifacts (AC 1.10)
+**If approved** → update state file (stage 5 status: `"done"`, current_stage: 6) and commit. Output: `"Checkpoint saved: Stage 5 done"` → proceed to Stage 6
+**If edit requested** → wait for user edits, then re-validate
+**If aborted** → update state file (stage 5 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, log residual artifacts (AC 1.10)
 
 ---
 
-## Stage 6: Test Plan -> Develop Tests (fresh context)
+## Stage 6: Test Plan → Develop Tests (fresh context)
 
-Spawn a subagent (Task tool, model: opus -- Opus 4.6) to execute the `/tdd-develop-tests` stage:
+Spawn a subagent (Task tool, model: opus — Opus 4.6) to execute the `/tdd-develop-tests` stage:
 
 **Subagent prompt:**
 ```
@@ -839,7 +841,7 @@ PRD file: <prd_path>
 UI contract file: <contract_path>
 Test plan file: <test_plan_path>
 
-CRITICAL CONSTRAINT -- BLIND AGENT:
+CRITICAL CONSTRAINT — BLIND AGENT:
 You must NOT read the dev plan at docs/dev_plans/<slug>.md.
 You must NOT access any application code.
 You develop Tier 1 E2E tests from PRD + UI contract + test plan ONLY.
@@ -847,7 +849,7 @@ This ensures tests validate requirements, not implementation.
 
 Important:
 - Read the PRD, UI contract, schema files, and test plan
-- DO NOT read the dev plan -- DO NOT access application code
+- DO NOT read the dev plan — DO NOT access application code
 - Develop Tier 1 E2E Playwright tests from the test plan specifications
 - Each test maps to a TP-{N} traceability ID via code comment
 - Use selectors from the UI contract data-testid registry
@@ -914,15 +916,15 @@ Please review and approve to proceed to application development.
 Options: approve | edit | abort
 ```
 
-**If approved** -> update state file (stage 6 status: `"done"`, current_stage: 7) and commit. Output: `"Checkpoint saved: Stage 6 done"` -> proceed to Stage 7
-**If edit requested** -> wait for user edits, re-run self-health gate
-**If aborted** -> update state file (stage 6 status: `"aborted"`, pipeline_status: `"aborted"`) and commit -> stop pipeline, log residual artifacts (AC 1.10)
+**If approved** → update state file (stage 6 status: `"done"`, current_stage: 7) and commit. Output: `"Checkpoint saved: Stage 6 done"` → proceed to Stage 7
+**If edit requested** → wait for user edits, re-run self-health gate
+**If aborted** → update state file (stage 6 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, log residual artifacts (AC 1.10)
 
 ---
 
-## Stage 7: Dev Plan -> Develop App with Test Adjustment Taxonomy (fresh context)
+## Stage 7: Dev Plan → Develop App with Test Adjustment Taxonomy (fresh context)
 
-Spawn a subagent (Task tool, model: opus -- Opus 4.6) to execute the `/execute` stage, extended with TDD test adjustment taxonomy:
+Spawn a subagent (Task tool, model: opus — Opus 4.6) to execute the `/execute` stage, extended with TDD test adjustment taxonomy:
 
 **Subagent prompt:**
 ```
@@ -934,7 +936,7 @@ Execute all steps for this dev plan:
 Dev plan file: <plan_path>
 JIRA integration: <enabled/disabled based on user_prefs.skip_jira>
 
-IMPORTANT TDD EXTENSIONS -- Test Adjustment Taxonomy:
+IMPORTANT TDD EXTENSIONS — Test Adjustment Taxonomy:
 
 This is a TDD pipeline run. Tests were written BEFORE application code (Stage 6).
 When implementing tasks, existing tests may need adjustments. Every test change
@@ -957,7 +959,7 @@ must be classified using the test adjustment taxonomy:
 - Each behavioral change must cite the affected TP-{N} contract
   and provide justification for why the change is necessary.
 
-**Security** (IMMUTABLE -- cannot be changed):
+**Security** (IMMUTABLE — cannot be changed):
 - Authentication tests
 - Authorization tests
 - Input validation tests
@@ -998,7 +1000,7 @@ If a task does not pass after 3 iterations, escalate to the user.
 Important:
 - Reconcile JIRA statuses first (if JIRA enabled)
 - Build the dependency graph and present pre-flight check
-- Execute tasks using the Ralph Loop (BUILD -> REVIEW -> ITERATE)
+- Execute tasks using the Ralph Loop (BUILD → REVIEW → ITERATE)
 - Each build/review uses fresh context subagents (already defined in execute.md)
 - Create PRs and wait for user approval per PR (Gate 7)
 - Track ALL test adjustments with classification (Structural/Behavioral/Security)
@@ -1017,9 +1019,9 @@ Important:
 
 ### GATE 7: Per-PR Approval (AC 8.5)
 
-Gate 7 is handled inside the Stage 7 subagent -- each task's PR requires user approval before merge. The subagent interacts with the user directly for these approvals since they are tightly coupled to the execution loop.
+Gate 7 is handled inside the Stage 7 subagent — each task's PR requires user approval before merge. The subagent interacts with the user directly for these approvals since they are tightly coupled to the execution loop.
 
-When Stage 7 subagent completes -> update state file (stage 7 status: `"done"`, current_stage: 8, update tasks object with final statuses/PRs and test_adjustments counts from subagent response) and commit. Output: `"Checkpoint saved: Stage 7 done"`
+When Stage 7 subagent completes → update state file (stage 7 status: `"done"`, current_stage: 8, update tasks object with final statuses/PRs and test_adjustments counts from subagent response) and commit. Output: `"Checkpoint saved: Stage 7 done"`
 
 ---
 
@@ -1027,7 +1029,7 @@ When Stage 7 subagent completes -> update state file (stage 7 status: `"done"`, 
 
 Stage 8 is the final validation stage. It combines smoke tests, traceability matrix, regression checks, cumulative critic validation, and metrics emission.
 
-Spawn a subagent (Task tool, model: opus -- Opus 4.6) to execute the validation:
+Spawn a subagent (Task tool, model: opus — Opus 4.6) to execute the validation:
 
 **Subagent prompt:**
 ```
@@ -1059,8 +1061,8 @@ For every TP-{N} from the test plan:
    for cross-file uniqueness
 
 The matrix must be bidirectional:
-- Forward: TP-{N} -> test file :: test name -> pass/fail
-- Reverse: test file :: test name -> TP-{N}
+- Forward: TP-{N} → test file :: test name → pass/fail
+- Reverse: test file :: test name → TP-{N}
 
 Flag any TP-{N} without a corresponding PASSING test as a gap (AC 9.3).
 Test names (not line numbers) are the primary identifier to survive file restructuring.
@@ -1137,7 +1139,7 @@ Present the full validation results:
 | Dev server startup | PASS | 4.2s | pnpm dev, ready in 4.2s |
 | Health checks | PASS | 0.3s | 2/2 endpoints healthy |
 | SDK version compatibility | PASS | 1.1s | confirmed |
-| Core user flow | PASS | 0.8s | POST /api/chat -> 200 |
+| Core user flow | PASS | 0.8s | POST /api/chat →200 |
 | Visual rendering | PASS / N/A | 0.5s | 0 orphan CSS vars |
 | Browser screenshots | PASS / N/A / WARNING | 12.3s | N routes x 3 viewports |
 | Server teardown | PASS | 0.2s | ports released |
@@ -1187,9 +1189,9 @@ Overall Verdict: PASS / FAIL
 Options: approve | fix | abort
 ```
 
-**If approved** -> update state file (stage 8 status: `"done"`, test_result: `"PASS"`) and commit. Output: `"Checkpoint saved: Stage 8 done"` -> proceed to Completion
-**If fix requested** -> wait for user fixes, then re-run Stage 8 validation
-**If aborted** -> update state file (stage 8 status: `"aborted"`, pipeline_status: `"aborted"`, test_result: `"FAIL"`) and commit -> stop pipeline, log residual artifacts (AC 1.10)
+**If approved** → update state file (stage 8 status: `"done"`, test_result: `"PASS"`) and commit. Output: `"Checkpoint saved: Stage 8 done"` → proceed to Completion
+**If fix requested** → wait for user fixes, then re-run Stage 8 validation
+**If aborted** → update state file (stage 8 status: `"aborted"`, pipeline_status: `"aborted"`, test_result: `"FAIL"`) and commit → stop pipeline, log residual artifacts (AC 1.10)
 
 ---
 
@@ -1197,7 +1199,7 @@ Options: approve | fix | abort
 
 ### Label-Based CI Skip Convention
 
-When the TDD pipeline creates the `tdd/{slug}/tests` branch in Stage 6, it applies the `tdd-red-tests` label to signal CI systems that test failures on this branch are intentional -- the tests are written before application code exists.
+When the TDD pipeline creates the `tdd/{slug}/tests` branch in Stage 6, it applies the `tdd-red-tests` label to signal CI systems that test failures on this branch are intentional — the tests are written before application code exists.
 
 **Convention:**
 - Branch pattern: `tdd/{slug}/tests`
@@ -1276,7 +1278,7 @@ Throughout the pipeline, state is persisted in two places:
 **2. In the orchestrator (lightweight):**
 - `slug`, `prd_path`, `plan_path`, `brief_path`, `contract_path`, `test_plan_path`, `test_result`, `requirement`, `user_prefs`
 
-This separation means the pipeline can be resumed at any stage by reading file state -- no conversational context is needed.
+This separation means the pipeline can be resumed at any stage by reading file state — no conversational context is needed.
 
 ---
 
@@ -1284,14 +1286,14 @@ This separation means the pipeline can be resumed at any stage by reading file s
 
 If the pipeline is interrupted at any stage:
 
-- **Stage 1 interrupted**: Re-run `/req2prd` -- PRD file may already exist, ask user whether to regenerate or use existing.
-- **Stage 2 interrupted**: Re-run `/tdd-design-brief` -- check if Design Brief already exists at `docs/tdd/<slug>/design-brief.md`.
-- **Stage 3 interrupted**: Re-run `/tdd-mock-analysis` -- check if UI contract already exists at `docs/tdd/<slug>/ui-contract.md`. Screenshots in `.pipeline/tdd/<slug>/mock-screenshots/` may be partial.
-- **Stage 4 interrupted**: Re-run `/tdd-test-plan` -- check if test plan already exists at `docs/tdd/<slug>/test-plan.md`.
-- **Stage 5 interrupted**: Re-run `/prd2plan` with test plan integration -- check if dev plan already exists at `docs/dev_plans/<slug>.md`. Contract negotiation may need to re-run.
-- **Stage 6 interrupted**: Re-run `/tdd-develop-tests` -- check if `tdd/{slug}/tests` branch exists with committed test files. If tests are partially written, the self-health gate will catch inconsistencies.
-- **Stage 7 interrupted**: Re-run `/execute @plan` -- it reads task statuses from the dev plan, reconciles JIRA statuses, and resumes from where it left off. Cumulative test adjustment counts are preserved in the state file (`test_adjustments` field) and loaded on resume to enforce the 20% behavioral threshold across interruptions.
-- **Stage 8 interrupted**: Re-run Stage 8 validation -- `/test` and traceability are idempotent, scan everything from scratch. Metrics are only written on successful completion, so partial runs leave no stale metrics.
+- **Stage 1 interrupted**: Re-run `/req2prd` — PRD file may already exist, ask user whether to regenerate or use existing.
+- **Stage 2 interrupted**: Re-run `/tdd-design-brief` — check if Design Brief already exists at `docs/tdd/<slug>/design-brief.md`.
+- **Stage 3 interrupted**: Re-run `/tdd-mock-analysis` — check if UI contract already exists at `docs/tdd/<slug>/ui-contract.md`. Screenshots in `.pipeline/tdd/<slug>/mock-screenshots/` may be partial.
+- **Stage 4 interrupted**: Re-run `/tdd-test-plan` — check if test plan already exists at `docs/tdd/<slug>/test-plan.md`.
+- **Stage 5 interrupted**: Re-run `/prd2plan` with test plan integration — check if dev plan already exists at `docs/dev_plans/<slug>.md`. Contract negotiation may need to re-run.
+- **Stage 6 interrupted**: Re-run `/tdd-develop-tests` — check if `tdd/{slug}/tests` branch exists with committed test files. If tests are partially written, the self-health gate will catch inconsistencies.
+- **Stage 7 interrupted**: Re-run `/execute @plan` — it reads task statuses from the dev plan, reconciles JIRA statuses, and resumes from where it left off. Cumulative test adjustment counts are preserved in the state file (`test_adjustments` field) and loaded on resume to enforce the 20% behavioral threshold across interruptions.
+- **Stage 8 interrupted**: Re-run Stage 8 validation — `/test` and traceability are idempotent, scan everything from scratch. Metrics are only written on successful completion, so partial runs leave no stale metrics.
 
 **Re-running `/tdd-fullpipeline`** after interruption: The orchestrator checks `docs/pipeline-state/<slug>.json` at startup (see "Startup: Resume Detection" section). If a state file exists, it offers to resume from the last completed stage. If no state file exists, it falls back to checking disk artifacts:
 - If `docs/prd/<slug>.md` exists, ask whether to skip Stage 1.
@@ -1350,11 +1352,11 @@ git add docs/pipeline-state/<slug>.json && git commit -m "pipeline: mark <slug> 
 2. Present the final report:
 
 **Heading rules:**
-- All smoke tests PASS and Stage 8 validation PASS -> "TDD Pipeline Complete"
-- Any smoke test row shows FAIL -> "TDD Pipeline Incomplete -- Smoke Test Failure" (include Error Details column)
-- Stage 8 validation FAIL -> "TDD Pipeline Incomplete -- Validation Failure" (include blocking items)
-- Smoke tests SKIPPED (opted out via `smoke_test.enabled: false`) -> "TDD Pipeline Complete" (treat opt-out as acceptable; include "SKIPPED" line)
-- Any smoke test row is a skip/warning -> "TDD Pipeline Complete" but list skipped checks
+- All smoke tests PASS and Stage 8 validation PASS → "TDD Pipeline Complete"
+- Any smoke test row shows FAIL → "TDD Pipeline Incomplete — Smoke Test Failure" (include Error Details column)
+- Stage 8 validation FAIL → "TDD Pipeline Incomplete — Validation Failure" (include blocking items)
+- Smoke tests SKIPPED (opted out via `smoke_test.enabled: false`) → "TDD Pipeline Complete" (treat opt-out as acceptable; include "SKIPPED" line)
+- Any smoke test row is a skip/warning → "TDD Pipeline Complete" but list skipped checks
 
 ```
 ## TDD Pipeline Complete
@@ -1414,7 +1416,7 @@ git add docs/pipeline-state/<slug>.json && git commit -m "pipeline: mark <slug> 
 | Dev server startup | PASS | 4.2s | pnpm dev, ready in 4.2s |
 | Health checks | PASS | 0.3s | 2/2 endpoints healthy |
 | SDK version compatibility | PASS | 1.1s | confirmed |
-| Core user flow | PASS | 0.8s | POST /api/chat -> 200 |
+| Core user flow | PASS | 0.8s | POST /api/chat →200 |
 | Visual rendering | PASS / N/A | 0.5s | 0 orphan CSS vars |
 | Browser screenshots | PASS / N/A / WARNING | 12.3s | N routes x 3 viewports |
 | Server teardown | PASS | 0.2s | ports released |
@@ -1436,4 +1438,4 @@ git add docs/pipeline-state/<slug>.json && git commit -m "pipeline: mark <slug> 
 - Compare metrics against targets (test plan accuracy > 85%, security integrity = 100%)
 ```
 
-**IMPORTANT:** The Stage 7 subagent's `/execute` includes a mandatory smoke test step (Step 5) that verifies the dev server actually works before declaring complete. If the smoke test fails, the pipeline is NOT complete -- the subagent must fix the issues or report them as blocking. Never present a "TDD Pipeline Complete" report to the user without smoke tests passing. **Verify the Stage 7 subagent's response includes a "Smoke Test Results" section before declaring pipeline complete.** If absent, query the subagent for smoke test status.
+**IMPORTANT:** The Stage 7 subagent's `/execute` includes a mandatory smoke test step (Step 5) that verifies the dev server actually works before declaring complete. If the smoke test fails, the pipeline is NOT complete — the subagent must fix the issues or report them as blocking. Never present a "TDD Pipeline Complete" report to the user without smoke tests passing. **Verify the Stage 7 subagent's response includes a "Smoke Test Results" section before declaring pipeline complete.** If absent, query the subagent for smoke test status.
