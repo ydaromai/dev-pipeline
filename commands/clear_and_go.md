@@ -109,7 +109,7 @@ Present your understanding to the user using AskUserQuestion:
 | 4 | <name from orchestrator> | IN PROGRESS — 2/6 tasks done |
 | 5 | <name from orchestrator> | NOT STARTED |
 
-Note: The Status column uses uppercase display labels for readability. Display label mapping: `"done"` → `DONE`, `"in_progress"` → `IN PROGRESS`, `"not_started"` → `NOT STARTED`, `"skipped"` → `SKIPPED`, `"aborted"` → `ABORTED`, `"pending"` (tasks) → `PENDING`. The JSON state file stores lowercase with underscores.
+Note: Status uses uppercase display labels. The JSON state file stores lowercase with underscores (e.g., `"in_progress"` → `IN PROGRESS`).
 
 ### Task Progress (if in execution stage):
 | Task | Status | JIRA | PR | Branch |
@@ -126,9 +126,9 @@ Note: The Status column uses uppercase display labels for readability. Display l
 
 Is this correct? If anything is wrong, tell me what to fix.
 Options: **confirm** | **fix** (tell me what to change) | **cancel** (abort checkpoint)
-
-(Gate options convention: "edit" for document-stage gates where the user modifies artifacts; "fix" for code/test-stage gates where the user fixes implementation issues. /clear_and_go uses "confirm"/"fix"/"cancel" because it is a checkpoint confirmation, not a stage gate.)
 ```
+
+*Gate options convention: "edit" for document-stage gates where the user modifies artifacts; "fix" for code/test-stage gates where the user fixes implementation issues. /clear_and_go uses "confirm"/"fix"/"cancel" because it is a checkpoint confirmation, not a stage gate.*
 
 Wait for user response. If they correct anything, update before proceeding. If they cancel, stop without writing the state file.
 
