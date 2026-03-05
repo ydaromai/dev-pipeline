@@ -140,7 +140,7 @@ Once the user approves, validate before writing:
 
 1. **Validate `current_stage` range** — must be an integer: 1–5 for fullpipeline, 1–8 for tdd-fullpipeline. If out of range, halt and ask the user to correct.
 2. **Validate slug** — must match `^[a-z0-9][a-z0-9_-]{0,63}$`. If invalid, halt and ask the user.
-3. **Validate `test_adjustments`** (TDD only) — must be an object with exactly keys `"structural"`, `"behavioral"`, `"security"`, each a non-negative integer (>= 0). Reject negative values, non-integer values, or extra keys — halt and ask the user to correct. If `current_stage >= 7` and values cannot be determined from conversation context or an existing state file, halt and ask the user to provide the counts rather than defaulting to zeroes (which would bypass the 20% behavioral threshold). If `current_stage < 7`, default to zeroes is safe.
+3. **Validate `test_adjustments`** (TDD only) — must be an object with exactly keys `"structural"`, `"behavioral"`, `"security"`, each a non-negative integer (>= 0). Reject negative values, non-integer values, or extra keys — halt and ask the user to correct. If `current_stage >= 7` and values cannot be determined from conversation context or an existing state file, halt and ask the user to provide the counts rather than defaulting to zeroes (which would bypass the 20% behavioral threshold). If `current_stage < 7`, default to zeroes is safe. **Carry-forward rule:** if an existing state file contains valid `test_adjustments` values and the conversation context does not provide updated counts, carry forward the existing values into the new state file. Do not silently drop them. For fullpipeline state files, MUST NOT write `test_adjustments` (TDD-only field).
 4. **Validate stage consistency** — all stages before `current_stage` should have status `"done"` or `"skipped"`, not `"not_started"`. If inconsistent, warn the user and ask for correction before writing.
 5. **Validate `test_result`** (if non-null) — must be one of `"PASS"`, `"FAIL"`, `"SKIPPED"`. If any other value, halt and ask the user to correct.
 
@@ -250,7 +250,7 @@ Create the `docs/pipeline-state/` directory if it doesn't exist.
 - `slug` — kebab-case identifier derived from the PRD title; must match `^[a-z0-9][a-z0-9_-]{0,63}$`. Used as the key for all artifact paths and the state file name (`<slug>.json`)
 - `requirement` — verbatim copy of the original requirement text from `$ARGUMENTS`. Stored for resume matching and reference. Do not include secrets, API keys, or PII
 - `pipeline_status` — always `"active"` when written by `/clear_and_go`. Canonical enum (set by orchestrators): `"active"` | `"completed"` | `"aborted"`. Valid transitions: `active → completed`, `active → aborted`. Exception: `/clear_and_go` may overwrite a `"completed"` or `"aborted"` file with `"active"` after explicit user confirmation (see Step 5 mismatch check). This is a manual override, not a standard transition — the orchestrators never perform this transition automatically
-- `current_stage` — always an integer (1–5 for fullpipeline, 1–8 for TDD). On completion, set to the final stage (5 or 8). On abort, remains at the stage where abort occurred. Validate range against pipeline type before writing. Note: `stages` object uses string keys (`"1"`, `"2"`, ...) per JSON convention; `current_stage` is an integer for arithmetic comparisons
+- `current_stage` — always an integer (1–5 for fullpipeline, 1–8 for TDD). On completion, set to the final stage (5 or 8). On abort, remains at the stage where abort occurred. Validate range against pipeline type before writing. **Consistency rule:** when `pipeline_status` is `"active"`, `stages[str(current_stage)].status` MUST be `"in_progress"` or `"not_started"` — never `"done"` or `"skipped"` (if the current stage is done, `current_stage` should have already been incremented). On completion (`pipeline_status: "completed"`), `current_stage` is the final stage and its status is `"done"`. Note: `stages` object uses string keys (`"1"`, `"2"`, ...) per JSON convention; `current_stage` is an integer for arithmetic comparisons
 - `stage_name` — human-readable name of the current stage, taken from the orchestrator's stage map. On write, MUST match the canonical name for `current_stage`. Informational; not validated on read (future schema versions may add new names). Canonical names — fullpipeline: stage 1 = "Requirement → PRD", stage 2 = "PRD → Dev Plan", stage 3 = "Dev Plan → JIRA", stage 4 = "Execute with Ralph Loop", stage 5 = "Test Verification". TDD: stage 1 = "Requirement → PRD", stage 2 = "PRD → Design Brief", stage 3 = "Mock App → UI Contract", stage 4 = "PRD + UI Contract → Test Plan", stage 5 = "PRD + Test Plan → Dev Plan", stage 6 = "Test Plan → Develop Tests", stage 7 = "Execute with Test Adjustment", stage 8 = "Validate"
 - `stages` — object keyed by stage number as string (`"1"` through `"5"` for fullpipeline, `"1"` through `"8"` for TDD). Each entry contains `status` and optional fields (`artifact`, `jira_epic`, `summary`). All keys must be present even for stages not yet reached
 - Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`. On read, reject unknown values. `"aborted"` means the user chose to stop the pipeline at this stage — stages after the aborted stage remain `"not_started"`, and the aborted stage itself was not completed
@@ -310,21 +310,22 @@ For example: `/fullpipeline Build a marketplace plugin system that allows third-
 
 Copy it to the clipboard. The requirement text MUST be wrapped in single quotes (not double quotes) to prevent shell expansion — single-quoted strings in POSIX shell suppress all interpretation except `'` itself. Do not change the quoting style without a security review. **POSIX-only safety:** The single-quote escaping is safe for POSIX-compliant shells (bash, zsh, sh). If the user pastes the command into a non-POSIX shell (PowerShell, fish, nushell), the quoting may not prevent expansion — the user is responsible for shell-appropriate quoting in those contexts. Escape single quotes in the requirement text by replacing `'` with `'\''`. Requirement text is expected to be printable UTF-8. Reject requirement text containing control characters (bytes 0x00–0x1F except tab 0x09, newline 0x0A, carriage return 0x0D) — these may cause clipboard corruption, shell injection, or terminal escape sequence attacks. If control characters are detected, log: `"ERROR: [clear_and_go] Requirement text contains control characters — cannot safely copy to clipboard"` and skip clipboard copy (present the command for manual copying after the user sanitizes):
 ```bash
+RESUME_CMD='/<pipeline-command> <escaped requirement text>'
 # macOS — capture exit code to check success
-printf '%s' '/<pipeline-command> <escaped requirement text>' | pbcopy 2>/dev/null
+printf '%s' "$RESUME_CMD" | pbcopy 2>/dev/null
 CLIP_OK=$?
 # Linux fallback — try xclip, then xsel (each with 2s timeout to avoid hangs on missing X11 display)
 if [ $CLIP_OK -ne 0 ]; then
-  timeout 2 sh -c "printf '%s' '<escaped requirement text>' | xclip -selection clipboard" 2>/dev/null
+  printf '%s' "$RESUME_CMD" | timeout 2 xclip -selection clipboard 2>/dev/null
   CLIP_OK=$?
 fi
 if [ $CLIP_OK -ne 0 ]; then
-  timeout 2 sh -c "printf '%s' '<escaped requirement text>' | xsel --clipboard --input" 2>/dev/null
+  printf '%s' "$RESUME_CMD" | timeout 2 xsel --clipboard --input 2>/dev/null
   CLIP_OK=$?
 fi
 # Windows (WSL) fallback: use clip.exe if available (2s timeout to avoid hangs on broken WSL interop)
 if [ $CLIP_OK -ne 0 ]; then
-  timeout 2 sh -c "printf '%s' '<escaped requirement text>' | clip.exe" 2>/dev/null
+  printf '%s' "$RESUME_CMD" | timeout 2 clip.exe 2>/dev/null
   CLIP_OK=$?
 fi
 ```
