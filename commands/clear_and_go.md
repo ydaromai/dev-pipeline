@@ -272,6 +272,8 @@ git add docs/pipeline-state/<slug>.json
 git commit -m "chore: save pipeline checkpoint for <slug> at stage <N>"
 ```
 
+On successful write, log: `"INFO: [clear_and_go] State file written: docs/pipeline-state/<slug>.json (stage <N>)"`.
+
 If the state file write itself fails (e.g., permission error, disk full), log: `"ERROR: [clear_and_go] Failed to write state file docs/pipeline-state/<slug>.json — <error>"` and present the error to the user — the checkpoint cannot be saved without the state file. Unlike the orchestrator gate writes (which continue on write failure because the pipeline can fall back to disk artifact detection), `/clear_and_go` treats write failure as fatal because the entire purpose of the command is to produce this checkpoint. Inform the user: `"If you clear context anyway, the orchestrator will attempt to reconstruct state from disk artifacts on next run, but task-level progress and user preferences may be lost."`
 If the git commit fails (e.g., nothing changed), continue — the state file on disk is the source of truth.
 
@@ -287,7 +289,7 @@ Build the exact command the user needs to type after clearing:
 
 For example: `/fullpipeline Build a marketplace plugin system that allows third-party developers to extend the platform`
 
-Copy it to the clipboard. The requirement text MUST be wrapped in single quotes (not double quotes) to prevent shell expansion — single-quoted strings in POSIX shell suppress all interpretation except `'` itself. Do not change the quoting style without a security review. Escape single quotes in the requirement text by replacing `'` with `'\''`:
+Copy it to the clipboard. The requirement text MUST be wrapped in single quotes (not double quotes) to prevent shell expansion — single-quoted strings in POSIX shell suppress all interpretation except `'` itself. Do not change the quoting style without a security review. Escape single quotes in the requirement text by replacing `'` with `'\''`. Requirement text is expected to be printable UTF-8; control characters (null bytes, escape sequences) are not supported and may cause clipboard or shell errors:
 ```bash
 # macOS — capture exit code to check success
 printf '%s' '/<pipeline-command> <escaped requirement text>' | pbcopy 2>/dev/null

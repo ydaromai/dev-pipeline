@@ -64,6 +64,8 @@ ORCHESTRATOR (this agent — lightweight coordinator)
 
 **Subagent depth:** Max depth is 3 (orchestrator → stage → build/review → critics). Claude Code handles this natively.
 
+**Subagent error handling:** If any stage subagent fails (crashes, returns empty output, or returns output missing expected fields like slug or file path), log: `"ERROR: [fullpipeline] Stage <N> subagent failed — <error_summary>"`. If the subagent response is missing an expected field, log: `"WARNING: [fullpipeline] Stage <N> subagent response missing expected field '<field>'"`. Present the error to the user and offer options: retry the stage, or abort the pipeline.
+
 ---
 
 ## Orchestrator State
@@ -164,6 +166,8 @@ Before any stage begins, validate the slug (derived from PRD title or provided b
 ^[a-z0-9][a-z0-9_-]{0,63}$
 ```
 
+**Requirement length check:** If `$ARGUMENTS` exceeds 4 KB, warn the user: `"WARNING: [fullpipeline] Requirement text is <N> bytes — recommended limit is 4 KB. Large requirement text bloats the state file and git history. Continue anyway?"` Proceed only if the user confirms.
+
 **Reject** slugs containing forward slash (`/`), backslash (`\`), double dot (`..`), null bytes (`\0`), or spaces. These prevent path traversal via `docs/prd/<slug>.md` and `docs/pipeline-state/<slug>.json`. The regex also guarantees shell safety — the slug is interpolated into git commit messages and shell commands. Any future relaxation of this regex must be reviewed for shell injection risk.
 
 ---
@@ -172,20 +176,20 @@ Before any stage begins, validate the slug (derived from PRD title or provided b
 
 Before starting Stage 1, check if any state file exists for this pipeline type.
 
-1. **Fast path** — derive slug from `$ARGUMENTS` (same kebab-case logic as Stage 1), validate it against `^[a-z0-9][a-z0-9_-]{0,63}$` (reject if invalid — log: `"Resume fast-path: derived slug '<value>' failed validation — skipping fast path"`), and check if `docs/pipeline-state/<derived-slug>.json` exists. If it does, read and validate it directly (skip full directory scan). Log: `"Resume fast-path: found docs/pipeline-state/<slug>.json — skipping directory scan"`. If not, proceed to step 2.
+1. **Fast path** — derive slug from `$ARGUMENTS` (same kebab-case logic as Stage 1), validate it against `^[a-z0-9][a-z0-9_-]{0,63}$` (reject if invalid — log: `"INFO: [fullpipeline] Resume fast-path: derived slug '<value>' failed validation — skipping fast path"`), and check if `docs/pipeline-state/<derived-slug>.json` exists. If it does, read and validate it directly (skip full directory scan). Log: `"INFO: [fullpipeline] Resume fast-path: found docs/pipeline-state/<slug>.json — skipping directory scan"`. If not, proceed to step 2.
 2. List all files in `docs/pipeline-state/*.json`
 3. For each file, read and validate:
-   - Well-formed JSON (skip files that fail parsing — log: `"Warning: <filename> is not valid JSON — skipping"`)
-   - Required fields present: `pipeline`, `slug`, `requirement`, `current_stage`, `stages`, `pipeline_status` (skip if missing — log: `"Warning: <filename> missing required field '<field>' — skipping"`)
-   - `schema_version` equals `1` (skip if not — log: `"Warning: <filename> has unsupported schema_version <value> — skipping"`)
-   - `current_stage` is an integer between 1 and 5 (skip if out of range — log: `"Warning: <filename> has invalid current_stage <value> — skipping"`)
-   - `stages` object contains keys `"1"` through `"5"` (skip if missing keys — log: `"Warning: <filename> has incomplete stages object — skipping"`)
-   - `slug` matches the validation pattern `^[a-z0-9][a-z0-9_-]{0,63}$` (skip if not — log: `"Warning: <filename> has invalid slug '<value>' — skipping"`)
-   - Each stage entry has a `status` field with a valid enum value (`"done"`, `"in_progress"`, `"not_started"`, `"skipped"`, `"aborted"`) — log: `"Warning: <filename> has invalid stage status '<value>' for stage <N> — skipping"`
-   - **Cross-field consistency**: all stages before `current_stage` should be `"done"` or `"skipped"` (not `"not_started"`). If inconsistent, log: `"Warning: <filename> has stage <N> as '<status>' but current_stage is <M> — accepting with warning"` (do not skip — allow the user to decide during the resume prompt)
-   After the scan completes, log: `"Resume scan: <N> files scanned, <M> valid, <K> skipped"`
-4. Filter to files where `pipeline` equals `"fullpipeline"` and `pipeline_status` equals `"active"`. If a fullpipeline file unexpectedly contains `test_adjustments`, log: `"Warning: <filename> contains test_adjustments (fullpipeline-only) — ignoring field"`. If exactly one match is found, use it. If multiple matches, present all and ask the user which to resume.
-5. **Match by slug** — derive a simplified slug from `$ARGUMENTS` (first N content words, kebab-case — this is a heuristic and may not match the PRD-derived slug exactly). Match against the `slug` field. If slug matching fails, log: `"INFO: slug '<derived>' did not match any active state file — falling back to requirement substring match"` and fall back to case-insensitive substring match of `$ARGUMENTS` against the `requirement` field. If neither matches any active state file but active state files exist, present the unmatched files and ask the user if any is the intended pipeline. If no active state files exist at all, proceed to step 13 (start fresh). Log: `"Resume match: slug=<slug>, file=<filename>, method=slug|requirement_substring"`
+   - Well-formed JSON (skip files that fail parsing — log: `"WARNING: [fullpipeline] <filename> is not valid JSON — skipping"`)
+   - Required fields present: `pipeline`, `slug`, `requirement`, `current_stage`, `stages`, `pipeline_status` (skip if missing — log: `"WARNING: [fullpipeline] <filename> missing required field '<field>' — skipping"`)
+   - `schema_version` equals `1` (skip if not — log: `"WARNING: [fullpipeline] <filename> has unsupported schema_version <value> — skipping"`)
+   - `current_stage` is an integer between 1 and 5 (skip if out of range — log: `"WARNING: [fullpipeline] <filename> has invalid current_stage <value> — skipping"`)
+   - `stages` object contains keys `"1"` through `"5"` (skip if missing keys — log: `"WARNING: [fullpipeline] <filename> has incomplete stages object — skipping"`)
+   - `slug` matches the validation pattern `^[a-z0-9][a-z0-9_-]{0,63}$` (skip if not — log: `"WARNING: [fullpipeline] <filename> has invalid slug '<value>' — skipping"`)
+   - Each stage entry has a `status` field with a valid enum value (`"done"`, `"in_progress"`, `"not_started"`, `"skipped"`, `"aborted"`) — log: `"WARNING: [fullpipeline] <filename> has invalid stage status '<value>' for stage <N> — skipping"`
+   - **Cross-field consistency**: all stages before `current_stage` should be `"done"` or `"skipped"` (not `"not_started"`). If inconsistent, log: `"WARNING: [fullpipeline] <filename> has stage <N> as '<status>' but current_stage is <M> — accepting with warning"` (do not skip — allow the user to decide during the resume prompt)
+   After the scan completes, log: `"INFO: [fullpipeline] Resume scan: <N> files scanned, <M> valid, <K> skipped"`
+4. Filter to files where `pipeline` equals `"fullpipeline"` and `pipeline_status` equals `"active"`. If a fullpipeline file unexpectedly contains `test_adjustments`, log: `"WARNING: [fullpipeline] <filename> contains test_adjustments (fullpipeline-only) — ignoring field"`. If exactly one match is found, use it. If multiple matches, present all and ask the user which to resume.
+5. **Match by slug** — derive a simplified slug from `$ARGUMENTS` (first N content words, kebab-case — this is a heuristic and may not match the PRD-derived slug exactly). Match against the `slug` field. If slug matching fails, log: `"INFO: [fullpipeline] slug '<derived>' did not match any active state file — falling back to requirement substring match"` and fall back to case-insensitive substring match of `$ARGUMENTS` against the `requirement` field. If neither matches any active state file but active state files exist, present the unmatched files and ask the user if any is the intended pipeline. If no active state files exist at all, proceed to step 13 (start fresh). Log: `"INFO: [fullpipeline] Resume match: slug=<slug>, file=<filename>, method=slug|requirement_substring"`
 6. **Verify disk artifacts** — for the matched state file, confirm that artifacts referenced in `stages` actually exist on disk (e.g., if Stage 1 is "done", check `docs/prd/<slug>.md` exists). If any claimed artifact is missing, include it in the resume offer.
 7. **Check git branch** — if `git_branch` in the state file differs from the current branch, note it in the resume offer.
 8. If all stages in the state file are `"not_started"`, treat as equivalent to "no state file" — skip the resume prompt and proceed fresh.
@@ -214,7 +218,7 @@ Options:
 - **restart** → Discard saved state and start fresh from Stage 1
 ```
 
-11. If the user chooses **resume**: set orchestrator state from the state file (slug, prd_path, plan_path, requirement, user_prefs, test_result) and jump directly to the current stage. If git branch differs, warn but proceed. For execution stage, the subagent will run JIRA reconciliation (Step 1.5) automatically. Clean up the pre-compact rule file if it exists: `rm -f .claude/rules/pipeline-resume.md`. Output: `"Checkpoint loaded [fullpipeline]: resuming from Stage <N>"`
+11. If the user chooses **resume**: set orchestrator state from the state file (slug, prd_path, plan_path, requirement, user_prefs, test_result) and jump directly to the current stage. If git branch differs, warn but proceed. For execution stage, the subagent will run JIRA reconciliation (Step 1.5) automatically. Clean up the pre-compact rule file if it exists: `rm -f .claude/rules/pipeline-resume.md`. Output: `"Checkpoint loaded [fullpipeline]: slug=<slug>, resuming from stage <N>"`
 12. If the user chooses **restart**: delete the state file, proceed with Stage 1 as normal.
 13. If no state file exists: proceed with Stage 1 as normal. (This includes the case where active state files exist but none matched — disk artifact detection in the Error Recovery section still applies on a per-stage basis.)
 
@@ -280,7 +284,7 @@ Please review and approve to proceed to dev planning.
 Options: approve | edit | abort
 ```
 
-**If approved** → update state file (stage 1 status: `"done"`, current_stage: 2) and commit. Output: `"Checkpoint saved [fullpipeline]: Stage 1 done"` → proceed to Stage 2
+**If approved** → update state file (stage 1 status: `"done"`, current_stage: 2) and commit. Output: `"Checkpoint saved [fullpipeline]: slug=<slug>, stage 1 done"` → proceed to Stage 2
 **If edit requested** → wait for user edits, then re-validate with `/validate`
 **If aborted** → update state file (stage 1 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, present abort report (see "Pipeline Abort" section)
 
@@ -347,7 +351,7 @@ Please review and approve to proceed to JIRA creation.
 Options: approve | edit | abort
 ```
 
-**If approved** → update state file (stage 2 status: `"done"`, current_stage: 3) and commit. Output: `"Checkpoint saved [fullpipeline]: Stage 2 done"` → proceed to Stage 3
+**If approved** → update state file (stage 2 status: `"done"`, current_stage: 3) and commit. Output: `"Checkpoint saved [fullpipeline]: slug=<slug>, stage 2 done"` → proceed to Stage 3
 **If aborted** → update state file (stage 2 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, present abort report
 
 ---
@@ -381,9 +385,9 @@ Important:
 
 **Note:** This stage includes its own user interaction (Gate 3a critic validation and Gate 3b JIRA confirmation) — the subagent handles both gates directly since they are tightly coupled to the JIRA creation flow.
 
-**If user chose skip-jira** → record `user_prefs.skip_jira = true`, update state file (stage 3 status: `"skipped"`, current_stage: 4, user_prefs.skip_jira: true) and commit. Output: `"Checkpoint saved [fullpipeline]: Stage 3 skipped"` → proceed to Stage 4
+**If user chose skip-jira** → record `user_prefs.skip_jira = true`, update state file (stage 3 status: `"skipped"`, current_stage: 4, user_prefs.skip_jira: true) and commit. Output: `"Checkpoint saved [fullpipeline]: slug=<slug>, stage 3 skipped"` → proceed to Stage 4
 
-When Stage 3 subagent completes successfully → update state file (stage 3 status: `"done"`, current_stage: 4, jira_epic from mapping) and commit. Output: `"Checkpoint saved [fullpipeline]: Stage 3 done"`
+When Stage 3 subagent completes successfully → update state file (stage 3 status: `"done"`, current_stage: 4, jira_epic from mapping) and commit. Output: `"Checkpoint saved [fullpipeline]: slug=<slug>, stage 3 done"`
 
 ---
 
@@ -441,7 +445,7 @@ Return the following in your final message:
 
 Gate 4 is handled inside the Stage 4 subagent — each task's PR requires user approval before merge. The subagent interacts with the user directly for these approvals since they are tightly coupled to the execution loop.
 
-When Stage 4 subagent completes → update state file (stage 4 status: `"done"`, current_stage: 5, update tasks object with final statuses/PRs from subagent response) and commit. Output: `"Checkpoint saved [fullpipeline]: Stage 4 done"`
+When Stage 4 subagent completes → update state file (stage 4 status: `"done"`, current_stage: 5, update tasks object with final statuses/PRs from subagent response) and commit. Output: `"Checkpoint saved [fullpipeline]: slug=<slug>, stage 4 done"`
 
 ---
 
@@ -512,7 +516,7 @@ Ralph Loop iterations: N
 Options: approve | fix | abort
 ```
 
-**If approved** → update state file (stage 5 status: `"done"`, test_result: `"PASS"`) and commit. Output: `"Checkpoint saved [fullpipeline]: Stage 5 done"` → proceed to Completion
+**If approved** → update state file (stage 5 status: `"done"`, test_result: `"PASS"`) and commit. Output: `"Checkpoint saved [fullpipeline]: slug=<slug>, stage 5 done"` → proceed to Completion
 **If fix requested** → wait for user fixes, then re-run `/test`
 **If aborted** → update state file (stage 5 status: `"aborted"`, pipeline_status: `"aborted"`, test_result: `"FAIL"`) and commit → stop pipeline, present abort report
 
