@@ -102,6 +102,85 @@ Everything else is persisted on disk and read fresh by each stage subagent.
 
 ---
 
+## Pipeline State File
+
+The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at every stage transition. This file enables automatic resume after context clears, crashes, or interruptions.
+
+**Schema:**
+```json
+{
+  "pipeline": "tdd-fullpipeline",
+  "slug": "<slug>",
+  "requirement": "<original requirement text>",
+  "current_stage": <N>,
+  "stage_name": "<stage name>",
+  "stages": {
+    "1": { "status": "done|in_progress|not_started", "artifact": "<path>", "summary": "<one-line>" },
+    "2": { "status": "...", "artifact": "<path>", "summary": "..." },
+    "3": { "status": "...", "artifact": "<path>", "summary": "..." },
+    "4": { "status": "...", "artifact": "<path>", "summary": "..." },
+    "5": { "status": "...", "artifact": "<path>", "jira_epic": "<key>", "summary": "..." },
+    "6": { "status": "...", "summary": "..." },
+    "7": { "status": "...", "summary": "..." },
+    "8": { "status": "...", "summary": "..." }
+  },
+  "tasks": {
+    "1.1": { "status": "done|in_progress|pending", "jira": "<key>", "pr": <number>, "branch": "<name>" }
+  },
+  "test_result": "PASS|FAIL|SKIPPED",
+  "user_prefs": { "skip_jira": false, "mock_url": "<url>" },
+  "known_issues": [],
+  "git_branch": "<branch>",
+  "updated_at": "<ISO timestamp>"
+}
+```
+
+**Write rule:** After every gate approval and before every stage subagent spawn, update the state file and commit it alongside other artifacts:
+```bash
+mkdir -p docs/pipeline-state
+# (write/update docs/pipeline-state/<slug>.json)
+git add docs/pipeline-state/<slug>.json && git commit -m "pipeline: update state for <slug> — stage <N>"
+```
+
+---
+
+## Startup: Resume Detection
+
+Before Pre-Flight Checks, check if any state file exists for this pipeline type.
+
+1. List all files in `docs/pipeline-state/*.json`
+2. For each state file found, read it and validate it is well-formed JSON with required fields (`pipeline`, `slug`, `requirement`, `current_stage`, `stages`). Skip any file that fails JSON parsing or is missing required fields — log a warning.
+3. Check if `pipeline` equals `"tdd-fullpipeline"` and `current_stage` is NOT `"completed"`. If exactly one match is found, use it. If multiple matches, present all and ask the user which to resume. Also try to match the requirement text from `$ARGUMENTS` against the `requirement` field in each state file.
+4. **Verify disk artifacts** — for the matched state file, confirm that artifacts referenced in `stages` actually exist on disk (e.g., if Stage 1 is "done", check `docs/prd/<slug>.md` exists). If any claimed artifact is missing, warn the user before offering resume.
+5. If a matching state file is found, present the resume offer:
+
+```
+## Existing Pipeline Detected
+
+Found saved state for slug "<slug>" at Stage <N> — <stage_name>.
+
+| Stage | Name | Status |
+|-------|------|--------|
+| 1 | Requirement -> PRD | DONE |
+| 2 | PRD -> Design Brief | DONE |
+| 3 | Mock App -> UI Contract | DONE |
+| 4 | PRD + UI Contract -> Test Plan | DONE |
+| 5 | PRD + Test Plan -> Dev Plan | IN PROGRESS |
+| 6 | Test Plan -> Develop Tests | NOT STARTED |
+| 7 | Execute with Test Adjustment | NOT STARTED |
+| 8 | Validate | NOT STARTED |
+
+Options:
+- **resume** -> Skip to Stage <N> and continue from where it left off
+- **restart** -> Discard saved state and start fresh from Stage 1
+```
+
+6. If the user chooses **resume**: set orchestrator state from the state file (slug, prd_path, plan_path, brief_path, contract_path, test_plan_path, requirement, user_prefs) and jump directly to the current stage. For execution stage, the subagent will run JIRA reconciliation (Step 1.5) automatically.
+7. If the user chooses **restart**: delete the state file, proceed with Pre-Flight Checks as normal.
+8. If no state file exists: proceed with Pre-Flight Checks as normal.
+
+---
+
 ## Pre-Flight Checks
 
 Before any stage begins, the orchestrator performs the following checks. All checks must pass before Stage 1 starts.
@@ -313,9 +392,9 @@ Please review and approve to proceed to Design Brief generation.
 Options: approve | edit | abort
 ```
 
-**If approved** -> proceed to Stage 2
+**If approved** -> update state file (Stage 1 done, current_stage: 2) and commit -> proceed to Stage 2
 **If edit requested** -> wait for user edits, then re-validate with `/validate`
-**If aborted** -> stop pipeline, log residual artifacts (AC 1.10)
+**If aborted** -> update state file (aborted at Gate 1) and commit -> stop pipeline, log residual artifacts (AC 1.10)
 
 ---
 
@@ -387,9 +466,9 @@ Design Brief generated: docs/tdd/<slug>/design-brief.md
 Options: provide mock URL | edit brief | abort
 ```
 
-**When user provides mock URL** -> store in `user_prefs.mock_url`, proceed to Stage 3
+**When user provides mock URL** -> store in `user_prefs.mock_url`, update state file (Stage 2 done, current_stage: 3, mock_url) and commit -> proceed to Stage 3
 **If edit requested** -> wait for user edits, then re-validate
-**If aborted** -> stop pipeline, log residual artifacts (AC 1.10)
+**If aborted** -> update state file (aborted at Gate 2) and commit -> stop pipeline, log residual artifacts (AC 1.10)
 
 ---
 
@@ -476,9 +555,9 @@ You can correct any misidentified elements or missing routes before proceeding.
 Options: approve | edit | abort
 ```
 
-**If approved** -> proceed to Stage 4
+**If approved** -> update state file (Stage 3 done, current_stage: 4) and commit -> proceed to Stage 4
 **If edit requested** -> user corrects the UI contract, then re-validate
-**If aborted** -> stop pipeline, log residual artifacts (AC 1.10)
+**If aborted** -> update state file (aborted at Gate 3) and commit -> stop pipeline, log residual artifacts (AC 1.10)
 
 ---
 
@@ -559,9 +638,9 @@ Please review and approve to proceed to dev plan generation.
 Options: approve | edit | abort
 ```
 
-**If approved** -> proceed to Stage 5
+**If approved** -> update state file (Stage 4 done, current_stage: 5) and commit -> proceed to Stage 5
 **If edit requested** -> wait for user edits, then re-validate
-**If aborted** -> stop pipeline, log residual artifacts (AC 1.10)
+**If aborted** -> update state file (aborted at Gate 4) and commit -> stop pipeline, log residual artifacts (AC 1.10)
 
 ---
 
@@ -687,9 +766,9 @@ Please review and approve to proceed to test development.
 Options: approve | edit | abort
 ```
 
-**If approved** -> proceed to Stage 6
+**If approved** -> update state file (Stage 5 done, current_stage: 6) and commit -> proceed to Stage 6
 **If edit requested** -> wait for user edits, then re-validate
-**If aborted** -> stop pipeline, log residual artifacts (AC 1.10)
+**If aborted** -> update state file (aborted at Gate 5) and commit -> stop pipeline, log residual artifacts (AC 1.10)
 
 ---
 
@@ -783,9 +862,9 @@ Please review and approve to proceed to application development.
 Options: approve | edit | abort
 ```
 
-**If approved** -> proceed to Stage 7
+**If approved** -> update state file (Stage 6 done, current_stage: 7) and commit -> proceed to Stage 7
 **If edit requested** -> wait for user edits, re-run self-health gate
-**If aborted** -> stop pipeline, log residual artifacts (AC 1.10)
+**If aborted** -> update state file (aborted at Gate 6) and commit -> stop pipeline, log residual artifacts (AC 1.10)
 
 ---
 
@@ -887,6 +966,8 @@ Important:
 ### GATE 7: Per-PR Approval (AC 8.5)
 
 Gate 7 is handled inside the Stage 7 subagent -- each task's PR requires user approval before merge. The subagent interacts with the user directly for these approvals since they are tightly coupled to the execution loop.
+
+When Stage 7 subagent completes -> update state file (Stage 7 done, current_stage: 8, update tasks object with final statuses/PRs from subagent response) and commit.
 
 ---
 
@@ -1054,9 +1135,9 @@ Overall Verdict: PASS / FAIL
 Options: approve | fix | abort
 ```
 
-**If approved** -> proceed to Completion
+**If approved** -> update state file (Stage 8 done, test_result: PASS) and commit -> proceed to Completion
 **If fix requested** -> wait for user fixes, then re-run Stage 8 validation
-**If aborted** -> stop pipeline, log residual artifacts (AC 1.10)
+**If aborted** -> update state file (aborted at Gate 8, test_result: FAIL) and commit -> stop pipeline, log residual artifacts (AC 1.10)
 
 ---
 
@@ -1160,7 +1241,7 @@ If the pipeline is interrupted at any stage:
 - **Stage 7 interrupted**: Re-run `/execute @plan` -- it reads task statuses from the dev plan, reconciles JIRA statuses, and resumes from where it left off. Test adjustment tracking resets -- cumulative adjustments from the previous partial run are not preserved.
 - **Stage 8 interrupted**: Re-run Stage 8 validation -- `/test` and traceability are idempotent, scan everything from scratch. Metrics are only written on successful completion, so partial runs leave no stale metrics.
 
-**Re-running `/tdd-fullpipeline`** after interruption: The orchestrator should check for existing artifacts before spawning each stage subagent:
+**Re-running `/tdd-fullpipeline`** after interruption: The orchestrator checks `docs/pipeline-state/<slug>.json` at startup (see "Startup: Resume Detection" section). If a state file exists, it offers to resume from the last completed stage. If no state file exists, it falls back to checking disk artifacts:
 - If `docs/prd/<slug>.md` exists, ask whether to skip Stage 1.
 - If `docs/tdd/<slug>/design-brief.md` exists, ask whether to skip Stage 2.
 - If `docs/tdd/<slug>/ui-contract.md` exists, ask whether to skip Stage 3.
@@ -1170,6 +1251,8 @@ If the pipeline is interrupted at any stage:
 - Check dev plan task statuses for Stage 7 resumption.
 
 This avoids re-running completed stages.
+
+**Using `/clear_and_go`:** The recommended way to handle context clearing mid-pipeline. Run `/clear_and_go` before clearing — it saves a state file, confirms with the user, and tells them to re-run the same command after clearing. The orchestrator will detect the state file and resume automatically.
 
 ### Pipeline Abort (AC 1.10)
 
@@ -1202,7 +1285,14 @@ The orchestrator will detect existing artifacts and offer to skip completed stag
 
 ## Completion
 
-When all stages complete (Stage 8 subagent returns with PASS verdict), present the final report:
+When all stages complete (Stage 8 subagent returns with PASS verdict):
+
+1. **Mark the state file as completed** — update `docs/pipeline-state/<slug>.json`: set `current_stage` to `"completed"`, all stages to `"done"` (or `"skipped"`), and commit:
+```bash
+git add docs/pipeline-state/<slug>.json && git commit -m "pipeline: mark <slug> as completed"
+```
+
+2. Present the final report:
 
 **Heading rules:**
 - All smoke tests PASS and Stage 8 validation PASS -> "TDD Pipeline Complete"
