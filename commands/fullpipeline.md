@@ -121,19 +121,26 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
 
 **Field definitions:**
 - `schema_version` — always integer `1` (increment on breaking schema changes). On read, validate type is integer; reject strings like `"1"`. Future schema changes increment this value; readers skip files with unrecognized versions (no forward-compatibility migration)
+- `pipeline` — string identifying the pipeline type: `"fullpipeline"` for this pipeline. Used by Resume Detection to filter state files by pipeline type and by the pipeline-type mismatch check before writing
+- `slug` — kebab-case identifier derived from the PRD title; must match `^[a-z0-9][a-z0-9_-]{0,63}$`. Used as the key for all artifact paths and the state file name (`<slug>.json`)
+- `requirement` — verbatim copy of the original requirement text from `$ARGUMENTS`. Stored for resume matching (substring match fallback) and for reference. Do not include secrets, API keys, or PII
 - `pipeline_status` — `"active"` during execution, `"completed"` on success, `"aborted"` on user abort. Valid transitions: `active → completed`, `active → aborted`. Exception: `/clear_and_go` may overwrite a completed/aborted file with `"active"` after explicit user confirmation (manual override only — orchestrators never perform this transition)
 - `current_stage` — always an integer (1–5). On completion, set to 5 (the final stage). On abort, remains at the stage where abort occurred (the aborting stage's `status` is set to `"aborted"`). Note: `stages` object uses string keys (`"1"`, `"2"`, ...) per JSON convention; `current_stage` is an integer for arithmetic comparisons
 - `stage_name` — human-readable name of the current stage. On write, MUST match the canonical name for `current_stage`. Informational; not validated on read (future schema versions may add new names). Canonical names: stage 1 = "Requirement → PRD", stage 2 = "PRD → Dev Plan", stage 3 = "Dev Plan → JIRA", stage 4 = "Execute with Ralph Loop", stage 5 = "Test Verification"
+- `stages` — object keyed by stage number as string (`"1"` through `"5"`). Each entry contains `status` and optional fields (`artifact`, `jira_epic`, `summary`). All 5 keys must be present even for stages not yet reached
 - Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`. On read, reject unknown values. `"aborted"` means the user chose to stop the pipeline at this stage — stages after the aborted stage remain `"not_started"`, and the aborted stage itself was not completed
 - Stage `jira_epic` — optional string; present on Stage 3 when JIRA import has completed. Contains the JIRA epic key (e.g., `"PIPE-35"`). Omitted when JIRA is skipped or stage not yet reached
 - Stage `summary` — string; brief human-readable outcome of the stage. Empty string `""` for `not_started` stages. Informational; not validated on read
 - Stage `artifact` — optional; omitted for execution stages (Stage 4) where output is per-task PRs tracked in the `tasks` object. When present on `not_started` stages, it is the expected output path (informational), not a claim of existence on disk
 - Task `status` — `"done"` | `"in_progress"` | `"pending"` (no `"aborted"` value — aborted pipelines stop execution; individual tasks remain at their last status). On read, reject unknown values. Note: tasks use `"pending"` while stages use `"not_started"` — this is intentional: `"pending"` indicates a task is queued for execution within an active stage, while `"not_started"` indicates a stage the pipeline has not reached yet
+- Task `jira` — string; JIRA issue key (e.g., `"PIPE-42"`) for this task. Present when JIRA is enabled; omitted when JIRA is skipped
+- Task `branch` — string; git branch name for this task (e.g., `"feat/<slug>/task-1.1"`). Present when a branch has been created; omitted before task execution begins
 - Task `pr` — integer (PR number) when a PR has been created; omit the field entirely (not `null`) when no PR exists yet
 - `tasks` — object keyed by task ID (e.g., `"1.1"`); empty `{}` until Stage 4 begins. Writers MUST NOT populate `tasks` before the execution stage starts. On read, validate that each task entry has a `status` field with a valid enum value
 - `test_result` — `null` until Stage 5 completes, then `"PASS"` | `"FAIL"` | `"SKIPPED"`. On read, reject unknown non-null values. On abort, the orchestrator sets `"FAIL"` and logs: `"INFO: [fullpipeline] test_result set to FAIL (reason: user abort at stage <N>)"` — there is no separate `"ABORTED"` enum value; check `pipeline_status` to distinguish test failure from user abort. On genuine test failure, log: `"INFO: [fullpipeline] test_result set to FAIL (reason: test verification failed)"`
 - `user_prefs` — object with known keys: `skip_jira` (boolean). Additional keys may be added; readers MUST ignore unknown keys (forward-compatible). Writers MUST NOT remove keys they don't recognize when updating the state file
 - `known_issues` — array of strings; `[]` when no issues. Writers MUST enforce: individual entries under 200 characters (truncate with `"…"` suffix if needed), array under 10 entries (keep most recent). Do not include secrets, API keys, or PII in entries — they are committed to git history
+- `git_branch` — string; the git branch name when the state file was last written. Used by Resume Detection to warn if the current branch differs from the saved branch. Informational; not validated on read
 - `updated_at` — ISO 8601 timestamp in UTC (e.g., `"2026-03-05T14:30:00Z"`); set on every write. Always use UTC. On read, accept any valid ISO 8601 string; do not reject if timezone offset differs (normalize to UTC for display)
 - `test_adjustments` — not present in fullpipeline state files (TDD pipeline only). Writers MUST NOT include this field in fullpipeline state files. If found during resume, log a warning and ignore
 
@@ -141,7 +148,9 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
 
 **Write rule:** After every gate approval or abort, update the state file and commit:
 1. **Pipeline-type mismatch check** — before writing, if a state file already exists, read its `pipeline` field. If it does not match `"fullpipeline"`, warn: `"WARNING: [fullpipeline] Existing state file is for pipeline '<existing_pipeline>' — overwriting will destroy the other pipeline's state."` Proceed only if the user explicitly confirms.
-2. **Write and log** — log: `"INFO: [fullpipeline] Writing state file: docs/pipeline-state/<slug>.json (stage <N>, status: <pipeline_status>)"`
+2. **Update `stage_name`** — every write that changes `current_stage` MUST also set `stage_name` to the canonical name for the new stage (see `stage_name` field definition above).
+3. **Abort checkpoint log** — on abort, after writing the state file, log: `"INFO: [fullpipeline] Checkpoint saved: slug=<slug>, stage <N> aborted"` (in addition to the "Pipeline aborted" log in the Pipeline Abort section).
+4. **Write and log** — log: `"INFO: [fullpipeline] Writing state file: docs/pipeline-state/<slug>.json (stage <N>, status: <pipeline_status>)"`
 ```bash
 mkdir -p docs/pipeline-state
 # (write/update docs/pipeline-state/<slug>.json)
@@ -186,7 +195,7 @@ Before starting Stage 1, check if any state file exists for this pipeline type.
 2. List all files in `docs/pipeline-state/*.json`
 3. For each file, read and validate:
    - Well-formed JSON (skip files that fail parsing — log: `"WARNING: [fullpipeline] <filename> is not valid JSON — skipping"`)
-   - Required fields present: `pipeline`, `slug`, `requirement`, `current_stage`, `stages`, `pipeline_status` (skip if missing — log: `"WARNING: [fullpipeline] <filename> missing required field '<field>' — skipping"`)
+   - Required fields present: `schema_version`, `pipeline`, `slug`, `requirement`, `current_stage`, `stages`, `pipeline_status` (skip if missing — log: `"WARNING: [fullpipeline] <filename> missing required field '<field>' — skipping"`)
    - `schema_version` equals `1` (skip if not — log: `"WARNING: [fullpipeline] <filename> has unsupported schema_version <value> — skipping"`)
    - `current_stage` is an integer between 1 and 5 (skip if out of range — log: `"WARNING: [fullpipeline] <filename> has invalid current_stage <value> — skipping"`)
    - `stages` object contains keys `"1"` through `"5"` (skip if missing keys — log: `"WARNING: [fullpipeline] <filename> has incomplete stages object — skipping"`)
@@ -258,6 +267,8 @@ Important:
 ```
 
 When the subagent completes, extract the slug and PRD path. Store them as orchestrator state.
+
+**Critic table column convention:** Gates that run a scored Ralph Loop (Gate 1, Gate 2) use 3-column tables showing scores or details. All other gates (Gate 5) use 2-column tables (Critic | Verdict) since they display a single-iteration snapshot.
 
 ### GATE 1: PRD Approval
 
@@ -523,9 +534,9 @@ Present the subagent's summary to the user:
 | Security | PASS ✅ |
 | Performance | PASS ✅ |
 | Data Integrity | PASS ✅ |
-| Observability | N/A |
-| API Contract | N/A |
-| Designer | N/A |
+| Observability | PASS ✅ / N/A |
+| API Contract | PASS ✅ / N/A |
+| Designer | PASS ✅ / N/A |
 
 Overall: PASS / FAIL
 Ralph Loop iterations: N
