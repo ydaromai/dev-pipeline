@@ -131,7 +131,7 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
     "1.2": { "status": "in_progress", "jira": "<key>" },
     "2.1": { "status": "pending", "jira": "<key>" }
   },
-  "test_result": "PASS|FAIL|SKIPPED",
+  "test_result": null,
   "test_adjustments": {
     "structural": 0,
     "behavioral": 0,
@@ -148,10 +148,15 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
 - `schema_version` — always `1` (increment on breaking schema changes)
 - `pipeline_status` — `"active"` during execution, `"completed"` on success, `"aborted"` on user abort
 - `current_stage` — always an integer (1–8). Remains at the last active stage even after completion/abort
+- `stage_name` — human-readable name of the current stage (e.g., `"Execute with Test Adjustment"`). Informational; not validated on read
 - Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`
-- Task `status` — `"done"` | `"in_progress"` | `"pending"`
 - Stage `artifact` — optional; omitted for execution stages (Stage 7) where output is per-task PRs tracked in the `tasks` object
-- `test_adjustments` — cumulative test adjustment counts from Stage 7, persisted across interruptions to enforce the 20% behavioral threshold
+- Task `status` — `"done"` | `"in_progress"` | `"pending"`
+- `tasks` — object keyed by task ID (e.g., `"1.1"`); empty `{}` until execution stage begins
+- `test_result` — `null` until Stage 8 completes, then `"PASS"` | `"FAIL"` | `"SKIPPED"`
+- `test_adjustments` — TDD only: cumulative test adjustment counts from Stage 7, persisted across interruptions to enforce the 20% behavioral threshold. Always an object with `{ "structural": 0, "behavioral": 0, "security": 0 }` as initial values before Stage 7 begins
+- `known_issues` — array of strings; `[]` when no issues
+- `updated_at` — ISO 8601 timestamp; set on every write
 
 **Write rule:** After every gate approval or abort, update the state file and commit:
 ```bash
@@ -159,11 +164,13 @@ mkdir -p docs/pipeline-state
 # (write/update docs/pipeline-state/<slug>.json)
 git add docs/pipeline-state/<slug>.json && git commit -m "pipeline: update state for <slug> — stage <N>"
 ```
+If the state file write itself fails (e.g., permission error, disk full), log: `"ERROR: Failed to write state file docs/pipeline-state/<slug>.json — <error>"` and continue — the pipeline can still be resumed via disk artifact detection.
 If the git commit fails (e.g., nothing changed), continue — the state file on disk is the source of truth.
 
 **Design constraints:**
 - **Single-session:** The state file assumes one active session per slug. Concurrent runs with the same slug will overwrite each other. This is by design — pipeline execution is inherently sequential.
 - **Accumulation:** Completed state files remain in `docs/pipeline-state/`. The orchestrator only acts on files with `pipeline_status: "active"`, so completed/aborted files are inert. Delete them manually if cleanup is desired.
+- **Atomic writes:** The state file is written and then committed. If the process crashes mid-write, the file may be truncated. Resume Detection handles this gracefully — corrupt JSON is skipped (step 3) and the orchestrator falls back to disk artifact detection. This is an accepted trade-off for simplicity.
 
 ---
 
@@ -171,19 +178,23 @@ If the git commit fails (e.g., nothing changed), continue — the state file on 
 
 Before Pre-Flight Checks, check if any state file exists for this pipeline type.
 
-1. List all files in `docs/pipeline-state/*.json`
-2. For each file, read and validate:
+1. **Fast path** — derive slug from `$ARGUMENTS` (same kebab-case logic as Stage 1) and check if `docs/pipeline-state/<derived-slug>.json` exists. If it does, read and validate it directly (skip full directory scan). If not, proceed to step 2.
+2. List all files in `docs/pipeline-state/*.json`
+3. For each file, read and validate:
    - Well-formed JSON (skip files that fail parsing — log: `"Warning: <filename> is not valid JSON — skipping"`)
    - Required fields present: `pipeline`, `slug`, `requirement`, `current_stage`, `stages`, `pipeline_status` (skip if missing — log: `"Warning: <filename> missing required field '<field>' — skipping"`)
+   - `schema_version` equals `1` (skip if not — log: `"Warning: <filename> has unsupported schema_version <value> — skipping"`)
    - `current_stage` is an integer between 1 and 8 (skip if out of range — log: `"Warning: <filename> has invalid current_stage <value> — skipping"`)
-3. Filter to files where `pipeline` equals `"tdd-fullpipeline"` and `pipeline_status` equals `"active"`. If exactly one match is found, use it. If multiple matches, present all and ask the user which to resume.
-4. **Match by slug** — derive slug from `$ARGUMENTS` (same kebab-case logic as Stage 1) and match against the `slug` field. If slug matching fails, fall back to case-insensitive substring match of `$ARGUMENTS` against the `requirement` field.
-5. **Verify disk artifacts** — for the matched state file, confirm that artifacts referenced in `stages` actually exist on disk (e.g., if Stage 1 is "done", check `docs/prd/<slug>.md` exists). If any claimed artifact is missing, include it in the resume offer. For Stage 6, verify the test branch exists (`git branch --list tdd/<slug>/tests`).
-6. **Check git branch** — if `git_branch` in the state file differs from the current branch, note it in the resume offer.
-7. **Re-validate user inputs** — if `user_prefs.mock_url` is present, re-run URL validation (scheme check, RFC 1918 check) before resuming.
-8. If all stages in the state file are `"not_started"`, treat as equivalent to "no state file" — skip the resume prompt and proceed fresh.
-9. If this was the only state file and it was corrupt (step 2 rejected it), warn: `"Found corrupt state file <filename>. Falling back to disk artifact detection."` Then check disk artifacts as described in the Error Recovery section.
-10. If a valid matching state file is found, present the resume offer:
+   - `stages` object contains keys `"1"` through `"8"` (skip if missing keys — log: `"Warning: <filename> has incomplete stages object — skipping"`)
+   - `slug` matches the validation pattern `^[a-z0-9][a-z0-9_-]{0,63}$` (skip if not — log: `"Warning: <filename> has invalid slug '<value>' — skipping"`)
+4. Filter to files where `pipeline` equals `"tdd-fullpipeline"` and `pipeline_status` equals `"active"`. If exactly one match is found, use it. If multiple matches, present all and ask the user which to resume.
+5. **Match by slug** — match the derived slug (from step 1) against the `slug` field. If slug matching fails (slug derivation may not reproduce the original PRD-derived slug), fall back to case-insensitive substring match of `$ARGUMENTS` against the `requirement` field. If neither matches any active state file, proceed to step 14 (start fresh). Log: `"Resume match: slug=<slug>, file=<filename>, method=slug|requirement_substring"`
+6. **Verify disk artifacts** — for the matched state file, confirm that artifacts referenced in `stages` actually exist on disk (e.g., if Stage 1 is "done", check `docs/prd/<slug>.md` exists). If any claimed artifact is missing, include it in the resume offer. For Stage 6, verify the test branch exists (`git branch --list tdd/<slug>/tests`).
+7. **Check git branch** — if `git_branch` in the state file differs from the current branch, note it in the resume offer.
+8. **Re-validate user inputs** — if `user_prefs.mock_url` is present, re-run URL validation (scheme check, RFC 1918 check) before resuming.
+9. If all stages in the state file are `"not_started"`, treat as equivalent to "no state file" — skip the resume prompt and proceed fresh.
+10. If this was the only state file and it was corrupt (step 3 rejected it), warn: `"Found corrupt state file <filename>. Falling back to disk artifact detection."` Then check disk artifacts as described in the Error Recovery section.
+11. If a valid matching state file is found, present the resume offer:
 
 ```
 ## Existing Pipeline Detected
@@ -210,9 +221,9 @@ Options:
 - **restart** -> Discard saved state and start fresh from Stage 1
 ```
 
-11. If the user chooses **resume**: set orchestrator state from the state file (slug, prd_path, plan_path, brief_path, contract_path, test_plan_path, requirement, user_prefs, test_result, test_adjustments) and jump directly to the current stage. If git branch differs, warn but proceed. For execution stage, the subagent will run JIRA reconciliation (Step 1.5) automatically and load `test_adjustments` from the state file to preserve cumulative adjustment counts. Output: `"Checkpoint loaded: resuming from Stage <N>"`
-12. If the user chooses **restart**: delete the state file, proceed with Pre-Flight Checks as normal.
-13. If no state file exists: proceed with Pre-Flight Checks as normal.
+12. If the user chooses **resume**: set orchestrator state from the state file (slug, prd_path, plan_path, brief_path, contract_path, test_plan_path, requirement, user_prefs, test_result, test_adjustments) and jump directly to the current stage. If git branch differs, warn but proceed. For execution stage, the subagent will run JIRA reconciliation (Step 1.5) automatically and load `test_adjustments` from the state file to preserve cumulative adjustment counts. Output: `"Checkpoint loaded: resuming from Stage <N>"`
+13. If the user chooses **restart**: delete the state file, proceed with Pre-Flight Checks as normal.
+14. If no state file exists: proceed with Pre-Flight Checks as normal.
 
 ---
 
@@ -502,7 +513,7 @@ Design Brief generated: docs/tdd/<slug>/design-brief.md
 Options: provide mock URL | edit brief | abort
 ```
 
-**When user provides mock URL** -> store in `user_prefs.mock_url`, update state file (stage 2 status: `"done"`, current_stage: 3, mock_url) and commit. Output: `"Checkpoint saved: Stage 2 done"` -> proceed to Stage 3
+**When user provides mock URL** -> store in `user_prefs.mock_url`, update state file (stage 2 status: `"done"`, current_stage: 3, user_prefs.mock_url: `<url>`) and commit. Output: `"Checkpoint saved: Stage 2 done"` -> proceed to Stage 3
 **If edit requested** -> wait for user edits, then re-validate
 **If aborted** -> update state file (stage 2 status: `"aborted"`, pipeline_status: `"aborted"`) and commit -> stop pipeline, log residual artifacts (AC 1.10)
 

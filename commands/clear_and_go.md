@@ -36,7 +36,7 @@ No active pipeline detected in this conversation.
 
 ```
 Pipeline is already complete — nothing to checkpoint.
-The state file has been marked as completed. No resume is needed.
+The state file was already marked as completed by the orchestrator. No resume is needed.
 ```
 
 ---
@@ -76,7 +76,9 @@ Cross-check conversation understanding against actual disk state.
 
 Also run: `git rev-parse --abbrev-ref HEAD` and `git log --oneline -5`
 
-Flag any discrepancies between conversation state and disk state.
+Flag any discrepancies between conversation state and disk state using structured messages:
+- `"WARNING: Stage <N> marked done in conversation but <artifact_path> not found on disk"`
+- `"WARNING: Conversation says stage <N> is <status> but disk artifact exists at <path>"`
 
 ---
 
@@ -124,7 +126,7 @@ Wait for user response. If they correct anything, update before proceeding.
 
 Once the user approves, write the state file to `docs/pipeline-state/<slug>.json`.
 
-**Note:** If a state file already exists for this slug (written by the orchestrator at a prior gate), this write **overwrites** it with the current checkpoint. This is intentional — `/clear_and_go` captures the most up-to-date state from the conversation, which may include progress beyond the last gate commit.
+**Note:** If a state file already exists for this slug (written by the orchestrator at a prior gate), this write **overwrites** it with the current checkpoint. This is intentional — `/clear_and_go` captures the most up-to-date state from the conversation, which may include progress beyond the last gate commit. Log: `"Note: overwriting existing state file (previous current_stage: <N>, new current_stage: <M>)"`
 
 Create the `docs/pipeline-state/` directory if it doesn't exist.
 
@@ -223,13 +225,17 @@ Create the `docs/pipeline-state/` directory if it doesn't exist.
 
 **Field definitions:**
 - `schema_version` — always `1`
-- `pipeline_status` — always `"active"` when written by `/clear_and_go`
+- `pipeline_status` — always `"active"` when written by `/clear_and_go`. Canonical enum (set by orchestrators): `"active"` | `"completed"` | `"aborted"`
 - `current_stage` — always an integer (1–5 for fullpipeline, 1–8 for TDD)
+- `stage_name` — human-readable name of the current stage. Informational; not validated on read
 - Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`
 - Stage `artifact` — optional; omitted for execution stages (Stage 4/7) where output is per-task PRs tracked in the `tasks` object
 - Task `status` — `"done"` | `"in_progress"` | `"pending"`
+- `tasks` — object keyed by task ID (e.g., `"1.1"`); empty `{}` until execution stage begins
 - `test_result` — `null` until Stage 5/8 completes, then `"PASS"` | `"FAIL"` | `"SKIPPED"`
-- `test_adjustments` — TDD only: cumulative test adjustment counts from Stage 7
+- `test_adjustments` — TDD only: cumulative test adjustment counts from Stage 7, persisted across interruptions to enforce the 20% behavioral threshold. Always `{ "structural": 0, "behavioral": 0, "security": 0 }` as initial values before Stage 7
+- `known_issues` — array of strings; `[]` when no issues
+- `updated_at` — ISO 8601 timestamp; set on every write
 
 **Design constraints:**
 - **Single-session:** The state file assumes one active session per slug. Concurrent runs with the same slug will overwrite each other. This is by design — pipeline execution is inherently sequential.
