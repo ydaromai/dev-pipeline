@@ -120,21 +120,21 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
 ```
 
 **Field definitions:**
-- `schema_version` — always `1` (increment on breaking schema changes). Future schema changes increment this value; readers skip files with unrecognized versions (no forward-compatibility migration)
+- `schema_version` — always integer `1` (increment on breaking schema changes). On read, validate type is integer; reject strings like `"1"`. Future schema changes increment this value; readers skip files with unrecognized versions (no forward-compatibility migration)
 - `pipeline_status` — `"active"` during execution, `"completed"` on success, `"aborted"` on user abort. Valid transitions: `active → completed`, `active → aborted`. Exception: `/clear_and_go` may overwrite a completed/aborted file with `"active"` after explicit user confirmation (manual override only — orchestrators never perform this transition)
-- `current_stage` — always an integer (1–5). On completion, set to the final stage number (5). Note: `stages` object uses string keys (`"1"`, `"2"`, ...) per JSON convention; `current_stage` is an integer for arithmetic comparisons
-- `stage_name` — human-readable name of the current stage. Informational; not validated on read. Canonical names: "Requirement → PRD", "PRD → Dev Plan", "Dev Plan → JIRA", "Execute with Ralph Loop", "Test Verification"
-- Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`
+- `current_stage` — always an integer (1–5). On completion, set to 5 (the final stage). On abort, remains at the stage where abort occurred (the aborting stage's `status` is set to `"aborted"`). Note: `stages` object uses string keys (`"1"`, `"2"`, ...) per JSON convention; `current_stage` is an integer for arithmetic comparisons
+- `stage_name` — human-readable name of the current stage. On write, MUST match the canonical name for `current_stage`. Informational; not validated on read (future schema versions may add new names). Canonical names: stage 1 = "Requirement → PRD", stage 2 = "PRD → Dev Plan", stage 3 = "Dev Plan → JIRA", stage 4 = "Execute with Ralph Loop", stage 5 = "Test Verification"
+- Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`. On read, reject unknown values. `"aborted"` means the user chose to stop the pipeline at this stage — stages after the aborted stage remain `"not_started"`, and the aborted stage itself was not completed
 - Stage `summary` — string; brief human-readable outcome of the stage. Empty string `""` for `not_started` stages. Informational; not validated on read
 - Stage `artifact` — optional; omitted for execution stages (Stage 4) where output is per-task PRs tracked in the `tasks` object. When present on `not_started` stages, it is the expected output path (informational), not a claim of existence on disk
-- Task `status` — `"done"` | `"in_progress"` | `"pending"` (no `"aborted"` value — aborted pipelines stop execution; individual tasks remain at their last status)
+- Task `status` — `"done"` | `"in_progress"` | `"pending"` (no `"aborted"` value — aborted pipelines stop execution; individual tasks remain at their last status). On read, reject unknown values
 - Task `pr` — integer (PR number) when a PR has been created; omit the field entirely (not `null`) when no PR exists yet
-- `tasks` — object keyed by task ID (e.g., `"1.1"`); empty `{}` until Stage 4 begins
-- `test_result` — `null` until Stage 5 completes, then `"PASS"` | `"FAIL"` | `"SKIPPED"`. Note: on abort, the orchestrator sets `"FAIL"` — there is no separate `"ABORTED"` enum value; check `pipeline_status` to distinguish test failure from user abort
-- `user_prefs` — object with known keys: `skip_jira` (boolean). Additional keys may be added; readers should ignore unknown keys
-- `known_issues` — array of strings; `[]` when no issues. Keep individual entries concise (under 200 characters) and the array small (under 10 entries) to stay within the 2 KB state file target. Do not include secrets, API keys, or PII in entries — they are committed to git history
-- `updated_at` — ISO 8601 timestamp in UTC (e.g., `"2026-03-05T14:30:00Z"`); set on every write. Always use UTC to ensure comparability across sessions and machines
-- `test_adjustments` — not present in fullpipeline state files (TDD pipeline only). If found during resume, log a warning and ignore
+- `tasks` — object keyed by task ID (e.g., `"1.1"`); empty `{}` until Stage 4 begins. Writers MUST NOT populate `tasks` before the execution stage starts. On read, validate that each task entry has a `status` field with a valid enum value
+- `test_result` — `null` until Stage 5 completes, then `"PASS"` | `"FAIL"` | `"SKIPPED"`. On read, reject unknown non-null values. Note: on abort, the orchestrator sets `"FAIL"` — there is no separate `"ABORTED"` enum value; check `pipeline_status` to distinguish test failure from user abort
+- `user_prefs` — object with known keys: `skip_jira` (boolean). Additional keys may be added; readers MUST ignore unknown keys (forward-compatible). Writers MUST NOT remove keys they don't recognize when updating the state file
+- `known_issues` — array of strings; `[]` when no issues. Writers MUST enforce: individual entries under 200 characters (truncate with `"…"` suffix if needed), array under 10 entries (keep most recent). Do not include secrets, API keys, or PII in entries — they are committed to git history
+- `updated_at` — ISO 8601 timestamp in UTC (e.g., `"2026-03-05T14:30:00Z"`); set on every write. Always use UTC. On read, accept any valid ISO 8601 string; do not reject if timezone offset differs (normalize to UTC for display)
+- `test_adjustments` — not present in fullpipeline state files (TDD pipeline only). Writers MUST NOT include this field in fullpipeline state files. If found during resume, log a warning and ignore
 
 **Important:** Do not include secrets, API keys, or PII in the requirement text — it is stored verbatim in the state file and committed to git history. Keep requirement text concise (recommended: under 2 KB) — excessively long text bloats the state file and git history without benefit.
 
@@ -167,7 +167,7 @@ Before any stage begins, validate the slug (derived from PRD title or provided b
 ^[a-z0-9][a-z0-9_-]{0,63}$
 ```
 
-**Requirement length check:** If `$ARGUMENTS` exceeds 4 KB, warn the user: `"WARNING: [fullpipeline] Requirement text is <N> bytes — recommended limit is 4 KB. Large requirement text bloats the state file and git history. Continue anyway?"` Proceed only if the user confirms.
+**Requirement length check:** If `$ARGUMENTS` exceeds 4 KB, warn the user: `"WARNING: [fullpipeline] Requirement text is <N> bytes — recommended limit is 4 KB. Large requirement text bloats the state file and git history. Continue anyway?"` Proceed only if the user confirms. Hard cap: reject requirement text exceeding 32 KB — `"ERROR: [fullpipeline] Requirement text is <N> bytes — maximum is 32 KB. Shorten the requirement or split into multiple pipeline runs."` Reject requirement text containing control characters (bytes 0x00–0x1F except tab 0x09, newline 0x0A, carriage return 0x0D) — `"ERROR: [fullpipeline] Requirement text contains control characters — remove them before proceeding."`
 
 **Reject** slugs containing forward slash (`/`), backslash (`\`), double dot (`..`), null bytes (`\0`), or spaces. These prevent path traversal via `docs/prd/<slug>.md` and `docs/pipeline-state/<slug>.json`. The regex also guarantees shell safety — the slug is interpolated into git commit messages and shell commands. Any future relaxation of this regex must be reviewed for shell injection risk.
 
@@ -548,7 +548,7 @@ This separation means the pipeline can be resumed at any stage by reading file s
 
 ## Pipeline Abort
 
-When a pipeline is aborted at any gate, present a structured abort report:
+When a pipeline is aborted at any gate, log: `"INFO: [fullpipeline] Pipeline aborted: slug=<slug>, stage=<N> (<stage_name>)"` and present a structured abort report:
 
 ```
 ## Pipeline Aborted at Stage <N> — <stage_name>
@@ -559,9 +559,9 @@ You may clean them up manually or re-run /fullpipeline to resume.
 
 | Artifact | Path | Status |
 |----------|------|--------|
-| PRD | docs/prd/<slug>.md | Complete / Partial / Not created |
-| Dev Plan | docs/dev_plans/<slug>.md | Complete / Partial / Not created |
-| JIRA Issues | jira-issue-mapping.json | Created / Not created |
+| PRD | docs/prd/<slug>.md | Complete |
+| Dev Plan | docs/dev_plans/<slug>.md | Partial |
+| JIRA Issues | jira-issue-mapping.json | Not created |
 | State File | docs/pipeline-state/<slug>.json | Saved (aborted) |
 
 Status values: `Complete` (artifact fully written and committed), `Partial` (artifact exists but may be incomplete), `Not created` (stage not reached), `Saved (aborted)` (state file preserved with aborted status).
@@ -591,12 +591,13 @@ If the pipeline is interrupted at any stage:
 
 When all stages complete (Stage 5 subagent returns, or Stage 5 is skipped):
 
-1. **Mark the state file as completed** — update `docs/pipeline-state/<slug>.json`: set `pipeline_status` to `"completed"`, all stages to `"done"` (or `"skipped"`), and commit:
+1. **Mark the state file as completed** — update `docs/pipeline-state/<slug>.json`: set `pipeline_status` to `"completed"`, `current_stage` to 5, all stages to `"done"` (or `"skipped"`), and commit:
 ```bash
 mkdir -p docs/pipeline-state
 # (write/update docs/pipeline-state/<slug>.json)
 git add docs/pipeline-state/<slug>.json && git commit -m "pipeline: mark <slug> as completed"
 ```
+Log: `"INFO: [fullpipeline] Pipeline completed: slug=<slug>, all stages done"`
 
 2. Present the final report:
 
