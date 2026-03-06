@@ -69,6 +69,39 @@ Reference the PRD Testing Strategy (Section 9) and `pipeline.config.yaml` test_r
 - **UI:** <if frontend files updated>
 ```
 
+## Step 3.5: AC→Task Coverage Matrix
+
+After generating the task breakdown, build a coverage matrix that maps every acceptance criterion to its implementing tasks. This catches silent feature drops before any code is written.
+
+1. **Extract all ACs** from the PRD:
+   - Section 7: Consolidated acceptance criteria list
+   - Section 5: Per-story acceptance criteria
+   - Deduplicate — Section 7 is authoritative; Section 5 may have additional detail
+
+2. **Map each AC to task(s)** in the dev plan:
+   - For each AC, identify which task(s) implement it
+   - Classify coverage status:
+     - **COVERED** — has both a UI task (page/component/action) and a backend task (API/RPC/repo)
+     - **BACKEND-ONLY** — has an RPC/repo/API task but no UI task that triggers it
+     - **UNCOVERED** — no task implements this AC at all
+
+3. **Output the matrix** as a new section in the dev plan:
+
+```markdown
+## AC Coverage Matrix
+| AC ID | Description | Priority | Coverage | UI Task | Backend Task | Notes |
+|-------|------------|----------|----------|---------|-------------|-------|
+| AC 1.1 | User can cancel order | P0 | COVERED | TASK 2.3 | TASK 1.2 | — |
+| AC 1.2 | Admin can upload catalog | P0 | BACKEND-ONLY | — | TASK 1.4 | ⚠ Missing UI task |
+| AC 2.1 | System sends PO to supplier | P1 | UNCOVERED | — | — | ❌ No implementing task |
+```
+
+4. **Hard gate:**
+   - Any **UNCOVERED P0 AC** → CRITICAL finding (blocks Step 5 critics — must add tasks first)
+   - Any **BACKEND-ONLY AC** → WARNING (requires justification: "intentionally API-only" or "missing UI task — add one")
+   - Any **UNCOVERED P1 AC** → WARNING (must be explicitly deferred with justification or covered)
+   - The matrix must have zero UNCOVERED P0 ACs and zero unjustified BACKEND-ONLY ACs before proceeding
+
 ## Step 4: Validate structure
 
 If `scripts/ai_development/validate-breakdown.js` exists, run it:

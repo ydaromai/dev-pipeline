@@ -29,6 +29,9 @@ Evaluate each item. Mark `[x]` for pass, `[✗]` for fail.
 - [ ] Per-story acceptance criteria (Section 5) are met
 - [ ] No scope creep (no features implemented that are not in PRD)
 - [ ] No missing edge cases from user story scenarios
+- [ ] All PRD acceptance criteria are reachable via UI (trace: page → button → API → RPC)
+- [ ] No backend-only features: every RPC/method with a PRD AC has a corresponding UI action
+- [ ] State machines: every transition defined in the PRD has a UI trigger in the implementation
 - [ ] Error states provide user-meaningful feedback
 - [ ] Non-functional requirements considered (performance, accessibility)
 - [ ] Non-goals are respected (nothing out-of-scope was added)
@@ -63,6 +66,9 @@ Evaluate each item. Mark `[x]` for pass, `[✗]` for fail.
 - [x/✗] Acceptance criteria testable and met
 - [x/✗] No scope creep
 - [x/✗] No missing edge cases
+- [x/✗] All ACs reachable via UI path
+- [x/✗] No backend-only features without UI triggers
+- [x/✗] State machine transitions have UI triggers
 - [x/✗] Error states user-meaningful
 - [x/✗] Non-functional requirements considered
 - [x/✗] Non-goals respected
@@ -71,10 +77,10 @@ Evaluate each item. Mark `[x]` for pass, `[✗]` for fail.
 - [x/✗/N/A] Tracking requirements traceable to metrics
 
 ### Requirements Traceability
-| PRD Requirement | Status | Implementation Location |
-|----------------|--------|------------------------|
-| US-1 AC 1.1 | Met/Unmet | file:line or N/A |
-| US-1 AC 1.2 | Met/Unmet | file:line or N/A |
+| PRD Requirement | Status | Implementation Location | UI Trigger |
+|----------------|--------|------------------------|------------|
+| US-1 AC 1.1 | Met/Unmet | file:line or N/A | page → button → method |
+| US-1 AC 1.2 | Met/Unmet | file:line or N/A | page → button → method |
 
 ### Summary
 One paragraph assessment of product alignment.

@@ -38,6 +38,9 @@ When reviewing a PRD (not code), evaluate:
 - [ ] Boundary conditions tested (empty, null, max, min, zero, negative)
 - [ ] Integration points tested (API calls, DB queries, external services)
 - [ ] UI tests added/updated (when frontend changes exist)
+- [ ] Every backend state transition has a UI trigger (button, form, link) that invokes it
+- [ ] No dead-end states: entities created via UI can reach all valid states via UI
+- [ ] Every public repository method is called from at least one UI component (or marked @internal)
 
 ### Test Quality
 - [ ] Tests are deterministic (no flaky tests, no time-dependent assertions)
@@ -86,6 +89,9 @@ When reviewing a PRD (not code), evaluate:
 - [x/✗] Boundary conditions tested
 - [x/✗] Integration points tested
 - [x/✗] UI tests (if frontend changes)
+- [x/✗] Backend state transitions have UI triggers
+- [x/✗] No dead-end entity states
+- [x/✗] Public repo methods reachable from UI
 - [x/✗] Tests deterministic
 - [x/✗] Test data realistic
 - [x/✗] Tests independent

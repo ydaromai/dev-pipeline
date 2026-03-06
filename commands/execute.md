@@ -404,6 +404,43 @@ For any SDK used in the project:
 4. **Cross-SDK seams** (e.g., AI SDK client ↔ server) are the highest-risk area
 5. **Emit a structured audit line per SDK checked** in the results, e.g., `ai@6.2.1 — toUIMessageStreamResponse: confirmed`. This provides an audit trail if a version-related issue surfaces later.
 
+### 5c.5. API→UI Wiring Audit
+
+After verifying SDK compatibility, audit that every backend method is reachable from the UI. This catches "built but unwired" features — backend code that works but has no UI trigger.
+
+1. **Scan backend methods:**
+   - Find all public `async` methods in `lib/api/*.ts`, `lib/repo/*.ts`, `lib/repositories/*.ts`, or equivalent (per project structure)
+   - Exclude test files (`*.test.*`, `*.spec.*`, `__tests__/`)
+   - Exclude methods marked `@internal` or `private`/`protected` methods
+   - Exclude methods called only by other repo/API methods (internal composition)
+
+2. **Cross-reference against UI:**
+   - For each backend method, grep `app/`, `components/`, `pages/`, `src/` for invocations (function calls, imports, hook usage)
+   - For RPC calls (`.rpc('name')`), search for the RPC name string in production UI code
+   - For state machine transitions, verify each defined transition has a UI trigger (button, form submission, link, automated UI action)
+
+3. **Output a structured audit table:**
+
+```markdown
+### API→UI Wiring Audit
+| Method | Source File | UI References | Status |
+|--------|------------|---------------|--------|
+| cancelOrder | lib/repo/orders.ts | 0 | ⚠ UNWIRED |
+| createOrder | lib/repo/orders.ts | 3 (OrderForm, OrderPage, QuickOrder) | ✅ WIRED |
+| deleteCatalogItem | lib/repo/catalog.ts | 0 | ⚠ UNWIRED |
+| sendPurchaseOrder | lib/api/po.ts | 0 | ⚠ UNWIRED |
+```
+
+4. **Classify findings:**
+   - **UNWIRED** methods are WARNINGs by default
+   - If an UNWIRED method maps to a **P0 AC** in the PRD → escalate to **CRITICAL**
+   - Methods marked `@internal`, called only by other repo methods, or used in background jobs/cron are excluded from the audit
+
+5. **Failure handling:**
+   - CRITICAL findings (P0 AC without UI path) → BLOCKING, must fix before delivery
+   - WARNING findings → report in the smoke test results table, do not block delivery
+   - If the project has no frontend (`has_frontend: false`), skip this step and report `API→UI Wiring: N/A (no frontend)`
+
 ### 5d. Core user flow verification
 
 <!-- Gate: has_frontend determines the verification path -->
