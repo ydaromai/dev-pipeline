@@ -1,6 +1,6 @@
 # /tdd-fullpipeline — Test-Driven Development Pipeline Orchestration
 
-You are executing the **TDD full pipeline**. This chains 8 pipeline stages with human gates between each stage, reordering the development process so that **tests are written before application code**. Each stage runs in a **fresh-context subagent** to keep the orchestrator lightweight — all artifacts are persisted on disk, so no conversational history needs to carry between stages.
+You are executing the **TDD full pipeline**. This chains 9 pipeline stages with human gates between each stage, reordering the development process so that **tests are written before application code**. Each stage runs in a **fresh-context subagent** to keep the orchestrator lightweight — all artifacts are persisted on disk, so no conversational history needs to carry between stages.
 
 The TDD pipeline solves a structural problem: when the same agent writes both application code and tests, the tests confirm what was built rather than what should have been built. By writing tests first — from requirements and a real UI contract — tests define expected behavior independently of implementation.
 
@@ -18,7 +18,7 @@ The TDD pipeline solves a structural problem: when the same agent writes both ap
 - Stage 3: `docs/tdd/<slug>/ui-contract.md` → `git add && git commit` right after writing
 - Stage 4: `docs/tdd/<slug>/test-plan.md` → `git add && git commit` right after writing
 - Stage 5: `docs/dev_plans/<slug>.md` → `git add && git commit` right after writing
-- After JIRA import: `docs/dev_plans/<slug>.md` (updated with keys) → `git add && git commit`
+- Stage 6: `docs/dev_plans/<slug>.md` (updated with JIRA keys) + `jira-issue-mapping.json` → `git add && git commit` right after JIRA import
 
 **Why:** Session context can compress or be lost. Files can be overwritten. Git is the only durable store. If it's not committed, it doesn't exist.
 
@@ -32,9 +32,9 @@ The TDD pipeline solves a structural problem: when the same agent writes both ap
 2. **Paste** the entire content into the subagent prompt where indicated
 3. **Never** summarize, paraphrase, or write instructions from memory
 
-**Exception — Stage 8 partial paste:** Stage 8 (Validate) needs only the smoke test infrastructure from execute.md, not the full execution loop. The Stage 8 subagent prompt explicitly instructs: "read execute.md, locate the Step 5 (Smoke Test) section, and paste only that section." This is the only authorized exception to the full-paste rule — it is explicitly scoped and the section boundaries are well-defined (Step 5 heading to Step 6 heading).
+**Exception — Stage 9 partial paste:** Stage 9 (Validate) needs only the smoke test infrastructure from execute.md, not the full execution loop. The Stage 9 subagent prompt explicitly instructs: "read execute.md, locate the Step 5 (Smoke Test) section, and paste only that section." This is the only authorized exception to the full-paste rule — it is explicitly scoped and the section boundaries are well-defined (Step 5 heading to Step 6 heading).
 
-**Why:** Command files contain precise workflow steps (critic review format, self-health gates, test adjustment taxonomy, smoke test config, failure handling) that are silently skipped when paraphrased. Stage 7 (execute.md) is 638 lines with 6 mandatory JIRA touchpoints — paraphrasing from memory loses all of them.
+**Why:** Command files contain precise workflow steps (critic review format, self-health gates, test adjustment taxonomy, smoke test config, failure handling) that are silently skipped when paraphrased. Stage 8 (execute.md) is 638 lines with 6 mandatory JIRA touchpoints — paraphrasing from memory loses all of them.
 
 ---
 
@@ -71,26 +71,32 @@ ORCHESTRATOR (this agent — lightweight coordinator)
   │
   │  ◄── GATE 5: user approves dev plan + conflict resolution ──►
   │
-  ├─ Stage 6 subagent (fresh context) ──► Tier 1 E2E test files on tdd/{slug}/tests branch
+  ├─ Stage 6 subagent (fresh context) ──► JIRA issues created
+  │    └─ critic validation (Product + Dev)
+  │    └─ dry-run preview + user confirmation
+  │
+  │  ◄── GATE 6: user confirms JIRA creation (or skips) ──►
+  │
+  ├─ Stage 7 subagent (fresh context) ──► Tier 1 E2E test files on tdd/{slug}/tests branch
   │    └─ critic subagents (parallel)
   │    └─ self-health gate: red_count = total_test_count
   │
-  │  ◄── GATE 6: user approves test code + red count ──►
+  │  ◄── GATE 7: user approves test code + red count ──►
   │
-  ├─ Stage 7 subagent (fresh context) ──► Code implemented, PRs merged
+  ├─ Stage 8 subagent (fresh context) ──► Code implemented, PRs merged
   │    └─ per-task: build subagent → review subagent → critic subagents
   │    └─ test adjustment taxonomy enforcement
   │
-  │  ◄── GATE 7: per-PR approval ──►
+  │  ◄── GATE 8: per-PR approval ──►
   │
-  └─ Stage 8 subagent (fresh context) ──► Validation report
+  └─ Stage 9 subagent (fresh context) ──► Validation report
        └─ smoke test, traceability matrix, regression check, metrics
        └─ 10-critic cumulative validation
 
-  ◄── GATE 8: final validation approval ──►
+  ◄── GATE 9: final validation approval ──►
 ```
 
-**Why fresh context?** By Gate 8, the orchestrator would be carrying the full PRD generation conversation, Design Brief extraction, Mock Analysis crawl data, test plan generation, all critic scoring iterations, dev plan generation, test development dialogue, execution loop — none of which later stages need. Each stage's meaningful output lives on disk (PRD file, design brief, UI contract, test plan, dev plan, test files). The orchestrator only tracks file paths, the slug, and user decisions.
+**Why fresh context?** By Gate 9, the orchestrator would be carrying the full PRD generation conversation, Design Brief extraction, Mock Analysis crawl data, test plan generation, all critic scoring iterations, dev plan generation, JIRA creation dialogue, test development dialogue, execution loop — none of which later stages need. Each stage's meaningful output lives on disk (PRD file, design brief, UI contract, test plan, dev plan, JIRA mapping, test files). The orchestrator only tracks file paths, the slug, and user decisions.
 
 **Subagent depth:** Max depth is 3 (orchestrator → stage → build/review → critics). Claude Code handles this natively.
 
@@ -139,10 +145,11 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
     "2": { "status": "done", "artifact": "docs/tdd/<slug>/design-brief.md", "summary": "..." },
     "3": { "status": "done", "artifact": "docs/tdd/<slug>/ui-contract.md", "summary": "..." },
     "4": { "status": "done", "artifact": "docs/tdd/<slug>/test-plan.md", "summary": "..." },
-    "5": { "status": "done", "artifact": "docs/dev_plans/<slug>.md", "jira_epic": "<key>", "summary": "..." },
-    "6": { "status": "not_started", "artifact": "tdd/<slug>/tests", "summary": "" },
-    "7": { "status": "not_started", "summary": "" },
-    "8": { "status": "not_started", "artifact": ".pipeline/metrics/<slug>.json", "summary": "" }
+    "5": { "status": "done", "artifact": "docs/dev_plans/<slug>.md", "summary": "..." },
+    "6": { "status": "done", "jira_epic": "<key>", "summary": "..." },
+    "7": { "status": "not_started", "artifact": "tdd/<slug>/tests", "summary": "" },
+    "8": { "status": "not_started", "summary": "" },
+    "9": { "status": "not_started", "artifact": ".pipeline/metrics/<slug>.json", "summary": "" }
   },
   "tasks": {
     "1.1": { "status": "done", "jira": "<key>", "pr": 42, "branch": "<name>" },
@@ -168,20 +175,20 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
 - `slug` — kebab-case identifier derived from the PRD title; must match `^[a-z0-9][a-z0-9_-]{0,63}$`. Used as the key for all artifact paths and the state file name (`<slug>.json`)
 - `requirement` — verbatim copy of the original requirement text from `$ARGUMENTS`. Stored for resume matching (substring match fallback) and for reference. Do not include secrets, API keys, or PII
 - `pipeline_status` — `"active"` during execution, `"completed"` on success, `"aborted"` on user abort. Valid transitions: `active → completed`, `active → aborted`. Exception: `/clear_and_go` may overwrite a completed/aborted file with `"active"` after explicit user confirmation (manual override only — orchestrators never perform this transition)
-- `current_stage` — always an integer (1–8). On completion, set to 8 (the final stage). On abort, remains at the stage where abort occurred (the aborting stage's `status` is set to `"aborted"`). **Consistency rule:** when `pipeline_status` is `"active"`, `stages[str(current_stage)].status` MUST be `"in_progress"` or `"not_started"` — never `"done"` or `"skipped"` (if the current stage is done, `current_stage` should have already been incremented). On completion (`pipeline_status: "completed"`), `current_stage` is the final stage and its status is `"done"`. Note: `stages` object uses string keys (`"1"`, `"2"`, ...) per JSON convention; `current_stage` is an integer for arithmetic comparisons
-- `stage_name` — human-readable name of the current stage. On write, MUST match the canonical name for `current_stage`. Informational; not validated on read (future schema versions may add new names). Canonical names: stage 1 = "Requirement → PRD", stage 2 = "PRD → Design Brief", stage 3 = "Mock App → UI Contract", stage 4 = "PRD + UI Contract → Test Plan", stage 5 = "PRD + Test Plan → Dev Plan", stage 6 = "Test Plan → Develop Tests", stage 7 = "Execute with Test Adjustment", stage 8 = "Validate"
-- `stages` — object keyed by stage number as string (`"1"` through `"8"`). Each entry contains `status` and optional fields (`artifact`, `jira_epic`, `summary`). All 8 keys must be present even for stages not yet reached
+- `current_stage` — always an integer (1–9). On completion, set to 9 (the final stage). On abort, remains at the stage where abort occurred (the aborting stage's `status` is set to `"aborted"`). **Consistency rule:** when `pipeline_status` is `"active"`, `stages[str(current_stage)].status` MUST be `"in_progress"` or `"not_started"` — never `"done"` or `"skipped"` (if the current stage is done, `current_stage` should have already been incremented). On completion (`pipeline_status: "completed"`), `current_stage` is the final stage and its status is `"done"`. Note: `stages` object uses string keys (`"1"`, `"2"`, ...) per JSON convention; `current_stage` is an integer for arithmetic comparisons
+- `stage_name` — human-readable name of the current stage. On write, MUST match the canonical name for `current_stage`. Informational; not validated on read (future schema versions may add new names). Canonical names: stage 1 = "Requirement → PRD", stage 2 = "PRD → Design Brief", stage 3 = "Mock App → UI Contract", stage 4 = "PRD + UI Contract → Test Plan", stage 5 = "PRD + Test Plan → Dev Plan", stage 6 = "Dev Plan → JIRA", stage 7 = "Test Plan → Develop Tests", stage 8 = "Execute with Test Adjustment", stage 9 = "Validate"
+- `stages` — object keyed by stage number as string (`"1"` through `"9"`). Each entry contains `status` and optional fields (`artifact`, `jira_epic`, `summary`). All 9 keys must be present even for stages not yet reached
 - Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`. On read, reject unknown values. `"aborted"` means the user chose to stop the pipeline at this stage — stages after the aborted stage remain `"not_started"`, and the aborted stage itself was not completed
-- Stage `jira_epic` — optional string; present on Stage 5 when JIRA import has completed. Contains the JIRA epic key (e.g., `"PIPE-35"`). Omitted when JIRA is skipped or stage not yet reached
+- Stage `jira_epic` — optional string; present on Stage 6 when JIRA import has completed. Contains the JIRA epic key (e.g., `"PIPE-35"`). Omitted when JIRA is skipped or stage not yet reached
 - Stage `summary` — string; brief human-readable outcome of the stage (recommended: under 500 characters). Empty string `""` for `not_started` stages. Informational; not validated on read
-- Stage `artifact` — optional; omitted for execution stages (Stage 7) where output is per-task PRs tracked in the `tasks` object. When present on `not_started` stages, it is the expected output path (informational), not a claim of existence on disk. Stage 6 artifact `"tdd/<slug>/tests"` is a git branch name, not a file path — verify via `git branch --list`, not filesystem stat. Stage 8 artifact `".pipeline/metrics/<slug>.json"` is gitignored and local-only — do not flag as missing after clone. Readers must check the `pipeline` field before accessing pipeline-specific fields
+- Stage `artifact` — optional; omitted for execution stages (Stage 8) where output is per-task PRs tracked in the `tasks` object, and for Stage 6 (JIRA) which updates the dev plan artifact in-place. When present on `not_started` stages, it is the expected output path (informational), not a claim of existence on disk. Stage 7 artifact `"tdd/<slug>/tests"` is a git branch name, not a file path — verify via `git branch --list`, not filesystem stat. Stage 9 artifact `".pipeline/metrics/<slug>.json"` is gitignored and local-only — do not flag as missing after clone. Readers must check the `pipeline` field before accessing pipeline-specific fields
 - Task `status` — `"done"` | `"in_progress"` | `"pending"` (no `"aborted"` value — aborted pipelines stop execution; individual tasks remain at their last status). On read, reject unknown values. Note: tasks use `"pending"` while stages use `"not_started"` — this is intentional: `"pending"` indicates a task is queued for execution within an active stage, while `"not_started"` indicates a stage the pipeline has not reached yet
 - Task `jira` — string; JIRA issue key (e.g., `"PIPE-42"`) for this task. Present when JIRA is enabled; omitted when JIRA is skipped
 - Task `branch` — string; git branch name for this task (e.g., `"feat/<slug>/task-1.1"`). Present when a branch has been created; omitted before task execution begins
 - Task `pr` — integer (PR number) when a PR has been created; omit the field entirely (not `null`) when no PR exists yet
-- `tasks` — object keyed by task ID (e.g., `"1.1"`); empty `{}` until Stage 7 begins. Writers MUST NOT populate `tasks` before the execution stage starts. On read, validate that each task entry has a `status` field with a valid enum value
-- `test_result` — `null` until Stage 8 completes, then `"PASS"` | `"FAIL"` | `"SKIPPED"`. On read, reject unknown non-null values. On abort, the orchestrator sets `"FAIL"` and logs: `"INFO: [tdd-fullpipeline] test_result set to FAIL (reason: user abort at stage <N>)"` — there is no separate `"ABORTED"` enum value; check `pipeline_status` to distinguish test failure from user abort. On genuine validation failure, log: `"INFO: [tdd-fullpipeline] test_result set to FAIL (reason: Stage 8 validation failed)"`
-- `test_adjustments` — cumulative test adjustment counts from Stage 7, persisted across interruptions to enforce the 20% behavioral threshold. Always an object with exactly three keys: `{ "structural": 0, "behavioral": 0, "security": 0 }`, each a non-negative integer (>= 0). Reject negative values, non-integer values, or extra keys beyond these three. On resume: if malformed and `current_stage < 7`, reset to zeroes with a warning; if malformed and `current_stage >= 7`, halt and ask the user (see resume step 12)
+- `tasks` — object keyed by task ID (e.g., `"1.1"`); empty `{}` until Stage 8 begins. Writers MUST NOT populate `tasks` before the execution stage starts. On read, validate that each task entry has a `status` field with a valid enum value
+- `test_result` — `null` until Stage 9 completes, then `"PASS"` | `"FAIL"` | `"SKIPPED"`. On read, reject unknown non-null values. On abort, the orchestrator sets `"FAIL"` and logs: `"INFO: [tdd-fullpipeline] test_result set to FAIL (reason: user abort at stage <N>)"` — there is no separate `"ABORTED"` enum value; check `pipeline_status` to distinguish test failure from user abort. On genuine validation failure, log: `"INFO: [tdd-fullpipeline] test_result set to FAIL (reason: Stage 9 validation failed)"`
+- `test_adjustments` — cumulative test adjustment counts from Stage 8, persisted across interruptions to enforce the 20% behavioral threshold. Always an object with exactly three keys: `{ "structural": 0, "behavioral": 0, "security": 0 }`, each a non-negative integer (>= 0). Reject negative values, non-integer values, or extra keys beyond these three. On resume: if malformed and `current_stage < 8`, reset to zeroes with a warning; if malformed and `current_stage >= 8`, halt and ask the user (see resume step 12)
 - `user_prefs` — object with known keys: `skip_jira` (boolean), `mock_url` (string). Additional keys may be added; readers MUST ignore unknown keys (forward-compatible). Writers MUST NOT remove keys they don't recognize when updating the state file
 - `known_issues` — array of strings; `[]` when no issues. Writers MUST enforce: individual entries under 200 characters (truncate with `"…"` suffix if needed), array under 10 entries (keep most recent). Do not include secrets, API keys, or PII in entries — they are committed to git history
 - `git_branch` — string; the git branch name when the state file was last written. Used by Resume Detection to warn if the current branch differs from the saved branch. Informational; not validated on read
@@ -216,7 +223,7 @@ If the git commit fails (e.g., nothing changed), continue — the state file on 
 - **Field duplication across files:** The state file schema and field definitions are intentionally repeated in `clear_and_go.md`, `fullpipeline.md`, and `tdd-fullpipeline.md`. Each file is self-contained so subagents can operate without reading other orchestrator files. This trades maintenance burden for execution reliability.
 - **Baseline capture timing:** Check 4 (Baseline Test Capture) runs eagerly at startup before any pipeline stage begins. This is intentional — capturing the baseline before changes ensures an accurate regression comparison at Stage 8. The cost is one test suite run at startup, which is acceptable for the accuracy it provides.
 - **No correlation ID (v1 scope):** Log messages use `[source_tag]` and include the slug, but there is no pipeline-wide UUID or `run_id`. The slug is unique per pipeline run for the current single-user CLI context. A correlation ID would be needed if pipelines are aggregated across users or CI systems — deferred to v2.
-- **Metrics only on success:** `.pipeline/metrics/<slug>.json` is written only after successful Stage 8 completion. Aborted/failed runs emit no metrics. This is an accepted survivorship bias — partial-run metrics would add complexity without clear value for the current CLI usage. If CI/CD integration is added, partial metrics should be revisited.
+- **Metrics only on success:** `.pipeline/metrics/<slug>.json` is written only after successful Stage 9 completion. Aborted/failed runs emit no metrics. This is an accepted survivorship bias — partial-run metrics would add complexity without clear value for the current CLI usage. If CI/CD integration is added, partial metrics should be revisited.
 - **Staleness detection:** There is no timeout or staleness threshold for `pipeline_status: "active"` state files. The `updated_at` field can be used to assess staleness manually, but no automated threshold is enforced. For CLI usage, the user is the staleness detector (they know when they abandoned a run). For CI/CD integration, consider defining a staleness threshold (e.g., 30 minutes).
 
 ---
@@ -231,8 +238,8 @@ Before Pre-Flight Checks, check if any state file exists for this pipeline type.
    - Well-formed JSON (skip files that fail parsing — log: `"WARNING: [tdd-fullpipeline] <filename> is not valid JSON — skipping"`)
    - Required fields present: `schema_version`, `pipeline`, `slug`, `requirement`, `current_stage`, `stages`, `pipeline_status` (skip if missing — log: `"WARNING: [tdd-fullpipeline] <filename> missing required field '<field>' — skipping"`)
    - `schema_version` equals `1` (skip if not — log: `"WARNING: [tdd-fullpipeline] <filename> has unsupported schema_version <value> — skipping"`)
-   - `current_stage` is an integer between 1 and 8 (skip if out of range — log: `"WARNING: [tdd-fullpipeline] <filename> has invalid current_stage <value> — skipping"`)
-   - `stages` object contains keys `"1"` through `"8"` (skip if missing keys — log: `"WARNING: [tdd-fullpipeline] <filename> has incomplete stages object — skipping"`)
+   - `current_stage` is an integer between 1 and 9 (skip if out of range — log: `"WARNING: [tdd-fullpipeline] <filename> has invalid current_stage <value> — skipping"`)
+   - `stages` object contains keys `"1"` through `"9"` (skip if missing keys — log: `"WARNING: [tdd-fullpipeline] <filename> has incomplete stages object — skipping"`)
    - `slug` matches the validation pattern `^[a-z0-9][a-z0-9_-]{0,63}$` (skip if not — log: `"WARNING: [tdd-fullpipeline] <filename> has invalid slug '<value>' — skipping"`)
    - Each stage entry has a `status` field with a valid enum value (`"done"`, `"in_progress"`, `"not_started"`, `"skipped"`, `"aborted"`) — log: `"WARNING: [tdd-fullpipeline] <filename> has invalid stage status '<value>' for stage <N> — skipping"`
    - **Cross-field consistency**: all stages before `current_stage` should be `"done"` or `"skipped"`. Flag `"not_started"`, `"in_progress"`, or `"aborted"` as inconsistent for prior stages. If inconsistent, log: `"WARNING: [tdd-fullpipeline] <filename> has stage <N> as '<status>' but current_stage is <M> — accepting with warning"` (do not skip — allow the user to decide during the resume prompt). Additionally, if `pipeline_status` is `"active"` and `stages[str(current_stage)].status` is `"done"` or `"skipped"`, log: `"WARNING: [tdd-fullpipeline] <filename> has current_stage <N> marked '<status>' — current_stage should have been incremented"` (accept with warning)
@@ -241,7 +248,7 @@ Before Pre-Flight Checks, check if any state file exists for this pipeline type.
    After the scan completes, log: `"INFO: [tdd-fullpipeline] Resume scan: <N> files found, <M> scanned, <K> valid, <J> skipped"` (when capped at 50, `<N>` is the total directory count and `<M>` is 50)
 4. Filter to files where `pipeline` equals `"tdd-fullpipeline"` and `pipeline_status` equals `"active"`. If a TDD file lacks `test_adjustments`, log: `"WARNING: [tdd-fullpipeline] <filename> missing test_adjustments — will use zeroes on resume"`. If exactly one match is found, use it. If multiple matches, present all and ask the user which to resume.
 5. **Match by slug** — derive a simplified slug from `$ARGUMENTS` (take the first 3–5 content words excluding stop words: `a`, `an`, `the`, `and`, `or`, `but`, `in`, `on`, `at`, `to`, `for`, `of`, `with`, `by`, `from`, `as`, `is`, `was`, `are`, `be`, `been`, `being`, `have`, `has`, `had`, `do`, `does`, `did`, `will`, `would`, `could`, `should`, `may`, `might`, `shall`, `can`, `that`, `this`, `it`, `not`; join with hyphens, lowercase, truncate to 64 chars — this is a heuristic and may not match the PRD-derived slug exactly). Match against the `slug` field. If slug matching fails, log: `"INFO: [tdd-fullpipeline] slug '<derived>' did not match any active state file — falling back to requirement substring match"` and fall back to case-insensitive substring match of `$ARGUMENTS` against the `requirement` field. If neither matches any active state file but active state files exist, present the unmatched files and ask the user if any is the intended pipeline. If no active state files exist at all, proceed to "start fresh" below. Log: `"INFO: [tdd-fullpipeline] Resume match: slug=<slug>, file=<filename>, method=slug|requirement_substring"`
-6. **Verify disk artifacts** — for the matched state file, confirm that artifacts referenced in `stages` actually exist on disk (e.g., if Stage 1 is "done", check `docs/prd/<slug>.md` exists). If any claimed artifact is missing, include it in the resume offer. For Stage 6, verify the test branch exists (`git branch --list tdd/<slug>/tests`). For gitignored artifacts (`.pipeline/tdd/<slug>/baseline-results.json`, `.pipeline/metrics/<slug>.json`), log at INFO level if missing: `"INFO: [tdd-fullpipeline] Gitignored artifact <path> not found — expected after clone, non-blocking"` (do not flag as a warning since these are local-only and not recoverable from git).
+6. **Verify disk artifacts** — for the matched state file, confirm that artifacts referenced in `stages` actually exist on disk (e.g., if Stage 1 is "done", check `docs/prd/<slug>.md` exists). If any claimed artifact is missing, include it in the resume offer. For Stage 7, verify the test branch exists (`git branch --list tdd/<slug>/tests`). For gitignored artifacts (`.pipeline/tdd/<slug>/baseline-results.json`, `.pipeline/metrics/<slug>.json`), log at INFO level if missing: `"INFO: [tdd-fullpipeline] Gitignored artifact <path> not found — expected after clone, non-blocking"` (do not flag as a warning since these are local-only and not recoverable from git).
 7. **Check git branch** — if `git_branch` in the state file differs from the current branch, note it in the resume offer.
 8. **Re-validate user inputs** — if `user_prefs.mock_url` is present, re-run URL validation (scheme check, RFC 1918 check, 0.0.0.0 check) before resuming. Note: this validates URL format only, not reachability. If the mock app server was shut down between sessions, the pipeline will resume but Stage 3 may fail at crawl time. Consider warning the user: `"INFO: [tdd-fullpipeline] mock_url '<url>' will be used on resume — ensure the mock app is running if resuming Stage 3 or later."`
 9. If all stages in the state file are `"not_started"`, treat as equivalent to "no state file" — skip the resume prompt and proceed fresh.
@@ -260,9 +267,10 @@ Found saved state for slug "<slug>" at Stage <N> — <stage_name>.
 | 3 | Mock App → UI Contract | DONE |
 | 4 | PRD + UI Contract → Test Plan | DONE |
 | 5 | PRD + Test Plan → Dev Plan | IN PROGRESS |
-| 6 | Test Plan → Develop Tests | NOT STARTED |
-| 7 | Execute with Test Adjustment | NOT STARTED |
-| 8 | Validate | NOT STARTED |
+| 6 | Dev Plan → JIRA | NOT STARTED |
+| 7 | Test Plan → Develop Tests | NOT STARTED |
+| 8 | Execute with Test Adjustment | NOT STARTED |
+| 9 | Validate | NOT STARTED |
 
 Known issues: <from known_issues field, or "none">
 Branch: <git_branch from state> (current: <actual branch>)
@@ -275,7 +283,7 @@ Options:
 
 *Display label mapping: `"done"` → `DONE`, `"in_progress"` → `IN PROGRESS`, `"not_started"` → `NOT STARTED`, `"skipped"` → `SKIPPED`, `"aborted"` → `ABORTED`, `"pending"` (tasks) → `PENDING`. The JSON state file stores lowercase with underscores.*
 
-12. If the user chooses **resume**: set orchestrator state from the state file (slug, prd_path, plan_path, brief_path, contract_path, test_plan_path, requirement, user_prefs, test_result, test_adjustments) and jump directly to the current stage. If `test_adjustments` is loaded from the state file, log: `"INFO: [tdd-fullpipeline] test_adjustments loaded from state file: structural=<N>, behavioral=<N>, security=<N>"`. If git branch differs, warn but proceed. Validate `test_adjustments`: must be an object with exactly keys `"structural"`, `"behavioral"`, `"security"`, each an integer >= 0. If malformed **and** `current_stage < 7`, reset to `{ "structural": 0, "behavioral": 0, "security": 0 }` and log: `"WARNING: [tdd-fullpipeline] test_adjustments malformed — reset to zeroes"`. If malformed **and** `current_stage >= 7`, **halt and present the raw value to the user** — resetting would lose cumulative adjustment counts that enforce the 20% behavioral threshold. Ask the user to confirm the reset or provide correct values before proceeding. For execution stage (Stage 7), the subagent will run JIRA reconciliation (Step 1.5) automatically and load `test_adjustments` from the state file to preserve cumulative adjustment counts. For Stage 8 resume, ensure `.pipeline/metrics/` directory exists: `mkdir -p .pipeline/metrics`. Clean up the pre-compact rule file if it exists: `rm -f .claude/rules/pipeline-resume.md`. Output: `"INFO: [tdd-fullpipeline] Checkpoint loaded: slug=<slug>, resuming from stage <N>"`
+12. If the user chooses **resume**: set orchestrator state from the state file (slug, prd_path, plan_path, brief_path, contract_path, test_plan_path, requirement, user_prefs, test_result, test_adjustments) and jump directly to the current stage. If `test_adjustments` is loaded from the state file, log: `"INFO: [tdd-fullpipeline] test_adjustments loaded from state file: structural=<N>, behavioral=<N>, security=<N>"`. If git branch differs, warn but proceed. Validate `test_adjustments`: must be an object with exactly keys `"structural"`, `"behavioral"`, `"security"`, each an integer >= 0. If malformed **and** `current_stage < 8`, reset to `{ "structural": 0, "behavioral": 0, "security": 0 }` and log: `"WARNING: [tdd-fullpipeline] test_adjustments malformed — reset to zeroes"`. If malformed **and** `current_stage >= 8`, **halt and present the raw value to the user** — resetting would lose cumulative adjustment counts that enforce the 20% behavioral threshold. Ask the user to confirm the reset or provide correct values before proceeding. For execution stage (Stage 8), the subagent will run JIRA reconciliation (Step 1.5) automatically and load `test_adjustments` from the state file to preserve cumulative adjustment counts. For Stage 9 resume, ensure `.pipeline/metrics/` directory exists: `mkdir -p .pipeline/metrics`. Clean up the pre-compact rule file if it exists: `rm -f .claude/rules/pipeline-resume.md`. Output: `"INFO: [tdd-fullpipeline] Checkpoint loaded: slug=<slug>, resuming from stage <N>"`
 13. If the user chooses **restart**: delete the state file, proceed with Pre-Flight Checks as normal.
 14. If no state file exists: proceed with Pre-Flight Checks as normal. (This includes the case where active state files exist but none matched — disk artifact detection in the Error Recovery section still applies on a per-stage basis.)
 
@@ -898,13 +906,48 @@ Options: approve | edit | abort
 
 *Gate options convention: "edit" for document-stage gates where the user modifies artifacts; "fix" for code/test-stage gates where the user fixes implementation issues.*
 
-**If approved** → update state file (stage 5 status: `"done"`, current_stage: 6, stage 5 `jira_epic`: extract from subagent response if JIRA was enabled) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 5 done"` → proceed to Stage 6
+**If approved** → update state file (stage 5 status: `"done"`, current_stage: 6) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 5 done"` → proceed to Stage 6
 **If edit requested** → wait for user edits, then re-validate
 **If aborted** → update state file (stage 5 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, log residual artifacts (AC 1.10)
 
 ---
 
-## Stage 6: Test Plan → Develop Tests (fresh context)
+## Stage 6: Dev Plan → JIRA (fresh context)
+
+Spawn a subagent (Task tool, model: opus — Opus 4.6) to execute the `/plan2jira` stage:
+
+**Subagent prompt:**
+```
+You are executing the /plan2jira pipeline stage. Read the full command instructions:
+<read and paste ${CLAUDE_PLUGIN_ROOT}/commands/plan2jira.md>
+
+Execute all steps for this dev plan:
+
+Dev plan file: <plan_path>
+
+Important:
+- Run mandatory critic validation (Product + Dev must pass)
+- Read pipeline.config.yaml for JIRA config
+- Run dry-run first and present preview
+- Ask user for confirmation before creating issues
+- Create JIRA issues and update the dev plan with keys
+- Return the following in your final message:
+  1. Critic validation results (Product, Dev — PASS/FAIL)
+  2. Number of issues created (Epic, Stories, Tasks)
+  3. JIRA keys for Epic and Stories
+  4. Whether the dev plan was updated with JIRA links
+  5. Any issues encountered
+```
+
+**Note:** This stage includes its own user interaction (critic validation and JIRA confirmation) — the subagent handles both gates directly since they are tightly coupled to the JIRA creation flow.
+
+**If user chose skip-jira** → record `user_prefs.skip_jira = true`, update state file (stage 6 status: `"skipped"`, current_stage: 7, user_prefs.skip_jira: true) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 6 skipped"` → proceed to Stage 7
+
+When Stage 6 subagent completes successfully → update state file (stage 6 status: `"done"`, current_stage: 7, stage 6 `jira_epic`: extract from subagent response) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 6 done"`
+
+---
+
+## Stage 7: Test Plan → Develop Tests (fresh context)
 
 Spawn a subagent (Task tool, model: opus — Opus 4.6) to execute the `/tdd-develop-tests` stage:
 
@@ -953,12 +996,12 @@ Important:
 
 When the subagent completes, verify the self-health gate result.
 
-### GATE 6: Test Code Approval (AC 7.8)
+### GATE 7: Test Code Approval (AC 7.8)
 
 Present the subagent's summary to the user:
 
 ```
-## Gate 6: Test Code Review
+## Gate 7: Test Code Review
 
 ### Self-Health Gate
 | Metric | Value | Status |
@@ -1002,7 +1045,7 @@ Present the subagent's summary to the user:
 Tests committed to branch: tdd/<slug>/tests
 Label: tdd-red-tests
 
-NOTE: Tier 2 integration/unit tests will be developed in Stage 7
+NOTE: Tier 2 integration/unit tests will be developed in Stage 8
 alongside application code, guided by the test plan Tier 2 specifications.
 
 Please review and approve to proceed to application development.
@@ -1011,13 +1054,13 @@ Options: approve | fix | abort
 
 *Gate options convention: "edit" for document-stage gates where the user modifies artifacts; "fix" for code/test-stage gates where the user fixes implementation issues.*
 
-**If approved** → update state file (stage 6 status: `"done"`, current_stage: 7) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 6 done"` → proceed to Stage 7
+**If approved** → update state file (stage 7 status: `"done"`, current_stage: 8) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 7 done"` → proceed to Stage 8
 **If fix requested** → wait for user fixes, re-run self-health gate
-**If aborted** → update state file (stage 6 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, log residual artifacts (AC 1.10)
+**If aborted** → update state file (stage 7 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, log residual artifacts (AC 1.10)
 
 ---
 
-## Stage 7: Dev Plan → Develop App with Test Adjustment Taxonomy (fresh context)
+## Stage 8: Dev Plan → Develop App with Test Adjustment Taxonomy (fresh context)
 
 **CRITICAL: The orchestrator MUST read the full execute.md file and paste its ENTIRE content into the subagent prompt.** Do NOT paraphrase, summarize, or write from memory. The execute.md file contains 6 mandatory JIRA touchpoints, branch/PR workflow, critic review format, smoke test configuration, and failure handling that will be silently skipped if not included verbatim. This is the #1 cause of pipeline compliance failures.
 
@@ -1040,7 +1083,7 @@ JIRA integration: <enabled/disabled based on user_prefs.skip_jira>
 
 IMPORTANT TDD EXTENSIONS — Test Adjustment Taxonomy:
 
-This is a TDD pipeline run. Tests were written BEFORE application code (Stage 6).
+This is a TDD pipeline run. Tests were written BEFORE application code (Stage 7).
 When implementing tasks, existing tests may need adjustments. Every test change
 must be classified using the test adjustment taxonomy:
 
@@ -1078,7 +1121,7 @@ If more than 20% of Tier 1 E2E test assertions are behaviorally adjusted,
 HALT the pipeline and escalate to the user with a full report of all adjustments.
 
 - The threshold is configurable via tdd.max_test_adjustment_pct (default: 20).
-- The denominator is the total number of Tier 1 E2E assertions at Stage 6 self-health gate.
+- The denominator is the total number of Tier 1 E2E assertions at Stage 7 self-health gate.
 - Structural adjustments are EXCLUDED from the threshold count.
 
 ### QA Critic Audit (AC 8.7)
@@ -1104,7 +1147,7 @@ Important:
 - Build the dependency graph and present pre-flight check
 - Execute tasks using the Ralph Loop (BUILD → REVIEW → ITERATE)
 - Each build/review uses fresh context subagents (already defined in execute.md)
-- Create PRs and wait for user approval per PR (Gate 7)
+- Create PRs and wait for user approval per PR (Gate 8)
 - Track ALL test adjustments with classification (Structural/Behavioral/Security)
 - HALT if behavioral adjustment threshold exceeded
 - Update dev plan and JIRA statuses as tasks complete
@@ -1119,25 +1162,25 @@ Important:
   8. Next steps
 ```
 
-### GATE 7: Per-PR Approval (AC 8.5)
+### GATE 8: Per-PR Approval (AC 8.5)
 
-Gate 7 is handled inside the Stage 7 subagent — each task's PR requires user approval before merge. The subagent interacts with the user directly for these approvals since they are tightly coupled to the execution loop.
+Gate 8 is handled inside the Stage 8 subagent — each task's PR requires user approval before merge. The subagent interacts with the user directly for these approvals since they are tightly coupled to the execution loop.
 
-When the subagent completes, verify the response contains: task results table, test adjustment log with classifications, behavioral threshold status, and smoke test results. If any expected field is missing, log: `"WARNING: [tdd-fullpipeline] Stage 7 subagent response missing expected field '<field>'"` and present the gap to the user.
+When the subagent completes, verify the response contains: task results table, test adjustment log with classifications, behavioral threshold status, and smoke test results. If any expected field is missing, log: `"WARNING: [tdd-fullpipeline] Stage 8 subagent response missing expected field '<field>'"` and present the gap to the user.
 
-When Stage 7 subagent completes → update state file (stage 7 status: `"done"`, current_stage: 8, update tasks object with final statuses/PRs and test_adjustments counts from subagent response) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 7 done"`
+When Stage 8 subagent completes → update state file (stage 8 status: `"done"`, current_stage: 9, update tasks object with final statuses/PRs and test_adjustments counts from subagent response) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 8 done"`
 
 ---
 
-## Stage 8: Validate (fresh context)
+## Stage 9: Validate (fresh context)
 
-Stage 8 is the final validation stage. It combines smoke tests, traceability matrix, regression checks, cumulative critic validation, and metrics emission.
+Stage 9 is the final validation stage. It combines smoke tests, traceability matrix, regression checks, cumulative critic validation, and metrics emission.
 
 Spawn a subagent (Task tool, model: opus — Opus 4.6) to execute the validation:
 
 **Subagent prompt:**
 ```
-You are executing Stage 8 (Validate) of the TDD pipeline.
+You are executing Stage 9 (Validate) of the TDD pipeline.
 
 Execute the following validation steps:
 
@@ -1149,7 +1192,7 @@ Baseline results: .pipeline/tdd/<slug>/baseline-results.json
 ### Step 1: Smoke Test (AC 9.1)
 
 Run the same smoke test infrastructure as /execute Step 5 (Smoke Test).
-Read `${CLAUDE_PLUGIN_ROOT}/commands/execute.md`, locate the "Step 5" section, and paste only that section below (Stage 8 needs only the smoke test infrastructure, not the full execute.md):
+Read `${CLAUDE_PLUGIN_ROOT}/commands/execute.md`, locate the "Step 5" section, and paste only that section below (Stage 9 needs only the smoke test infrastructure, not the full execute.md):
 <read and paste the Step 5 (Smoke Test) section from ${CLAUDE_PLUGIN_ROOT}/commands/execute.md>
 
 Execute: dev server startup, health checks, core user flow,
@@ -1193,7 +1236,7 @@ Run a 10-critic cumulative validation on the main..HEAD diff:
 Collect and emit metrics to .pipeline/metrics/<slug>.json:
 
 If a previous metrics file exists for this slug, preserve it as <slug>.prev.json
-before overwriting. Metrics are written ONLY after successful Stage 8 completion.
+before overwriting. Metrics are written ONLY after successful Stage 9 completion.
 Partial runs do NOT overwrite existing metrics.
 
 Metrics schema (schema_version: 1):
@@ -1202,9 +1245,9 @@ Metrics schema (schema_version: 1):
   "schema_version": 1,
   "slug": "<slug>",
   "timestamp": "ISO 8601",
-  "red_test_count": <tests that were red at Stage 6 self-health gate>,
-  "total_test_count": <total tests at Stage 6>,
-  "green_pass_rate": <percentage of tests passing after Stage 7>,
+  "red_test_count": <tests that were red at Stage 7 self-health gate>,
+  "total_test_count": <total tests at Stage 7>,
+  "green_pass_rate": <percentage of tests passing after Stage 8>,
   "test_adjustment_count": {
     "structural": <count>,
     "behavioral": <count>,
@@ -1212,10 +1255,10 @@ Metrics schema (schema_version: 1):
     "total": <count>
   },
   "test_plan_accuracy": <percentage of TP items that passed without behavioral adjustment>,
-  "tdd_cycle_time_seconds": <wall-clock seconds from Stage 4 start to Stage 8 completion>,
-  "security_test_integrity": <percentage of security tests never modified in Stage 7>,
+  "tdd_cycle_time_seconds": <wall-clock seconds from Stage 4 start to Stage 9 completion>,
+  "security_test_integrity": <percentage of security tests never modified in Stage 8>,
   "stages_completed": <count>,
-  "stages_total": 8
+  "stages_total": 9
 }
 
 Return the following in your final message:
@@ -1231,12 +1274,12 @@ Return the following in your final message:
 
 When the subagent completes, extract the validation results.
 
-### GATE 8: Final Validation Approval (AC 9.7)
+### GATE 9: Final Validation Approval (AC 9.7)
 
 Present the full validation results:
 
 ```
-## Gate 8: Final Validation
+## Gate 9: Final Validation
 
 ### Smoke Test Results
 | Check | Status | Duration | Details |
@@ -1283,8 +1326,8 @@ Present the full validation results:
 ### Pipeline Metrics
 | Metric | Value |
 |--------|-------|
-| Red test count (Stage 6) | N |
-| Green pass rate (Stage 7) | N% |
+| Red test count (Stage 7) | N |
+| Green pass rate (Stage 8) | N% |
 | Test adjustments | N total (structural: X, behavioral: Y, security: Z) |
 | Test plan accuracy | N% |
 | TDD cycle time | Xm Ys |
@@ -1295,11 +1338,11 @@ Overall Verdict: PASS / FAIL
 Options: approve | fix | abort
 ```
 
-*Gate options convention: "edit" for document-stage gates where the user modifies artifacts; "fix" for code/test-stage gates where the user fixes implementation issues. Gate 8 "fix" means: go fix the underlying code or tests, then re-run Stage 8 validation.*
+*Gate options convention: "edit" for document-stage gates where the user modifies artifacts; "fix" for code/test-stage gates where the user fixes implementation issues. Gate 9 "fix" means: go fix the underlying code or tests, then re-run Stage 9 validation.*
 
-**If approved** → update state file (stage 8 status: `"done"`, test_result: `"PASS"`) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 8 done"` → proceed to Completion
-**If fix requested** → wait for user fixes, then re-run Stage 8 validation
-**If aborted** → update state file (stage 8 status: `"aborted"`, pipeline_status: `"aborted"`, test_result: `"FAIL"`) and commit → stop pipeline, log residual artifacts (AC 1.10)
+**If approved** → update state file (stage 9 status: `"done"`, test_result: `"PASS"`) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 9 done"` → proceed to Completion
+**If fix requested** → wait for user fixes, then re-run Stage 9 validation
+**If aborted** → update state file (stage 9 status: `"aborted"`, pipeline_status: `"aborted"`, test_result: `"FAIL"`) and commit → stop pipeline, log residual artifacts (AC 1.10)
 
 ---
 
@@ -1307,13 +1350,13 @@ Options: approve | fix | abort
 
 ### Label-Based CI Skip Convention
 
-When the TDD pipeline creates the `tdd/{slug}/tests` branch in Stage 6, it applies the `tdd-red-tests` label to signal CI systems that test failures on this branch are intentional — the tests are written before application code exists.
+When the TDD pipeline creates the `tdd/{slug}/tests` branch in Stage 7, it applies the `tdd-red-tests` label to signal CI systems that test failures on this branch are intentional — the tests are written before application code exists.
 
 **Convention:**
 - Branch pattern: `tdd/{slug}/tests`
 - Label: `tdd-red-tests`
 - CI behavior: Skip test execution jobs on branches/PRs with this label
-- The label is removed when Stage 7 begins (app code is being written against the tests)
+- The label is removed when Stage 8 begins (app code is being written against the tests)
 
 ### GitHub Actions Workflow Examples
 
@@ -1399,9 +1442,10 @@ If the pipeline is interrupted at any stage:
 - **Stage 3 interrupted**: Re-run `/tdd-mock-analysis` — check if UI contract already exists at `docs/tdd/<slug>/ui-contract.md`. Screenshots in `.pipeline/tdd/<slug>/mock-screenshots/` may be partial.
 - **Stage 4 interrupted**: Re-run `/tdd-test-plan` — check if test plan already exists at `docs/tdd/<slug>/test-plan.md`.
 - **Stage 5 interrupted**: Re-run `/prd2plan` with test plan integration — check if dev plan already exists at `docs/dev_plans/<slug>.md`. Contract negotiation may need to re-run.
-- **Stage 6 interrupted**: Re-run `/tdd-develop-tests` — check if `tdd/{slug}/tests` branch exists with committed test files. If tests are partially written, the self-health gate will catch inconsistencies.
-- **Stage 7 interrupted**: Re-run `/execute @plan` — it reads task statuses from the dev plan, reconciles JIRA statuses, and resumes from where it left off. Cumulative test adjustment counts are preserved in the state file (`test_adjustments` field) and loaded on resume to enforce the 20% behavioral threshold across interruptions.
-- **Stage 8 interrupted**: Re-run Stage 8 validation — `/test` and traceability are idempotent, scan everything from scratch. Metrics are only written on successful completion, so partial runs leave no stale metrics.
+- **Stage 6 interrupted**: Re-run `/plan2jira @docs/dev_plans/<slug>.md` — check if JIRA issues already exist. The script has idempotency protection via `.jira-import-history.json`. If JIRA import was partial, use the cleanup script to remove batch issues and re-run.
+- **Stage 7 interrupted**: Re-run `/tdd-develop-tests` — check if `tdd/{slug}/tests` branch exists with committed test files. If tests are partially written, the self-health gate will catch inconsistencies.
+- **Stage 8 interrupted**: Re-run `/execute @plan` — it reads task statuses from the dev plan, reconciles JIRA statuses, and resumes from where it left off. Cumulative test adjustment counts are preserved in the state file (`test_adjustments` field) and loaded on resume to enforce the 20% behavioral threshold across interruptions.
+- **Stage 9 interrupted**: Re-run Stage 9 validation — `/test` and traceability are idempotent, scan everything from scratch. Metrics are only written on successful completion, so partial runs leave no stale metrics.
 
 **Re-running `/tdd-fullpipeline`** after interruption: The orchestrator checks `docs/pipeline-state/<slug>.json` at startup (see "Startup: Resume Detection" section). If a state file exists, it offers to resume from the last completed stage. If no state file exists, it falls back to checking disk artifacts:
 - If `docs/prd/<slug>.md` exists, ask whether to skip Stage 1.
@@ -1409,8 +1453,9 @@ If the pipeline is interrupted at any stage:
 - If `docs/tdd/<slug>/ui-contract.md` exists, ask whether to skip Stage 3.
 - If `docs/tdd/<slug>/test-plan.md` exists, ask whether to skip Stage 4.
 - If `docs/dev_plans/<slug>.md` exists, ask whether to skip Stage 5.
-- If `tdd/{slug}/tests` branch exists with tests, ask whether to skip Stage 6.
-- Check dev plan task statuses for Stage 7 resumption.
+- If `jira-issue-mapping.json` exists with matching slug, ask whether to skip Stage 6.
+- If `tdd/{slug}/tests` branch exists with tests, ask whether to skip Stage 7.
+- Check dev plan task statuses for Stage 8 resumption.
 
 This avoids re-running completed stages.
 
@@ -1452,9 +1497,9 @@ The orchestrator will detect existing artifacts and offer to skip completed stag
 
 ## Completion
 
-When all stages complete (Stage 8 subagent returns with PASS verdict):
+When all stages complete (Stage 9 subagent returns with PASS verdict):
 
-1. **Mark the state file as completed** — update `docs/pipeline-state/<slug>.json`: set `pipeline_status` to `"completed"`, `current_stage` to 8, all stages to `"done"` (or `"skipped"`), and commit:
+1. **Mark the state file as completed** — update `docs/pipeline-state/<slug>.json`: set `pipeline_status` to `"completed"`, `current_stage` to 9, all stages to `"done"` (or `"skipped"`), and commit:
 ```bash
 mkdir -p docs/pipeline-state
 # (write/update docs/pipeline-state/<slug>.json)
@@ -1465,9 +1510,9 @@ Log: `"INFO: [tdd-fullpipeline] Pipeline completed: slug=<slug>, all stages done
 2. Present the final report:
 
 **Heading rules:**
-- All smoke tests PASS and Stage 8 validation PASS → "TDD Pipeline Complete"
+- All smoke tests PASS and Stage 9 validation PASS → "TDD Pipeline Complete"
 - Any smoke test row shows FAIL → "TDD Pipeline Incomplete — Smoke Test Failure" (include Error Details column)
-- Stage 8 validation FAIL → "TDD Pipeline Incomplete — Validation Failure" (include blocking items)
+- Stage 9 validation FAIL → "TDD Pipeline Incomplete — Validation Failure" (include blocking items)
 - Smoke tests SKIPPED (opted out via `smoke_test.enabled: false`) → "TDD Pipeline Complete" (treat opt-out as acceptable; include "SKIPPED" line)
 - Any smoke test row is a skip/warning → "TDD Pipeline Complete" but list skipped checks
 
@@ -1500,8 +1545,8 @@ Log: `"INFO: [tdd-fullpipeline] Pipeline completed: slug=<slug>, all stages done
 ### TDD Metrics
 | Metric | Value | Target | Status |
 |--------|-------|--------|--------|
-| Red test count (Stage 6) | N | = total | PASS |
-| Green pass rate (Stage 7) | N% | > 95% | PASS |
+| Red test count (Stage 7) | N | = total | PASS |
+| Green pass rate (Stage 8) | N% | > 95% | PASS |
 | Test adjustments | N (S: X, B: Y, Sec: Z) | B < 20% | PASS |
 | Test plan accuracy | N% | > 85% | PASS |
 | TDD cycle time | Xm Ys | -- | -- |
@@ -1535,7 +1580,7 @@ Log: `"INFO: [tdd-fullpipeline] Pipeline completed: slug=<slug>, all stages done
 | Real API test | ✅ / ⚠️ skipped (no API key) | 2.1s | — |
 | Server teardown | ✅ | 0.2s | ports released |
 
-### Stage 8 Validation
+### Stage 9 Validation
 | Section | Status | Details |
 |---------|--------|---------|
 | Smoke Test | PASS | All checks green |
@@ -1552,4 +1597,4 @@ Log: `"INFO: [tdd-fullpipeline] Pipeline completed: slug=<slug>, all stages done
 - Compare metrics against targets (test plan accuracy > 85%, security integrity = 100%)
 ```
 
-**IMPORTANT:** The Stage 7 subagent's `/execute` includes a mandatory smoke test step (Step 5) that verifies the dev server actually works before declaring complete. If the smoke test fails, the pipeline is NOT complete — the subagent must fix the issues or report them as blocking. Never present a "TDD Pipeline Complete" report to the user without smoke tests passing. **Verify the Stage 7 subagent's response includes a "Smoke Test Results" section before declaring pipeline complete.** If absent, query the subagent for smoke test status.
+**IMPORTANT:** The Stage 8 subagent's `/execute` includes a mandatory smoke test step (Step 5) that verifies the dev server actually works before declaring complete. If the smoke test fails, the pipeline is NOT complete — the subagent must fix the issues or report them as blocking. Never present a "TDD Pipeline Complete" report to the user without smoke tests passing. **Verify the Stage 8 subagent's response includes a "Smoke Test Results" section before declaring pipeline complete.** If absent, query the subagent for smoke test status.
