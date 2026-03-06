@@ -310,26 +310,46 @@ For example: `/fullpipeline Build a marketplace plugin system that allows third-
 
 Copy it to the clipboard. The requirement text MUST be wrapped in single quotes (not double quotes) to prevent shell expansion — single-quoted strings in POSIX shell suppress all interpretation except `'` itself. Do not change the quoting style without a security review. **POSIX-only safety:** The single-quote escaping is safe for POSIX-compliant shells (bash, zsh, sh). If the user pastes the command into a non-POSIX shell (PowerShell, fish, nushell), the quoting may not prevent expansion — the user is responsible for shell-appropriate quoting in those contexts. Escape single quotes in the requirement text by replacing `'` with `'\''`. Requirement text is expected to be printable UTF-8. Reject requirement text containing control characters (bytes 0x00–0x1F except tab 0x09, newline 0x0A, carriage return 0x0D) — these may cause clipboard corruption, shell injection, or terminal escape sequence attacks. If control characters are detected, log: `"ERROR: [clear_and_go] Requirement text contains control characters — cannot safely copy to clipboard"` and skip clipboard copy (present the command for manual copying after the user sanitizes):
 ```bash
-RESUME_CMD='/<pipeline-command> <escaped requirement text>'
-# macOS — capture exit code to check success
-printf '%s' "$RESUME_CMD" | pbcopy 2>/dev/null
+# Step 1: Copy to clipboard
+printf '%s' '/<pipeline-command> <escaped requirement text>' | pbcopy 2>/dev/null
 CLIP_OK=$?
 # Linux fallback — try xclip, then xsel (each with 2s timeout to avoid hangs on missing X11 display)
 if [ $CLIP_OK -ne 0 ]; then
-  printf '%s' "$RESUME_CMD" | timeout 2 xclip -selection clipboard 2>/dev/null
+  printf '%s' '/<pipeline-command> <escaped requirement text>' | timeout 2 xclip -selection clipboard 2>/dev/null
   CLIP_OK=$?
 fi
 if [ $CLIP_OK -ne 0 ]; then
-  printf '%s' "$RESUME_CMD" | timeout 2 xsel --clipboard --input 2>/dev/null
+  printf '%s' '/<pipeline-command> <escaped requirement text>' | timeout 2 xsel --clipboard --input 2>/dev/null
   CLIP_OK=$?
 fi
 # Windows (WSL) fallback: use clip.exe if available (2s timeout to avoid hangs on broken WSL interop)
 if [ $CLIP_OK -ne 0 ]; then
-  printf '%s' "$RESUME_CMD" | timeout 2 clip.exe 2>/dev/null
+  printf '%s' '/<pipeline-command> <escaped requirement text>' | timeout 2 clip.exe 2>/dev/null
   CLIP_OK=$?
+fi
+
+# Step 2: Verify clipboard contents by reading back and comparing
+if [ $CLIP_OK -eq 0 ]; then
+  CLIP_CONTENT=""
+  # macOS
+  CLIP_CONTENT=$(pbpaste 2>/dev/null) || \
+  # Linux — xclip then xsel
+  CLIP_CONTENT=$(timeout 2 xclip -selection clipboard -o 2>/dev/null) || \
+  CLIP_CONTENT=$(timeout 2 xsel --clipboard --output 2>/dev/null) || \
+  # Windows (WSL)
+  CLIP_CONTENT=$(timeout 2 powershell.exe -command "Get-Clipboard" 2>/dev/null | tr -d '\r') || \
+  CLIP_CONTENT=""
+
+  EXPECTED='/<pipeline-command> <escaped requirement text>'
+  if [ "$CLIP_CONTENT" != "$EXPECTED" ]; then
+    CLIP_OK=1
+  fi
 fi
 ```
 
+**Important:** The clipboard copy MUST use the literal command string directly in the `printf` argument (single-quoted), NOT via a shell variable. Using a variable (`$RESUME_CMD`) can cause the pipe to `pbcopy` to fail silently when the string contains special characters. Always verify by reading back from clipboard (`pbpaste` on macOS) and comparing against the expected string.
+
+If clipboard verification failed (content doesn't match or read-back failed), log: `"WARNING: [clear_and_go] Clipboard verification failed — user must copy the resume command manually"`.
 If clipboard copy failed, log: `"WARNING: [clear_and_go] Clipboard copy failed — user must copy the resume command manually"`.
 
 
