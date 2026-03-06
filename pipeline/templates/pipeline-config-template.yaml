@@ -185,6 +185,12 @@ pipeline:
   #     critics: [product, dev, devops, qa, security, performance, data-integrity]  # always-on critics; conditional critics (observability, api-contract, designer) are added automatically based on has_backend_service/has_api/has_frontend flags
   #     max_iterations: 3                    # max fix iterations for critic failures
 
+  # Staging deployment (Stages 8–10 of /fullpipeline and /tdd-fullpipeline)
+  # Required for staging verification stages. If omitted, Stages 8–10 are skipped.
+  # staging:
+  #   deploy_command: "npm run deploy:staging"    # Command to deploy to staging (required)
+  #   url: "https://staging.example.com"          # Staging environment URL (required)
+
   # Project-specific paths (override per project)
   paths:
     prd_dir: "docs/prd"

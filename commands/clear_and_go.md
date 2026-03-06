@@ -138,7 +138,7 @@ Wait for user response. If they correct anything, update before proceeding. If t
 
 Once the user approves, validate before writing:
 
-1. **Validate `current_stage` range** — must be an integer: 1–5 for fullpipeline, 1–8 for tdd-fullpipeline. If out of range, halt and ask the user to correct.
+1. **Validate `current_stage` range** — must be an integer: 1–10 for fullpipeline, 1–14 for tdd-fullpipeline. If out of range, halt and ask the user to correct.
 2. **Validate slug** — must match `^[a-z0-9][a-z0-9_-]{0,63}$`. If invalid, halt and ask the user.
 3. **Validate `test_adjustments`** (TDD only) — must be an object with exactly keys `"structural"`, `"behavioral"`, `"security"`, each a non-negative integer (>= 0). Reject negative values, non-integer values, or extra keys — halt and ask the user to correct. If `current_stage >= 7` and values cannot be determined from conversation context or an existing state file, halt and ask the user to provide the counts rather than defaulting to zeroes (which would bypass the 20% behavioral threshold). If `current_stage < 7`, default to zeroes is safe. **Carry-forward rule:** if an existing state file contains valid `test_adjustments` values and the conversation context does not provide updated counts, carry forward the existing values into the new state file. Do not silently drop them. For fullpipeline state files, MUST NOT write `test_adjustments` (TDD-only field).
 4. **Validate stage consistency** — all stages before `current_stage` should have status `"done"` or `"skipped"`, not `"not_started"`. If inconsistent, warn the user and ask for correction before writing.
@@ -186,10 +186,12 @@ Create the `docs/pipeline-state/` directory if it doesn't exist.
       "status": "in_progress",
       "summary": "2/6 tasks done"
     },
-    "5": {
-      "status": "not_started",
-      "summary": ""
-    }
+    "5": { "status": "not_started", "summary": "" },
+    "6": { "status": "not_started", "summary": "" },
+    "7": { "status": "not_started", "summary": "" },
+    "8": { "status": "not_started", "summary": "" },
+    "9": { "status": "not_started", "summary": "" },
+    "10": { "status": "not_started", "summary": "" }
   },
   "tasks": {
     "1.1": { "status": "done", "jira": "PIPE-3", "pr": 42, "branch": "feat/story-1-task-1-slug" },
@@ -225,7 +227,13 @@ Create the `docs/pipeline-state/` directory if it doesn't exist.
     "5": { "status": "in_progress", "artifact": "docs/dev_plans/<slug>.md", "jira_epic": "<key>", "summary": "..." },
     "6": { "status": "not_started", "artifact": "tdd/<slug>/tests", "summary": "" },
     "7": { "status": "not_started", "summary": "" },
-    "8": { "status": "not_started", "artifact": ".pipeline/metrics/<slug>.json", "summary": "" }
+    "8": { "status": "not_started", "artifact": ".pipeline/metrics/<slug>.json", "summary": "" },
+    "9": { "status": "not_started", "summary": "" },
+    "10": { "status": "not_started", "summary": "" },
+    "11": { "status": "not_started", "summary": "" },
+    "12": { "status": "not_started", "summary": "" },
+    "13": { "status": "not_started", "summary": "" },
+    "14": { "status": "not_started", "summary": "" }
   },
   "tasks": {},
   "test_result": null,
@@ -250,9 +258,9 @@ Create the `docs/pipeline-state/` directory if it doesn't exist.
 - `slug` — kebab-case identifier derived from the PRD title; must match `^[a-z0-9][a-z0-9_-]{0,63}$`. Used as the key for all artifact paths and the state file name (`<slug>.json`)
 - `requirement` — verbatim copy of the original requirement text from `$ARGUMENTS`. Stored for resume matching and reference. Do not include secrets, API keys, or PII
 - `pipeline_status` — always `"active"` when written by `/clear_and_go`. Canonical enum (set by orchestrators): `"active"` | `"completed"` | `"aborted"`. Valid transitions: `active → completed`, `active → aborted`. Exception: `/clear_and_go` may overwrite a `"completed"` or `"aborted"` file with `"active"` after explicit user confirmation (see Step 5 mismatch check). This is a manual override, not a standard transition — the orchestrators never perform this transition automatically
-- `current_stage` — always an integer (1–5 for fullpipeline, 1–8 for TDD). On completion, set to the final stage (5 or 8). On abort, remains at the stage where abort occurred. Validate range against pipeline type before writing. **Consistency rule:** when `pipeline_status` is `"active"`, `stages[str(current_stage)].status` MUST be `"in_progress"` or `"not_started"` — never `"done"` or `"skipped"` (if the current stage is done, `current_stage` should have already been incremented). On completion (`pipeline_status: "completed"`), `current_stage` is the final stage and its status is `"done"`. Note: `stages` object uses string keys (`"1"`, `"2"`, ...) per JSON convention; `current_stage` is an integer for arithmetic comparisons
-- `stage_name` — human-readable name of the current stage, taken from the orchestrator's stage map. On write, MUST match the canonical name for `current_stage`. Informational; not validated on read (future schema versions may add new names). Canonical names — fullpipeline: stage 1 = "Requirement → PRD", stage 2 = "PRD → Dev Plan", stage 3 = "Dev Plan → JIRA", stage 4 = "Execute with Ralph Loop", stage 5 = "Test Verification". TDD: stage 1 = "Requirement → PRD", stage 2 = "PRD → Design Brief", stage 3 = "Mock App → UI Contract", stage 4 = "PRD + UI Contract → Test Plan", stage 5 = "PRD + Test Plan → Dev Plan", stage 6 = "Test Plan → Develop Tests", stage 7 = "Execute with Test Adjustment", stage 8 = "Validate"
-- `stages` — object keyed by stage number as string (`"1"` through `"5"` for fullpipeline, `"1"` through `"8"` for TDD). Each entry contains `status` and optional fields (`artifact`, `jira_epic`, `summary`). All keys must be present even for stages not yet reached
+- `current_stage` — always an integer (1–10 for fullpipeline, 1–14 for TDD). On completion, set to the final stage (10 or 14). On abort, remains at the stage where abort occurred. Validate range against pipeline type before writing. **Consistency rule:** when `pipeline_status` is `"active"`, `stages[str(current_stage)].status` MUST be `"in_progress"` or `"not_started"` — never `"done"` or `"skipped"` (if the current stage is done, `current_stage` should have already been incremented). On completion (`pipeline_status: "completed"`), `current_stage` is the final stage and its status is `"done"`. Note: `stages` object uses string keys (`"1"`, `"2"`, ...) per JSON convention; `current_stage` is an integer for arithmetic comparisons
+- `stage_name` — human-readable name of the current stage, taken from the orchestrator's stage map. On write, MUST match the canonical name for `current_stage`. Informational; not validated on read (future schema versions may add new names). Canonical names — fullpipeline: stage 1 = "Requirement → PRD", stage 2 = "PRD → Dev Plan", stage 3 = "Dev Plan → JIRA", stage 4 = "Execute with Ralph Loop", stage 5 = "Test Verification", stage 6 = "Product Review vs PRD", stage 7 = "E2E Local", stage 8 = "Deploy to Staging", stage 9 = "Tests vs Staging", stage 10 = "E2E vs Staging". TDD: stage 1 = "Requirement → PRD", stage 2 = "PRD → Design Brief", stage 3 = "Mock App → UI Contract", stage 4 = "PRD + UI Contract → Test Plan", stage 5 = "PRD + Test Plan → Dev Plan", stage 6 = "Dev Plan → JIRA", stage 7 = "Test Plan → Develop Tests", stage 8 = "Execute with Test Adjustment", stage 9 = "Validate", stage 10 = "Product Review vs PRD", stage 11 = "E2E Local", stage 12 = "Deploy to Staging", stage 13 = "Tests vs Staging", stage 14 = "E2E vs Staging"
+- `stages` — object keyed by stage number as string (`"1"` through `"10"` for fullpipeline, `"1"` through `"14"` for TDD). Each entry contains `status` and optional fields (`artifact`, `jira_epic`, `summary`). All keys must be present even for stages not yet reached
 - Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`. On read, reject unknown values. `"aborted"` means the user chose to stop the pipeline at this stage — stages after the aborted stage remain `"not_started"`, and the aborted stage itself was not completed
 - Stage `jira_epic` — optional string; present on Stage 3 (fullpipeline) or Stage 5 (TDD pipeline) when JIRA import has completed. Contains the JIRA epic key (e.g., `"PIPE-35"`). Omitted when JIRA is skipped or stage not yet reached
 - Stage `summary` — string; brief human-readable outcome of the stage (recommended: under 500 characters). Empty string `""` for `not_started` stages. Informational; not validated on read

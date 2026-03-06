@@ -89,11 +89,36 @@ ORCHESTRATOR (this agent — lightweight coordinator)
   │
   │  ◄── GATE 8: per-PR approval ──►
   │
-  └─ Stage 9 subagent (fresh context) ──► Validation report
-       └─ smoke test, traceability matrix, regression check, metrics
-       └─ 10-critic cumulative validation
+  ├─ Stage 9 subagent (fresh context) ──► Validation report
+  │    └─ smoke test, traceability matrix, regression check, metrics
+  │    └─ 10-critic cumulative validation
+  │
+  │  ◄── GATE 9: validation approval ──►
+  │
+  ├─ Stage 10 subagent (fresh context) ──► Product Review report
+  │    └─ 10 critic subagents vs PRD acceptance criteria (parallel)
+  │
+  │  ◄── GATE 10: product review approval ──►
+  │
+  ├─ Stage 11 subagent (fresh context) ──► E2E Local report
+  │    └─ E2E test execution against local dev server
+  │
+  │  ◄── GATE 11: E2E local approval ──►
+  │
+  ├─ Stage 12 subagent (fresh context) ──► Staging deployment
+  │    └─ deploy_staging_command execution + verification
+  │
+  │  ◄── GATE 12: staging deploy confirmation ──►
+  │
+  ├─ Stage 13 subagent (fresh context) ──► Staging test report
+  │    └─ full test suite against staging URL
+  │
+  │  ◄── GATE 13: staging tests approval ──►
+  │
+  └─ Stage 14 subagent (fresh context) ──► E2E Staging report
+       └─ E2E tests against staging URL
 
-  ◄── GATE 9: final validation approval ──►
+  ◄── GATE 14: E2E staging approval ──►
 ```
 
 **Why fresh context?** By Gate 9, the orchestrator would be carrying the full PRD generation conversation, Design Brief extraction, Mock Analysis crawl data, test plan generation, all critic scoring iterations, dev plan generation, JIRA creation dialogue, test development dialogue, execution loop — none of which later stages need. Each stage's meaningful output lives on disk (PRD file, design brief, UI contract, test plan, dev plan, JIRA mapping, test files). The orchestrator only tracks file paths, the slug, and user decisions.
@@ -117,7 +142,7 @@ Resume command (copied to clipboard):
 Clear context now: press Escape, type /clear, press Enter
 Then paste the command (Cmd+V / Ctrl+V) to resume from Stage <N+1>.
 ```
-Then **stop** — do not proceed to the next stage. Wait for the user to clear and re-invoke. This ensures each stage gets a fresh context window. Gates excluded from auto-clear: Gate 8 (per-PR, inside subagent) and Gate 9 (proceeds directly to Completion report, which is lightweight).
+Then **stop** — do not proceed to the next stage. Wait for the user to clear and re-invoke. This ensures each stage gets a fresh context window. Gates excluded from auto-clear: Gate 8 (per-PR, inside subagent) and Gate 14 (proceeds directly to Completion report, which is lightweight).
 
 ---
 
@@ -164,7 +189,12 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
     "6": { "status": "done", "jira_epic": "<key>", "summary": "..." },
     "7": { "status": "not_started", "artifact": "tdd/<slug>/tests", "summary": "" },
     "8": { "status": "not_started", "summary": "" },
-    "9": { "status": "not_started", "artifact": ".pipeline/metrics/<slug>.json", "summary": "" }
+    "9": { "status": "not_started", "artifact": ".pipeline/metrics/<slug>.json", "summary": "" },
+    "10": { "status": "not_started", "summary": "" },
+    "11": { "status": "not_started", "summary": "" },
+    "12": { "status": "not_started", "summary": "" },
+    "13": { "status": "not_started", "summary": "" },
+    "14": { "status": "not_started", "summary": "" }
   },
   "tasks": {
     "1.1": { "status": "done", "jira": "<key>", "pr": 42, "branch": "<name>" },
@@ -190,9 +220,9 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
 - `slug` — kebab-case identifier derived from the PRD title; must match `^[a-z0-9][a-z0-9_-]{0,63}$`. Used as the key for all artifact paths and the state file name (`<slug>.json`)
 - `requirement` — verbatim copy of the original requirement text from `$ARGUMENTS`. Stored for resume matching (substring match fallback) and for reference. Do not include secrets, API keys, or PII
 - `pipeline_status` — `"active"` during execution, `"completed"` on success, `"aborted"` on user abort. Valid transitions: `active → completed`, `active → aborted`. Exception: `/clear_and_go` may overwrite a completed/aborted file with `"active"` after explicit user confirmation (manual override only — orchestrators never perform this transition)
-- `current_stage` — always an integer (1–9). On completion, set to 9 (the final stage). On abort, remains at the stage where abort occurred (the aborting stage's `status` is set to `"aborted"`). **Consistency rule:** when `pipeline_status` is `"active"`, `stages[str(current_stage)].status` MUST be `"in_progress"` or `"not_started"` — never `"done"` or `"skipped"` (if the current stage is done, `current_stage` should have already been incremented). On completion (`pipeline_status: "completed"`), `current_stage` is the final stage and its status is `"done"`. Note: `stages` object uses string keys (`"1"`, `"2"`, ...) per JSON convention; `current_stage` is an integer for arithmetic comparisons
-- `stage_name` — human-readable name of the current stage. On write, MUST match the canonical name for `current_stage`. Informational; not validated on read (future schema versions may add new names). Canonical names: stage 1 = "Requirement → PRD", stage 2 = "PRD → Design Brief", stage 3 = "Mock App → UI Contract", stage 4 = "PRD + UI Contract → Test Plan", stage 5 = "PRD + Test Plan → Dev Plan", stage 6 = "Dev Plan → JIRA", stage 7 = "Test Plan → Develop Tests", stage 8 = "Execute with Test Adjustment", stage 9 = "Validate"
-- `stages` — object keyed by stage number as string (`"1"` through `"9"`). Each entry contains `status` and optional fields (`artifact`, `jira_epic`, `summary`). All 9 keys must be present even for stages not yet reached
+- `current_stage` — always an integer (1–14). On completion, set to 14 (the final stage). On abort, remains at the stage where abort occurred (the aborting stage's `status` is set to `"aborted"`). **Consistency rule:** when `pipeline_status` is `"active"`, `stages[str(current_stage)].status` MUST be `"in_progress"` or `"not_started"` — never `"done"` or `"skipped"` (if the current stage is done, `current_stage` should have already been incremented). On completion (`pipeline_status: "completed"`), `current_stage` is the final stage and its status is `"done"`. Note: `stages` object uses string keys (`"1"`, `"2"`, ...) per JSON convention; `current_stage` is an integer for arithmetic comparisons
+- `stage_name` — human-readable name of the current stage. On write, MUST match the canonical name for `current_stage`. Informational; not validated on read (future schema versions may add new names). Canonical names: stage 1 = "Requirement → PRD", stage 2 = "PRD → Design Brief", stage 3 = "Mock App → UI Contract", stage 4 = "PRD + UI Contract → Test Plan", stage 5 = "PRD + Test Plan → Dev Plan", stage 6 = "Dev Plan → JIRA", stage 7 = "Test Plan → Develop Tests", stage 8 = "Execute with Test Adjustment", stage 9 = "Validate", stage 10 = "Product Review vs PRD", stage 11 = "E2E Local", stage 12 = "Deploy to Staging", stage 13 = "Tests vs Staging", stage 14 = "E2E vs Staging"
+- `stages` — object keyed by stage number as string (`"1"` through `"14"`). Each entry contains `status` and optional fields (`artifact`, `jira_epic`, `summary`). All 14 keys must be present even for stages not yet reached
 - Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`. On read, reject unknown values. `"aborted"` means the user chose to stop the pipeline at this stage — stages after the aborted stage remain `"not_started"`, and the aborted stage itself was not completed
 - Stage `jira_epic` — optional string; present on Stage 6 when JIRA import has completed. Contains the JIRA epic key (e.g., `"PIPE-35"`). Omitted when JIRA is skipped or stage not yet reached
 - Stage `summary` — string; brief human-readable outcome of the stage (recommended: under 500 characters). Empty string `""` for `not_started` stages. Informational; not validated on read
@@ -254,7 +284,7 @@ Before Pre-Flight Checks, check if any state file exists for this pipeline type.
    - Required fields present: `schema_version`, `pipeline`, `slug`, `requirement`, `current_stage`, `stages`, `pipeline_status` (skip if missing — log: `"WARNING: [tdd-fullpipeline] <filename> missing required field '<field>' — skipping"`)
    - `schema_version` equals `1` (skip if not — log: `"WARNING: [tdd-fullpipeline] <filename> has unsupported schema_version <value> — skipping"`)
    - `current_stage` is an integer between 1 and 9 (skip if out of range — log: `"WARNING: [tdd-fullpipeline] <filename> has invalid current_stage <value> — skipping"`)
-   - `stages` object contains keys `"1"` through `"9"` (skip if missing keys — log: `"WARNING: [tdd-fullpipeline] <filename> has incomplete stages object — skipping"`)
+   - `stages` object contains keys `"1"` through `"14"` (skip if missing keys — log: `"WARNING: [tdd-fullpipeline] <filename> has incomplete stages object — skipping"`)
    - `slug` matches the validation pattern `^[a-z0-9][a-z0-9_-]{0,63}$` (skip if not — log: `"WARNING: [tdd-fullpipeline] <filename> has invalid slug '<value>' — skipping"`)
    - Each stage entry has a `status` field with a valid enum value (`"done"`, `"in_progress"`, `"not_started"`, `"skipped"`, `"aborted"`) — log: `"WARNING: [tdd-fullpipeline] <filename> has invalid stage status '<value>' for stage <N> — skipping"`
    - **Cross-field consistency**: all stages before `current_stage` should be `"done"` or `"skipped"`. Flag `"not_started"`, `"in_progress"`, or `"aborted"` as inconsistent for prior stages. If inconsistent, log: `"WARNING: [tdd-fullpipeline] <filename> has stage <N> as '<status>' but current_stage is <M> — accepting with warning"` (do not skip — allow the user to decide during the resume prompt). Additionally, if `pipeline_status` is `"active"` and `stages[str(current_stage)].status` is `"done"` or `"skipped"`, log: `"WARNING: [tdd-fullpipeline] <filename> has current_stage <N> marked '<status>' — current_stage should have been incremented"` (accept with warning)
@@ -1355,9 +1385,271 @@ Options: approve | fix | abort
 
 *Gate options convention: "edit" for document-stage gates where the user modifies artifacts; "fix" for code/test-stage gates where the user fixes implementation issues. Gate 9 "fix" means: go fix the underlying code or tests, then re-run Stage 9 validation.*
 
-**If approved** → update state file (stage 9 status: `"done"`, test_result: `"PASS"`) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 9 done"` → proceed to Completion
+**If approved** → update state file (stage 9 status: `"done"`, test_result: `"PASS"`, current_stage: 10) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 9 done"` → auto-clear (see "Auto-clear after gate approval" rule)
 **If fix requested** → wait for user fixes, then re-run Stage 9 validation
 **If aborted** → update state file (stage 9 status: `"aborted"`, pipeline_status: `"aborted"`, test_result: `"FAIL"`) and commit → stop pipeline, log residual artifacts (AC 1.10)
+
+---
+
+## Stage 10: Product Review vs PRD (fresh context)
+
+Run all 10 critics against the cumulative diff (all changes on the feature branch vs main), scored against the PRD acceptance criteria.
+
+Spawn a subagent (Task tool, model: opus — Opus 4.6):
+
+**Subagent prompt:**
+```
+You are executing Stage 10 (Product Review vs PRD) of the tdd-fullpipeline.
+
+PRD file: <prd_path>
+Dev plan file: <plan_path>
+Test plan file: <test_plan_path>
+
+Steps:
+1. Read the PRD file and extract all acceptance criteria (grouped by priority)
+2. Run `git diff main...HEAD` to get the cumulative diff
+3. For each of the 10 critics, spawn a critic subagent (model: sonnet — Sonnet 4.6) with:
+   - The critic's persona file from ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/<role>-critic.md
+   - The cumulative diff
+   - The PRD acceptance criteria
+   - Instruction: "Score this implementation against the PRD acceptance criteria. Produce verdict (PASS/FAIL), score (1-10), and findings (Critical/Warnings/Notes)."
+4. All critics must pass: score > 0, 0 Critical findings, 0 Warnings
+5. If any critic fails, iterate: fix the findings and re-run ALL critics (max 3 iterations)
+6. Return:
+   - Critic results table (all 10 critics, verdicts, scores, findings)
+   - AC coverage matrix (which ACs are covered, which are gaps)
+   - Iteration count
+   - Overall verdict (PASS/FAIL)
+```
+
+### GATE 10: Product Review Approval
+
+Present the subagent's summary to the user:
+
+```
+## Gate 10: Product Review vs PRD
+
+### Acceptance Criteria Coverage
+| AC ID | Description | Status |
+|-------|-------------|--------|
+| AC 1.1 | <description> | ✅ Covered |
+| AC 1.2 | <description> | ✅ Covered |
+
+### Critic Results (iteration N)
+| Critic | Verdict | Score | Critical | Warnings | Notes |
+|--------|---------|-------|----------|----------|-------|
+| Product | PASS ✅ | 9.0 | 0 | 0 | 1 |
+| ... | ... | ... | ... | ... | ... |
+
+Overall: PASS / FAIL
+Iterations: N
+
+Options: approve | fix | abort
+```
+
+**If approved** → update state file (stage 10 status: `"done"`, current_stage: 11) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 10 done"` → auto-clear (see "Auto-clear after gate approval" rule)
+**If fix requested** → wait for user fixes, then re-run Stage 10
+**If aborted** → update state file (stage 10 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, log residual artifacts (AC 1.10)
+
+---
+
+## Stage 11: E2E Local (fresh context)
+
+Run the E2E test suite against a local dev server. Start the server, run tests, loop until all pass.
+
+Read `pipeline.config.yaml` for:
+- `test_commands.e2e` — E2E test command (default: `npx playwright test`)
+- `smoke_test.start_command` — local server start command (auto-detected if omitted)
+
+Spawn a subagent (Task tool, model: opus — Opus 4.6):
+
+**Subagent prompt:**
+```
+You are executing Stage 11 (E2E Local) of the tdd-fullpipeline.
+
+Steps:
+1. Start the local dev server
+2. Wait for the server to be ready
+3. Run the E2E test command: <e2e_command>
+4. If any tests fail: analyze, fix, re-run (max 3 iterations)
+5. Stop the dev server
+6. Return: test results, iteration count, overall verdict (PASS/FAIL)
+```
+
+### GATE 11: E2E Local Approval
+
+```
+## Gate 11: E2E Local
+
+### E2E Test Results
+| Suite | Status | Pass | Fail | Skip | Duration |
+|-------|--------|------|------|------|----------|
+| <suite> | PASS | N | 0 | 0 | Xs |
+
+Overall: PASS / FAIL
+Iterations: N
+
+Options: approve | fix | abort
+```
+
+**If approved** → update state file (stage 11 status: `"done"`, current_stage: 12) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 11 done"` → auto-clear (see "Auto-clear after gate approval" rule)
+**If fix requested** → wait for user fixes, then re-run Stage 11
+**If aborted** → update state file (stage 11 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, log residual artifacts (AC 1.10)
+
+---
+
+## Stage 12: Deploy to Staging (fresh context)
+
+Deploy the application to staging using the configured deploy command.
+
+Read `pipeline.config.yaml` for:
+- `staging.deploy_command` — staging deployment command (required; no default)
+- `staging.url` — staging environment URL (required for Stages 13–14)
+
+If `staging.deploy_command` is not configured, halt and tell the user. Offer to skip Stages 12–14 (set all to `"skipped"`) and proceed to Completion.
+
+Spawn a subagent (Task tool, model: opus — Opus 4.6):
+
+**Subagent prompt:**
+```
+You are executing Stage 12 (Deploy to Staging) of the tdd-fullpipeline.
+
+Deploy command: <staging.deploy_command>
+Staging URL: <staging.url>
+
+Steps:
+1. Run the deploy command
+2. Wait for deployment to complete
+3. Verify the staging URL is reachable (HTTP GET, expect 200)
+4. If deployment fails, report the error — do NOT retry automatically
+5. Return: deploy output, verification result, overall verdict (PASS/FAIL)
+```
+
+### GATE 12: Staging Deploy Confirmation
+
+```
+## Gate 12: Deploy to Staging
+
+Deploy command: <command>
+Staging URL: <url>
+
+| Check | Status |
+|-------|--------|
+| Deploy command | ✅ exited 0 |
+| Staging URL reachable | ✅ HTTP 200 |
+
+Overall: PASS / FAIL
+
+Options: approve | fix | abort
+```
+
+**If approved** → update state file (stage 12 status: `"done"`, current_stage: 13) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 12 done"` → auto-clear (see "Auto-clear after gate approval" rule)
+**If fix requested** → wait for user fixes, then re-run Stage 12
+**If aborted** → update state file (stage 12 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, log residual artifacts (AC 1.10)
+
+---
+
+## Stage 13: Tests vs Staging (fresh context)
+
+Run the full test suite against the staging environment.
+
+Read `pipeline.config.yaml` for:
+- `test_commands.all` — full test suite command (default: `npm run test:all`)
+- `staging.url` — staging URL (set as `BASE_URL` / `API_URL` env var)
+
+Spawn a subagent (Task tool, model: opus — Opus 4.6):
+
+**Subagent prompt:**
+```
+You are executing Stage 13 (Tests vs Staging) of the tdd-fullpipeline.
+
+Test command: <test_commands.all>
+Staging URL: <staging.url>
+
+Steps:
+1. Set environment variables: BASE_URL=<staging_url>, API_URL=<staging_url>
+2. Run the full test suite
+3. If tests fail: analyze, fix real bugs, retry (max 3 iterations)
+4. Return: test results by type, iteration count, overall verdict (PASS/FAIL)
+```
+
+### GATE 13: Staging Tests Approval
+
+```
+## Gate 13: Tests vs Staging
+
+Staging URL: <url>
+
+### Test Results
+| Type | Status | Pass | Fail | Skip | Duration |
+|------|--------|------|------|------|----------|
+| Unit | PASS | N | 0 | 0 | Xs |
+| Integration | PASS | N | 0 | 0 | Xs |
+| E2E | PASS | N | 0 | 0 | Xs |
+
+Overall: PASS / FAIL
+Iterations: N
+
+Options: approve | fix | abort
+```
+
+**If approved** → update state file (stage 13 status: `"done"`, current_stage: 14) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 13 done"` → auto-clear (see "Auto-clear after gate approval" rule)
+**If fix requested** → wait for user fixes, then re-run Stage 13
+**If aborted** → update state file (stage 13 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, log residual artifacts (AC 1.10)
+
+---
+
+## Stage 14: E2E vs Staging (fresh context)
+
+Run the same E2E test suite as Stage 11, but pointed at the staging URL instead of localhost.
+
+Read `pipeline.config.yaml` for:
+- `test_commands.e2e` — E2E test command (default: `npx playwright test`)
+- `staging.url` — staging URL (set as `BASE_URL` env var)
+
+Spawn a subagent (Task tool, model: opus — Opus 4.6):
+
+**Subagent prompt:**
+```
+You are executing Stage 14 (E2E vs Staging) of the tdd-fullpipeline.
+
+E2E command: <test_commands.e2e>
+Staging URL: <staging.url>
+
+Steps:
+1. Set environment variable: BASE_URL=<staging_url>
+2. Run the E2E test command
+3. If any tests fail: analyze, fix real bugs, retry (max 3 iterations)
+4. Return: E2E results, comparison with Stage 11, overall verdict (PASS/FAIL)
+```
+
+### GATE 14: E2E Staging Approval
+
+```
+## Gate 14: E2E vs Staging
+
+Staging URL: <url>
+
+### E2E Test Results
+| Suite | Status | Pass | Fail | Skip | Duration |
+|-------|--------|------|------|------|----------|
+| <suite> | PASS | N | 0 | 0 | Xs |
+
+### Local vs Staging Comparison
+| Metric | Local (Stage 11) | Staging (Stage 14) |
+|--------|------------------|-------------------|
+| Tests passed | N | N |
+| Duration | Xs | Xs |
+| Regressions | — | 0 |
+
+Overall: PASS / FAIL
+
+Options: approve | fix | abort
+```
+
+**If approved** → update state file (stage 14 status: `"done"`) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 14 done"` → proceed to Completion
+**If fix requested** → wait for user fixes, then re-run Stage 14
+**If aborted** → update state file (stage 14 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, log residual artifacts (AC 1.10)
 
 ---
 
@@ -1461,6 +1753,11 @@ If the pipeline is interrupted at any stage:
 - **Stage 7 interrupted**: Re-run `/tdd-develop-tests` — check if `tdd/{slug}/tests` branch exists with committed test files. If tests are partially written, the self-health gate will catch inconsistencies.
 - **Stage 8 interrupted**: Re-run `/execute @plan` — it reads task statuses from the dev plan, reconciles JIRA statuses, and resumes from where it left off. Cumulative test adjustment counts are preserved in the state file (`test_adjustments` field) and loaded on resume to enforce the 20% behavioral threshold across interruptions.
 - **Stage 9 interrupted**: Re-run Stage 9 validation — `/test` and traceability are idempotent, scan everything from scratch. Metrics are only written on successful completion, so partial runs leave no stale metrics.
+- **Stage 10 interrupted**: Re-run Stage 10 — critic review is stateless, re-runs from scratch.
+- **Stage 11 interrupted**: Re-run Stage 11 — E2E tests are idempotent.
+- **Stage 12 interrupted**: Re-run Stage 12 — check if staging is already deployed (verify staging URL first). Deploy commands should be idempotent.
+- **Stage 13 interrupted**: Re-run Stage 13 — tests are idempotent.
+- **Stage 14 interrupted**: Re-run Stage 14 — E2E tests are idempotent.
 
 **Re-running `/tdd-fullpipeline`** after interruption: The orchestrator checks `docs/pipeline-state/<slug>.json` at startup (see "Startup: Resume Detection" section). If a state file exists, it offers to resume from the last completed stage. If no state file exists, it falls back to checking disk artifacts:
 - If `docs/prd/<slug>.md` exists, ask whether to skip Stage 1.
@@ -1512,9 +1809,9 @@ The orchestrator will detect existing artifacts and offer to skip completed stag
 
 ## Completion
 
-When all stages complete (Stage 9 subagent returns with PASS verdict):
+When all stages complete (Stage 14 subagent returns, or remaining stages are skipped):
 
-1. **Mark the state file as completed** — update `docs/pipeline-state/<slug>.json`: set `pipeline_status` to `"completed"`, `current_stage` to 9, all stages to `"done"` (or `"skipped"`), and commit:
+1. **Mark the state file as completed** — update `docs/pipeline-state/<slug>.json`: set `pipeline_status` to `"completed"`, `current_stage` to 14, all stages to `"done"` (or `"skipped"`), and commit:
 ```bash
 mkdir -p docs/pipeline-state
 # (write/update docs/pipeline-state/<slug>.json)

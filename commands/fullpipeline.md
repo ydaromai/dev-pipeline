@@ -56,8 +56,35 @@ ORCHESTRATOR (this agent — lightweight coordinator)
   │
   │  ◄── GATE 4: per-PR approval ──►
   │
-  └─ Stage 5 subagent (fresh context) ──► Test Verification report
-       └─ test audit, test generation, test execution, critic validation
+  ├─ Stage 5 subagent (fresh context) ──► Test Verification report
+  │    └─ test audit, test generation, test execution, critic validation
+  │
+  │  ◄── GATE 5: test results approval ──►
+  │
+  ├─ Stage 6 subagent (fresh context) ──► Product Review report
+  │    └─ 10 critic subagents vs PRD acceptance criteria (parallel)
+  │
+  │  ◄── GATE 6: product review approval ──►
+  │
+  ├─ Stage 7 subagent (fresh context) ──► E2E Local report
+  │    └─ E2E test execution against local dev server
+  │
+  │  ◄── GATE 7: E2E local approval ──►
+  │
+  ├─ Stage 8 subagent (fresh context) ──► Staging deployment
+  │    └─ deploy_staging_command execution + verification
+  │
+  │  ◄── GATE 8: staging deploy confirmation ──►
+  │
+  ├─ Stage 9 subagent (fresh context) ──► Staging test report
+  │    └─ full test suite against staging URL
+  │
+  │  ◄── GATE 9: staging tests approval ──►
+  │
+  └─ Stage 10 subagent (fresh context) ──► E2E Staging report
+       └─ E2E tests against staging URL
+
+  ◄── GATE 10: E2E staging approval ──►
 ```
 
 **Why fresh context?** By Gate 4, the orchestrator would be carrying the full PRD generation conversation, all critic scoring iterations, plan generation, JIRA creation dialogue — none of which the execution engine needs. Each stage's meaningful output lives on disk (PRD file, dev plan file, JIRA mapping). The orchestrator only tracks file paths, the slug, and user decisions.
@@ -81,7 +108,7 @@ Resume command (copied to clipboard):
 Clear context now: press Escape, type /clear, press Enter
 Then paste the command (Cmd+V / Ctrl+V) to resume from Stage <N+1>.
 ```
-Then **stop** — do not proceed to the next stage. Wait for the user to clear and re-invoke. This ensures each stage gets a fresh context window. Gates excluded from auto-clear: Gate 4 (per-PR, inside subagent) and Gate 5 (proceeds directly to Completion report, which is lightweight).
+Then **stop** — do not proceed to the next stage. Wait for the user to clear and re-invoke. This ensures each stage gets a fresh context window. Gates excluded from auto-clear: Gate 4 (per-PR, inside subagent) and Gate 10 (proceeds directly to Completion report, which is lightweight).
 
 ---
 
@@ -121,7 +148,12 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
     "2": { "status": "done", "artifact": "docs/dev_plans/<slug>.md", "summary": "..." },
     "3": { "status": "done", "jira_epic": "<key>", "summary": "..." },
     "4": { "status": "in_progress", "summary": "..." },
-    "5": { "status": "not_started", "summary": "" }
+    "5": { "status": "not_started", "summary": "" },
+    "6": { "status": "not_started", "summary": "" },
+    "7": { "status": "not_started", "summary": "" },
+    "8": { "status": "not_started", "summary": "" },
+    "9": { "status": "not_started", "summary": "" },
+    "10": { "status": "not_started", "summary": "" }
   },
   "tasks": {
     "1.1": { "status": "done", "jira": "<key>", "pr": 42, "branch": "<name>" },
@@ -142,9 +174,9 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
 - `slug` — kebab-case identifier derived from the PRD title; must match `^[a-z0-9][a-z0-9_-]{0,63}$`. Used as the key for all artifact paths and the state file name (`<slug>.json`)
 - `requirement` — verbatim copy of the original requirement text from `$ARGUMENTS`. Stored for resume matching (substring match fallback) and for reference. Do not include secrets, API keys, or PII
 - `pipeline_status` — `"active"` during execution, `"completed"` on success, `"aborted"` on user abort. Valid transitions: `active → completed`, `active → aborted`. Exception: `/clear_and_go` may overwrite a completed/aborted file with `"active"` after explicit user confirmation (manual override only — orchestrators never perform this transition)
-- `current_stage` — always an integer (1–5). On completion, set to 5 (the final stage). On abort, remains at the stage where abort occurred (the aborting stage's `status` is set to `"aborted"`). **Consistency rule:** when `pipeline_status` is `"active"`, `stages[str(current_stage)].status` MUST be `"in_progress"` or `"not_started"` — never `"done"` or `"skipped"` (if the current stage is done, `current_stage` should have already been incremented). On completion (`pipeline_status: "completed"`), `current_stage` is the final stage and its status is `"done"`. Note: `stages` object uses string keys (`"1"`, `"2"`, ...) per JSON convention; `current_stage` is an integer for arithmetic comparisons
-- `stage_name` — human-readable name of the current stage. On write, MUST match the canonical name for `current_stage`. Informational; not validated on read (future schema versions may add new names). Canonical names: stage 1 = "Requirement → PRD", stage 2 = "PRD → Dev Plan", stage 3 = "Dev Plan → JIRA", stage 4 = "Execute with Ralph Loop", stage 5 = "Test Verification"
-- `stages` — object keyed by stage number as string (`"1"` through `"5"`). Each entry contains `status` and optional fields (`artifact`, `jira_epic`, `summary`). All 5 keys must be present even for stages not yet reached
+- `current_stage` — always an integer (1–10). On completion, set to 10 (the final stage). On abort, remains at the stage where abort occurred (the aborting stage's `status` is set to `"aborted"`). **Consistency rule:** when `pipeline_status` is `"active"`, `stages[str(current_stage)].status` MUST be `"in_progress"` or `"not_started"` — never `"done"` or `"skipped"` (if the current stage is done, `current_stage` should have already been incremented). On completion (`pipeline_status: "completed"`), `current_stage` is the final stage and its status is `"done"`. Note: `stages` object uses string keys (`"1"`, `"2"`, ...) per JSON convention; `current_stage` is an integer for arithmetic comparisons
+- `stage_name` — human-readable name of the current stage. On write, MUST match the canonical name for `current_stage`. Informational; not validated on read (future schema versions may add new names). Canonical names: stage 1 = "Requirement → PRD", stage 2 = "PRD → Dev Plan", stage 3 = "Dev Plan → JIRA", stage 4 = "Execute with Ralph Loop", stage 5 = "Test Verification", stage 6 = "Product Review vs PRD", stage 7 = "E2E Local", stage 8 = "Deploy to Staging", stage 9 = "Tests vs Staging", stage 10 = "E2E vs Staging"
+- `stages` — object keyed by stage number as string (`"1"` through `"10"`). Each entry contains `status` and optional fields (`artifact`, `jira_epic`, `summary`). All 10 keys must be present even for stages not yet reached
 - Stage `status` — `"done"` | `"in_progress"` | `"not_started"` | `"skipped"` | `"aborted"`. On read, reject unknown values. `"aborted"` means the user chose to stop the pipeline at this stage — stages after the aborted stage remain `"not_started"`, and the aborted stage itself was not completed
 - Stage `jira_epic` — optional string; present on Stage 3 when JIRA import has completed. Contains the JIRA epic key (e.g., `"PIPE-35"`). Omitted when JIRA is skipped or stage not yet reached
 - Stage `summary` — string; brief human-readable outcome of the stage (recommended: under 500 characters). Empty string `""` for `not_started` stages. Informational; not validated on read
@@ -566,9 +598,318 @@ Options: approve | fix | abort
 
 *Gate options convention: "edit" for document-stage gates where the user modifies artifacts; "fix" for code/test-stage gates where the user fixes implementation issues.*
 
-**If approved** → update state file (stage 5 status: `"done"`, test_result: `"PASS"`) and commit. Output: `"INFO: [fullpipeline] Checkpoint saved: slug=<slug>, stage 5 done"` → proceed to Completion
+**If approved** → update state file (stage 5 status: `"done"`, test_result: `"PASS"`, current_stage: 6) and commit. Output: `"INFO: [fullpipeline] Checkpoint saved: slug=<slug>, stage 5 done"` → auto-clear (see "Auto-clear after gate approval" rule)
 **If fix requested** → wait for user fixes, then re-run `/test`
 **If aborted** → update state file (stage 5 status: `"aborted"`, pipeline_status: `"aborted"`, test_result: `"FAIL"`) and commit → stop pipeline, present abort report
+
+---
+
+## Stage 6: Product Review vs PRD (fresh context)
+
+Run all 10 critics against the cumulative diff (all changes on the feature branch vs main), scored against the PRD acceptance criteria. This is a final product-level validation that the implementation matches what was specified.
+
+Spawn a subagent (Task tool, model: opus — Opus 4.6):
+
+**Subagent prompt:**
+```
+You are executing Stage 6 (Product Review vs PRD) of the fullpipeline.
+
+PRD file: <prd_path>
+Dev plan file: <plan_path>
+
+Steps:
+1. Read the PRD file and extract all acceptance criteria (grouped by priority)
+2. Run `git diff main...HEAD` to get the cumulative diff
+3. For each of the 10 critics, spawn a critic subagent (model: sonnet — Sonnet 4.6) with:
+   - The critic's persona file from ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/<role>-critic.md
+   - The cumulative diff
+   - The PRD acceptance criteria
+   - Instruction: "Score this implementation against the PRD acceptance criteria. Produce verdict (PASS/FAIL), score (1-10), and findings (Critical/Warnings/Notes)."
+4. All critics must pass: score > 0, 0 Critical findings, 0 Warnings
+5. If any critic fails, iterate: fix the findings and re-run ALL critics (max 3 iterations)
+6. Return:
+   - Critic results table (all 10 critics, verdicts, scores, findings)
+   - AC coverage matrix (which ACs are covered, which are gaps)
+   - Iteration count
+   - Overall verdict (PASS/FAIL)
+```
+
+When the subagent completes, extract the verdict.
+
+### GATE 6: Product Review Approval
+
+Present the subagent's summary to the user:
+
+```
+## Gate 6: Product Review vs PRD
+
+### Acceptance Criteria Coverage
+| AC ID | Description | Status |
+|-------|-------------|--------|
+| AC 1.1 | <description> | ✅ Covered |
+| AC 1.2 | <description> | ✅ Covered |
+| AC 2.1 | <description> | ⚠️ Partial |
+
+### Critic Results (iteration N)
+| Critic | Verdict | Score | Critical | Warnings | Notes |
+|--------|---------|-------|----------|----------|-------|
+| Product | PASS ✅ | 9.0 | 0 | 0 | 1 |
+| Dev | PASS ✅ | 9.0 | 0 | 0 | 0 |
+| ... | ... | ... | ... | ... | ... |
+
+Overall: PASS / FAIL
+Iterations: N
+
+Options: approve | fix | abort
+```
+
+*Gate options convention: "fix" for verification-stage gates where the user fixes implementation issues.*
+
+**If approved** → update state file (stage 6 status: `"done"`, current_stage: 7) and commit. Output: `"INFO: [fullpipeline] Checkpoint saved: slug=<slug>, stage 6 done"` → auto-clear (see "Auto-clear after gate approval" rule)
+**If fix requested** → wait for user fixes, then re-run Stage 6
+**If aborted** → update state file (stage 6 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, present abort report
+
+---
+
+## Stage 7: E2E Local (fresh context)
+
+Run the E2E test suite against a local dev server. The stage starts the server, runs tests, and loops until all tests pass.
+
+Read `pipeline.config.yaml` for:
+- `test_commands.e2e` — E2E test command (default: `npx playwright test`)
+- `smoke_test.start_command` — local server start command (auto-detected from lockfile if omitted)
+
+Spawn a subagent (Task tool, model: opus — Opus 4.6):
+
+**Subagent prompt:**
+```
+You are executing Stage 7 (E2E Local) of the fullpipeline.
+
+Steps:
+1. Start the local dev server using the start command from pipeline.config.yaml (or auto-detect)
+2. Wait for the server to be ready (use ready_patterns from smoke_test config)
+3. Run the E2E test command: <e2e_command>
+4. If any tests fail:
+   a. Analyze failures
+   b. Fix the issues
+   c. Re-run tests
+   d. Max 3 iterations — if still failing after 3, report failures to user
+5. Stop the dev server
+6. Return:
+   - Test results (pass/fail counts, duration)
+   - Iteration count
+   - Any remaining failures
+   - Overall verdict (PASS/FAIL)
+```
+
+When the subagent completes, extract the verdict.
+
+### GATE 7: E2E Local Approval
+
+Present the subagent's summary to the user:
+
+```
+## Gate 7: E2E Local
+
+### E2E Test Results
+| Suite | Status | Pass | Fail | Skip | Duration |
+|-------|--------|------|------|------|----------|
+| <suite> | PASS | N | 0 | 0 | Xs |
+
+Overall: PASS / FAIL
+Iterations: N
+
+Options: approve | fix | abort
+```
+
+**If approved** → update state file (stage 7 status: `"done"`, current_stage: 8) and commit. Output: `"INFO: [fullpipeline] Checkpoint saved: slug=<slug>, stage 7 done"` → auto-clear (see "Auto-clear after gate approval" rule)
+**If fix requested** → wait for user fixes, then re-run Stage 7
+**If aborted** → update state file (stage 7 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, present abort report
+
+---
+
+## Stage 8: Deploy to Staging (fresh context)
+
+Deploy the application to the staging environment using the configured deploy command.
+
+Read `pipeline.config.yaml` for:
+- `staging.deploy_command` — staging deployment command (required; no default)
+- `staging.url` — staging environment URL (required for Stages 9–10)
+
+If `staging.deploy_command` is not configured, halt and tell the user: `"staging.deploy_command is not configured in pipeline.config.yaml. Add it before running Stage 8."` Offer to skip Stages 8–10 (set all to `"skipped"`) and proceed to Completion.
+
+Spawn a subagent (Task tool, model: opus — Opus 4.6):
+
+**Subagent prompt:**
+```
+You are executing Stage 8 (Deploy to Staging) of the fullpipeline.
+
+Deploy command: <staging.deploy_command>
+Staging URL: <staging.url>
+
+Steps:
+1. Run the deploy command
+2. Wait for deployment to complete
+3. Verify the staging URL is reachable (HTTP GET, expect 200)
+4. If deployment fails, report the error — do NOT retry automatically (deployments may have side effects)
+5. Return:
+   - Deploy command output (truncated to last 100 lines)
+   - Staging URL verification result
+   - Overall verdict (PASS/FAIL)
+```
+
+When the subagent completes, extract the verdict.
+
+### GATE 8: Staging Deploy Confirmation
+
+Present the subagent's summary to the user:
+
+```
+## Gate 8: Deploy to Staging
+
+Deploy command: <command>
+Staging URL: <url>
+
+| Check | Status |
+|-------|--------|
+| Deploy command | ✅ exited 0 |
+| Staging URL reachable | ✅ HTTP 200 |
+
+Overall: PASS / FAIL
+
+Options: approve | fix | abort
+```
+
+**If approved** → update state file (stage 8 status: `"done"`, current_stage: 9) and commit. Output: `"INFO: [fullpipeline] Checkpoint saved: slug=<slug>, stage 8 done"` → auto-clear (see "Auto-clear after gate approval" rule)
+**If fix requested** → wait for user fixes, then re-run Stage 8
+**If aborted** → update state file (stage 8 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, present abort report
+
+---
+
+## Stage 9: Tests vs Staging (fresh context)
+
+Run the full test suite against the staging environment.
+
+Read `pipeline.config.yaml` for:
+- `test_commands.all` — full test suite command (default: `npm run test:all`)
+- `staging.url` — staging URL (set as `BASE_URL` / `API_URL` env var)
+
+Spawn a subagent (Task tool, model: opus — Opus 4.6):
+
+**Subagent prompt:**
+```
+You are executing Stage 9 (Tests vs Staging) of the fullpipeline.
+
+Test command: <test_commands.all>
+Staging URL: <staging.url>
+
+Steps:
+1. Set environment variables: BASE_URL=<staging_url>, API_URL=<staging_url>
+2. Run the full test suite: <test_commands.all>
+3. If tests fail:
+   a. Analyze failures — distinguish staging-specific issues (network, config) from real bugs
+   b. Fix real bugs, retry (max 3 iterations)
+   c. For staging-specific issues, report to user
+4. Return:
+   - Test results by type (unit, integration, E2E — pass/fail/skip/duration)
+   - Iteration count
+   - Any remaining failures
+   - Overall verdict (PASS/FAIL)
+```
+
+When the subagent completes, extract the verdict.
+
+### GATE 9: Staging Tests Approval
+
+Present the subagent's summary to the user:
+
+```
+## Gate 9: Tests vs Staging
+
+Staging URL: <url>
+
+### Test Results
+| Type | Status | Pass | Fail | Skip | Duration |
+|------|--------|------|------|------|----------|
+| Unit | PASS | N | 0 | 0 | Xs |
+| Integration | PASS | N | 0 | 0 | Xs |
+| E2E | PASS | N | 0 | 0 | Xs |
+| All | PASS | N | 0 | 0 | Xs |
+
+Overall: PASS / FAIL
+Iterations: N
+
+Options: approve | fix | abort
+```
+
+**If approved** → update state file (stage 9 status: `"done"`, current_stage: 10) and commit. Output: `"INFO: [fullpipeline] Checkpoint saved: slug=<slug>, stage 9 done"` → auto-clear (see "Auto-clear after gate approval" rule)
+**If fix requested** → wait for user fixes, then re-run Stage 9
+**If aborted** → update state file (stage 9 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, present abort report
+
+---
+
+## Stage 10: E2E vs Staging (fresh context)
+
+Run the same E2E test suite as Stage 7, but pointed at the staging URL instead of localhost. This validates that the deployed staging environment behaves identically to local.
+
+Read `pipeline.config.yaml` for:
+- `test_commands.e2e` — E2E test command (default: `npx playwright test`)
+- `staging.url` — staging URL (set as `BASE_URL` env var)
+
+Spawn a subagent (Task tool, model: opus — Opus 4.6):
+
+**Subagent prompt:**
+```
+You are executing Stage 10 (E2E vs Staging) of the fullpipeline.
+
+E2E command: <test_commands.e2e>
+Staging URL: <staging.url>
+
+Steps:
+1. Set environment variable: BASE_URL=<staging_url>
+2. Run the E2E test command: <e2e_command>
+3. If any tests fail:
+   a. Analyze failures — distinguish environment issues from real bugs
+   b. Fix real bugs, retry (max 3 iterations)
+   c. For environment issues (timeouts, DNS, TLS), report to user
+4. Return:
+   - E2E test results (pass/fail/skip/duration)
+   - Comparison with Stage 7 results (any regressions?)
+   - Iteration count
+   - Overall verdict (PASS/FAIL)
+```
+
+When the subagent completes, extract the verdict.
+
+### GATE 10: E2E Staging Approval
+
+Present the subagent's summary to the user:
+
+```
+## Gate 10: E2E vs Staging
+
+Staging URL: <url>
+
+### E2E Test Results
+| Suite | Status | Pass | Fail | Skip | Duration |
+|-------|--------|------|------|------|----------|
+| <suite> | PASS | N | 0 | 0 | Xs |
+
+### Local vs Staging Comparison
+| Metric | Local (Stage 7) | Staging (Stage 10) |
+|--------|-----------------|-------------------|
+| Tests passed | N | N |
+| Duration | Xs | Xs |
+| Regressions | — | 0 |
+
+Overall: PASS / FAIL
+
+Options: approve | fix | abort
+```
+
+**If approved** → update state file (stage 10 status: `"done"`) and commit. Output: `"INFO: [fullpipeline] Checkpoint saved: slug=<slug>, stage 10 done"` → proceed to Completion
+**If fix requested** → wait for user fixes, then re-run Stage 10
+**If aborted** → update state file (stage 10 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, present abort report
 
 ---
 
@@ -622,6 +963,11 @@ If the pipeline is interrupted at any stage:
 - **Stage 3 interrupted**: Re-run `/plan2jira` — jira-import.js handles idempotency (skips already-created issues)
 - **Stage 4 interrupted**: Re-run `/execute @plan` — it reads task statuses from the dev plan, **reconciles JIRA statuses** (transitions completed tasks to "Done" and in-progress tasks to "In Progress"), and then resumes execution from where it left off. No manual JIRA updates are needed after session restarts.
 - **Stage 5 interrupted**: Re-run `/test @plan` — `/test` is idempotent, scans everything from scratch with no persistent state.
+- **Stage 6 interrupted**: Re-run Stage 6 — critic review is stateless, re-runs from scratch.
+- **Stage 7 interrupted**: Re-run Stage 7 — E2E tests are idempotent.
+- **Stage 8 interrupted**: Re-run Stage 8 — check if staging is already deployed (verify staging URL first). Deploy commands should be idempotent.
+- **Stage 9 interrupted**: Re-run Stage 9 — tests are idempotent.
+- **Stage 10 interrupted**: Re-run Stage 10 — E2E tests are idempotent.
 
 **Re-running `/fullpipeline`** after interruption: The orchestrator checks `docs/pipeline-state/<slug>.json` at startup (see "Startup: Resume Detection" section). If a state file exists, it offers to resume from the last completed stage. If no state file exists, it falls back to checking disk artifacts — if `docs/prd/<slug>.md` exists, ask the user whether to skip Stage 1, etc.
 
@@ -631,9 +977,9 @@ If the pipeline is interrupted at any stage:
 
 ## Completion
 
-When all stages complete (Stage 5 subagent returns, or Stage 5 is skipped):
+When all stages complete (Stage 10 subagent returns, or remaining stages are skipped):
 
-1. **Mark the state file as completed** — update `docs/pipeline-state/<slug>.json`: set `pipeline_status` to `"completed"`, `current_stage` to 5, all stages to `"done"` (or `"skipped"`), and commit:
+1. **Mark the state file as completed** — update `docs/pipeline-state/<slug>.json`: set `pipeline_status` to `"completed"`, `current_stage` to 10, all stages to `"done"` (or `"skipped"`), and commit:
 ```bash
 mkdir -p docs/pipeline-state
 # (write/update docs/pipeline-state/<slug>.json)
@@ -690,9 +1036,37 @@ Log: `"INFO: [fullpipeline] Pipeline completed: slug=<slug>, all stages done"`
 | Critic Validation | PASS | All 7 critics passed on cumulative diff |
 | **Overall** | **PASS** | |
 
+### Product Review (Stage 6)
+| Check | Status |
+|-------|--------|
+| PRD AC Coverage | X/Y ACs covered |
+| 10-Critic Verdict | PASS — 0C, 0W |
+| Iterations | N |
+
+### E2E Local (Stage 7)
+| Suite | Pass | Fail | Duration |
+|-------|------|------|----------|
+| All E2E | N | 0 | Xs |
+
+### Staging Deployment (Stage 8)
+| Check | Status |
+|-------|--------|
+| Deploy command | ✅ exited 0 |
+| Staging URL | ✅ HTTP 200 |
+
+### Tests vs Staging (Stage 9)
+| Type | Pass | Fail | Duration |
+|------|------|------|----------|
+| All | N | 0 | Xs |
+
+### E2E vs Staging (Stage 10)
+| Suite | Pass | Fail | Duration |
+|-------|------|------|----------|
+| All E2E | N | 0 | Xs |
+
 ### Next Steps
-- Deploy to staging
-- Product review against PRD acceptance criteria
+- Monitor staging for 24h
+- Promote to production
 ```
 
 **IMPORTANT:** The Stage 4 subagent's `/execute` includes a mandatory smoke test step (Step 5) that verifies the dev server actually works before declaring complete. If the smoke test fails, the pipeline is NOT complete — the subagent must fix the issues or report them as blocking. Never present a "Pipeline Complete" report to the user without smoke tests passing. **Verify the Stage 4 subagent's response includes a "Smoke Test Results" section before declaring pipeline complete.** If absent, query the subagent for smoke test status. **Heading rules:**

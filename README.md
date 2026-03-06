@@ -5,11 +5,13 @@ AI-driven software delivery pipeline for Claude Code. Converts requirements into
 ## How It Works
 
 ```
-Requirement  -->  PRD  -->  Dev Plan  -->  JIRA  -->  Code (Ralph Loop)  -->  Test Verification
-              GATE 1     GATE 2      GATE 3a/3b    GATE 4 (per PR)        GATE 5
+Requirement → PRD → Dev Plan → JIRA → Code (Ralph Loop) → Test Verification → Product Review → E2E Local → Deploy Staging → Tests Staging → E2E Staging
+  GATE 1      G2      G3a/3b    G4 (per PR)   G5              G6               G7            G8             G9              G10
 ```
 
-Each stage is a Claude Code slash command. Human approval gates sit between stages. Stage 5 (`/test`) performs comprehensive test verification: test existence audit, missing test generation, full test execution, coverage verification, CI/CD audit, and cumulative critic validation across the entire feature branch. Ten critic agents validate artifacts at each gate — 7 always-on (Product, Dev, DevOps, QA, Security, Performance, Data Integrity) and 3 conditional (Observability when `has_backend_service: true`, API Contract when `has_api: true`, Designer when `has_frontend: true`).
+Each stage is a Claude Code slash command. Human approval gates sit between stages. After each gate approval, the orchestrator auto-clears context and resumes from the state file — every stage gets a fresh context window. Ten critic agents validate artifacts at each gate — 7 always-on (Product, Dev, DevOps, QA, Security, Performance, Data Integrity) and 3 conditional (Observability when `has_backend_service: true`, API Contract when `has_api: true`, Designer when `has_frontend: true`).
+
+Stages 6–10 are mandatory verification: product review against PRD acceptance criteria (10 critics, 0C/0W), E2E tests on localhost, deploy to staging, full tests on staging, and E2E on staging.
 
 ### TDD Pipeline — `/tdd-fullpipeline`
 
