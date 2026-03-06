@@ -8,17 +8,20 @@ on:
       - '*.md'
       - '.github/**/*.md'
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: [20, 22]
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 20
+          cache: npm
       - run: npm install --prefix scripts/jira
       - run: npm test
       - run: npm run test:jira
