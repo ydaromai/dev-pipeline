@@ -547,19 +547,19 @@ Design Brief generated: docs/tdd/<slug>/design-brief.md
 - Components: N
 - Data Shapes: N
 
-### Critic Results (iteration N)
-| Critic | Verdict |
-|--------|---------|
-| Product | PASS ✅ |
-| Dev | PASS ✅ |
-| DevOps | PASS ✅ |
-| QA | PASS ✅ |
-| Security | PASS ✅ |
-| Performance | PASS ✅ |
-| Data Integrity | PASS ✅ |
-| Observability | PASS ✅ / N/A |
-| API Contract | PASS ✅ / N/A |
-| Designer | PASS ✅ / N/A |
+### Critic Results (iteration N, avg: X.X/10)
+| Critic | Verdict | Score |
+|--------|---------|-------|
+| Product | PASS ✅ | X.X |
+| Dev | PASS ✅ | X.X |
+| DevOps | PASS ✅ | X.X |
+| QA | PASS ✅ | X.X |
+| Security | PASS ✅ | X.X |
+| Performance | PASS ✅ | X.X |
+| Data Integrity | PASS ✅ | X.X |
+| Observability | PASS ✅ / N/A | X.X |
+| API Contract | PASS ✅ / N/A | X.X |
+| Designer | PASS ✅ / N/A | X.X |
 
 ### Next Step: Build Mock App
 
@@ -654,19 +654,19 @@ Screenshots: .pipeline/tdd/<slug>/mock-screenshots/ (N screenshots)
 | Component: LoginForm | FOUND |
 | Component: DataTable | WARNING -- not found in DOM |
 
-### Critic Results (iteration N)
-| Critic | Verdict |
-|--------|---------|
-| Product | PASS ✅ |
-| Dev | PASS ✅ |
-| DevOps | PASS ✅ |
-| QA | PASS ✅ |
-| Security | PASS ✅ |
-| Performance | PASS ✅ |
-| Data Integrity | PASS ✅ |
-| Observability | PASS ✅ / N/A |
-| API Contract | PASS ✅ / N/A |
-| Designer | PASS ✅ / N/A |
+### Critic Results (iteration N, avg: X.X/10)
+| Critic | Verdict | Score |
+|--------|---------|-------|
+| Product | PASS ✅ | X.X |
+| Dev | PASS ✅ | X.X |
+| DevOps | PASS ✅ | X.X |
+| QA | PASS ✅ | X.X |
+| Security | PASS ✅ | X.X |
+| Performance | PASS ✅ | X.X |
+| Data Integrity | PASS ✅ | X.X |
+| Observability | PASS ✅ / N/A | X.X |
+| API Contract | PASS ✅ / N/A | X.X |
+| Designer | PASS ✅ / N/A | X.X |
 
 Please review the UI contract and cross-reference warnings.
 You can correct any misidentified elements or missing routes before proceeding.
@@ -746,19 +746,19 @@ Test plan generated: docs/tdd/<slug>/test-plan.md
 - TP range: TP-1 through TP-N
 - PRD AC coverage: X% of acceptance criteria have corresponding TP items
 
-### Critic Results (iteration N)
-| Critic | Verdict |
-|--------|---------|
-| Product | PASS ✅ |
-| Dev | PASS ✅ |
-| DevOps | PASS ✅ |
-| QA | PASS ✅ |
-| Security | PASS ✅ |
-| Performance | PASS ✅ |
-| Data Integrity | PASS ✅ |
-| Observability | PASS ✅ / N/A |
-| API Contract | PASS ✅ / N/A |
-| Designer | PASS ✅ / N/A |
+### Critic Results (iteration N, avg: X.X/10)
+| Critic | Verdict | Score |
+|--------|---------|-------|
+| Product | PASS ✅ | X.X |
+| Dev | PASS ✅ | X.X |
+| DevOps | PASS ✅ | X.X |
+| QA | PASS ✅ | X.X |
+| Security | PASS ✅ | X.X |
+| Performance | PASS ✅ | X.X |
+| Data Integrity | PASS ✅ | X.X |
+| Observability | PASS ✅ / N/A | X.X |
+| API Contract | PASS ✅ / N/A | X.X |
+| Designer | PASS ✅ / N/A | X.X |
 
 Please review and approve to proceed to dev plan generation.
 Options: approve | edit | abort
@@ -945,7 +945,7 @@ Important:
   3. Any fake tests identified (tests that passed without app code)
   4. Security test classification summary (count, keywords matched)
   5. Self-health gate fix iterations (if any)
-  6. Critic results (all critics, verdicts, iteration count)
+  6. Critic results (all critics, verdicts, scores 0.0-10.0, iteration count)
   7. Branch name and commit SHA
   8. Any unresolved issues
 ```
@@ -975,19 +975,19 @@ Present the subagent's summary to the user:
 | Security (auto-classified) | N |
 | Standard | N |
 
-### Critic Results (iteration N)
-| Critic | Verdict |
-|--------|---------|
-| Product | PASS ✅ |
-| Dev | PASS ✅ |
-| DevOps | PASS ✅ |
-| QA | PASS ✅ |
-| Security | PASS ✅ |
-| Performance | PASS ✅ |
-| Data Integrity | PASS ✅ |
-| Observability | PASS ✅ / N/A |
-| API Contract | PASS ✅ / N/A |
-| Designer | PASS ✅ / N/A |
+### Critic Results (iteration N, avg: X.X/10)
+| Critic | Verdict | Score |
+|--------|---------|-------|
+| Product | PASS ✅ | X.X |
+| Dev | PASS ✅ | X.X |
+| DevOps | PASS ✅ | X.X |
+| QA | PASS ✅ | X.X |
+| Security | PASS ✅ | X.X |
+| Performance | PASS ✅ | X.X |
+| Data Integrity | PASS ✅ | X.X |
+| Observability | PASS ✅ / N/A | X.X |
+| API Contract | PASS ✅ / N/A | X.X |
+| Designer | PASS ✅ / N/A | X.X |
 
 Tests committed to branch: tdd/<slug>/tests
 Label: tdd-red-tests

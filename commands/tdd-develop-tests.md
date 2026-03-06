@@ -99,7 +99,8 @@ And the UI contract:
 
 Produce your structured output. Include:
 1. Verdict (PASS/FAIL)
-2. Findings (Critical/Warnings/Notes)
+2. Score (0.0-10.0)
+3. Findings (Critical/Warnings/Notes)
 ```
 
 **QA Critic special instruction:** The QA Critic specifically validates that tests assert real behavior, not trivial conditions (AC 7.5). Flag as Critical:
@@ -316,7 +317,7 @@ Present the Stage 6 summary to the user for approval (AC 7.8):
 - **Red count:** <red_count> (expected: equals total)
 - **Fake tests identified:** <fake_test_count> (expected: 0)
 - **Self-health gate:** PASS | FAIL (with override)
-- **Critic review:** PASS in <N> iterations
+- **Critic review:** PASS in <N> iterations (avg score: <avg_score>/10)
 - **Branch:** tdd/<slug>/tests
 - **Label:** tdd-red-tests
 
