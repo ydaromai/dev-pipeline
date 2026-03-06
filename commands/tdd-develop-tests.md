@@ -251,9 +251,54 @@ Options:
 
 ---
 
+## Step 5b: TP Coverage Verification
+
+After the self-health gate passes, verify that every Tier 1 TP in the test plan has a corresponding test.
+
+### 5b-1. Count Tier 1 TPs from Test Plan Body
+
+Read the test plan and count actual Tier 1 specifications by scanning the body content — do NOT trust the summary header counts, which may be stale from earlier drafts. Count each `TP-{N}` entry that has `**Tier:** Tier 1` (or equivalent Tier 1 marker). Record the list of all Tier 1 TP IDs.
+
+### 5b-2. Extract TP IDs from Test Files
+
+Scan all generated test files for `// TP-{N}:` traceability comments. Record the list of all referenced TP IDs.
+
+### 5b-3. Cross-Reference
+
+Compare the two lists:
+- **Missing TPs:** Tier 1 TPs in the test plan that have NO corresponding test → these are coverage gaps
+- **Extra TPs:** TP IDs in test files that are NOT Tier 1 in the test plan → flag as potential errors
+- **Stale counts:** If the test plan summary header count differs from the body count, note the discrepancy
+
+### 5b-4. Fix Coverage Gaps
+
+If any Tier 1 TPs are missing:
+1. Generate tests for the missing TPs following Step 2 rules
+2. Re-run self-health gate (Step 4) on the new tests only
+3. Update totals
+
+### 5b-5. Reconcile Summary Header
+
+If the test plan summary header has stale counts (differs from body count), report the discrepancy in the Gate 6 summary so it can be corrected.
+
+### 5b-6. Coverage Report
+
+Record the final coverage data for the human gate:
+```
+TP Coverage Verification:
+  Tier 1 TPs in test plan (body count): N
+  Tier 1 TPs in test plan (header claims): M
+  Header stale: yes/no (if M ≠ N)
+  Tests with TP traceability: N
+  Coverage gaps: 0 | [list of missing TP-{N}]
+  Extra TPs: 0 | [list]
+```
+
+---
+
 ## Step 6: Commit and Branch
 
-After the self-health gate passes (all tests are red):
+After the self-health gate and TP coverage verification pass (all tests are red, all Tier 1 TPs covered):
 
 ### 6a. Create Branch
 
@@ -328,10 +373,13 @@ Present the Stage 6 summary to the user for approval (AC 7.8):
 - **Keywords matched:** <list of unique keywords found>
 - **Security tests are immutable** -- they cannot be modified during Stage 7 (Develop App)
 
-### TP-{N} Coverage
-- **Tier 1 specs in test plan:** <tier1_spec_count>
+### TP-{N} Coverage Verification
+- **Tier 1 TPs in test plan (body count):** <tier1_body_count>
+- **Tier 1 TPs in test plan (header claims):** <tier1_header_count>
+- **Header stale:** yes/no (if counts differ, the header is stale and should be corrected)
 - **Tier 1 tests developed:** <tier1_test_count>
 - **Coverage gaps:** <list any TP-{N} without a corresponding test, or "None">
+- **Extra TPs:** <list any TP-{N} in tests but not Tier 1 in plan, or "None">
 
 ### Tier 2 Status
 - **Tier 2 specs in test plan:** <tier2_spec_count>

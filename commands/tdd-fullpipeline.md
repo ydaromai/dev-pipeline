@@ -946,8 +946,9 @@ Important:
   4. Security test classification summary (count, keywords matched)
   5. Self-health gate fix iterations (if any)
   6. Critic results (all critics, verdicts, scores 0.0-10.0, iteration count)
-  7. Branch name and commit SHA
-  8. Any unresolved issues
+  7. TP coverage verification (body count vs header count, gaps, extras)
+  8. Branch name and commit SHA
+  9. Any unresolved issues
 ```
 
 When the subagent completes, verify the self-health gate result.
@@ -988,6 +989,15 @@ Present the subagent's summary to the user:
 | Observability | PASS ✅ / N/A | X.X |
 | API Contract | PASS ✅ / N/A | X.X |
 | Designer | PASS ✅ / N/A | X.X |
+
+### TP Coverage Verification
+| Metric | Value | Status |
+|--------|-------|--------|
+| Tier 1 TPs (body count) | N | -- |
+| Tier 1 TPs (header claims) | M | MATCH / STALE |
+| Tests with TP traceability | N | PASS (= body count) |
+| Coverage gaps | 0 | PASS |
+| Extra TPs | 0 | PASS |
 
 Tests committed to branch: tdd/<slug>/tests
 Label: tdd-red-tests
