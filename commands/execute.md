@@ -139,11 +139,12 @@ You are implementing a task from a dev plan. Follow all agent constraints.
 
 ## Instructions
 1. Read the codebase to understand existing patterns
-2. Implement subtasks: review the subtask list and identify which are independent (no output from one is input to another) vs. dependent (one builds on another's output, e.g., "create schema" before "write migration"). Implement independent subtasks in whatever order is most efficient; maintain sequential order for dependent subtasks. If dependencies between subtasks are unclear, default to sequential execution in the listed order.
-3. Write tests as specified in Required Tests
-4. Run tests: <test command from pipeline.config.yaml>
-5. Commit with conventional commit format, reference JIRA key
-6. Report what you implemented and any issues encountered
+2. If this task involves CI/CD workflows or Vercel config, read `${CLAUDE_PLUGIN_ROOT}/pipeline/templates/ci-guidelines.md` and follow all rules strictly
+3. Implement subtasks: review the subtask list and identify which are independent (no output from one is input to another) vs. dependent (one builds on another's output, e.g., "create schema" before "write migration"). Implement independent subtasks in whatever order is most efficient; maintain sequential order for dependent subtasks. If dependencies between subtasks are unclear, default to sequential execution in the listed order.
+4. Write tests as specified in Required Tests
+5. Run tests: <test command from pipeline.config.yaml>
+6. Commit with conventional commit format, reference JIRA key
+7. Report what you implemented and any issues encountered
 ```
 
 ### 3c. Ralph Loop — REVIEW phase (fresh context, different model)

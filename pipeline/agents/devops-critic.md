@@ -32,6 +32,13 @@ When reviewing a PRD (not code), evaluate:
 - [ ] Monitoring and observability needs are considered
 - [ ] Migration or rollout strategy is addressed (if applicable)
 
+- [ ] CI workflows use PR-only triggers (no `push` trigger on CI — deploy workflows handle push)
+- [ ] CI triggers restricted to `main` branch (not `'**'` / all branches)
+- [ ] CI workflows have `paths-ignore` for docs/markdown (`docs/**`, `*.md`, `.github/**/*.md`)
+- [ ] Vercel projects that deploy via GitHub Actions have `"ignoreCommand": "exit 0"` in vercel.json (prevents double builds)
+- [ ] Scheduled workflows use reasonable intervals (no `*/5 * * * *` cron unless truly needed — prefer `*/30` or longer)
+- [ ] CI does not duplicate work across workflows (e.g., deploy workflow should not re-run lint/test if CI already passed on the PR)
+- [ ] CI uses `concurrency` with `cancel-in-progress: true` to avoid stacking runs
 - [ ] No hardcoded environment values (uses env vars / config)
 - [ ] No secrets in code or config files committed
 - [ ] No secrets in comments, logs, or error messages
@@ -70,6 +77,9 @@ When reviewing a PRD (not code), evaluate:
 - Note 1
 
 ### Checklist
+- [x/✗/N/A] CI triggers optimized (PR-only, main-only, paths-ignore)
+- [x/✗/N/A] No duplicate CI/CD work (Vercel ignoreCommand, no redundant stages)
+- [x/✗/N/A] Scheduled jobs use reasonable intervals
 - [x/✗/N/A] No hardcoded environment values
 - [x/✗/N/A] No secrets in code
 - [x/✗/N/A] No secrets in logs/errors
