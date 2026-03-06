@@ -206,6 +206,38 @@ For each route (at the desktop viewport as the primary extraction viewport), ext
      Recommendation: Add an aria-label or accessible name to this element in the mock app.
      ```
 
+### 4d. Visual System Extraction
+
+For each route (at the desktop viewport), extract visual design tokens and animation infrastructure via `page.evaluate()`:
+
+1. **CSS custom properties from `:root`:**
+   ```js
+   const styles = getComputedStyle(document.documentElement);
+   ```
+   - Collect all `--*` properties and group into categories: colors, spacing, typography, radius, shadows
+   - Record raw values (hex, rem, px, etc.)
+
+2. **Typography:**
+   - `@font-face` declarations from all stylesheets (family name, weight, style, src)
+   - Font loading status via `document.fonts.check('16px <family>')` for each declared family
+   - Type scale: collect all unique `font-size` values applied to text elements, sorted ascending
+
+3. **Animation system:**
+   - `@keyframes` definitions from stylesheets (animation name + keyframe steps)
+   - `@media (prefers-reduced-motion)` presence (boolean)
+   - Transition properties on interactive elements — sample up to 10 unique `transition` patterns (deduplicated by property+duration+easing)
+   - Motion library detection: check for `motion/react` or `framer-motion` in script tags or module imports
+
+4. **Layout measurements at each viewport** (mobile, tablet, desktop):
+   - Sidebar width (expanded and collapsed states, if a sidebar toggle exists)
+   - Bottom navigation height (if present)
+   - Content area padding (top, right, bottom, left)
+   - Card border-radius (sample from first card-like element: `[class*="card"]`, `article`, `.card`)
+
+5. **Status colors:**
+   - Scan for semantic status elements (elements with status-related classes or `data-status` attributes)
+   - For each unique status, record: background color, text color, border color
+
 ---
 
 ## Step 5: Keyboard Navigation Testing
@@ -401,19 +433,69 @@ All screenshots are saved to `.pipeline/tdd/<slug>/mock-screenshots/`.
 | /settings | settings-mobile.png | settings-tablet.png | settings-desktop.png |
 ```
 
+#### Section 8: Visual Contract
+
+The visual design tokens and animation infrastructure extracted in Step 4d:
+
+```markdown
+## Visual Contract
+
+### 8.1 Design Tokens
+| Token | Value | Category |
+|-------|-------|----------|
+| --color-primary | #1a2b4a | color |
+| --color-accent | #f5a623 | color |
+| --spacing-md | 1rem | spacing |
+| --radius-lg | 12px | radius |
+| --shadow-card | 0 2px 8px rgba(0,0,0,0.12) | shadow |
+
+### 8.2 Typography
+| Property | Value |
+|----------|-------|
+| Primary font | Inter |
+| Font weight range | 400, 500, 600, 700 |
+| Type scale | 12px, 14px, 16px, 20px, 24px, 32px |
+| Font loading | Inter: loaded, Mono: loaded |
+
+### 8.3 Animation System
+| Name | Type | Duration | Easing |
+|------|------|----------|--------|
+| fadeIn | @keyframes | 200ms | ease-out |
+| slideUp | @keyframes | 300ms | cubic-bezier(0.4, 0, 0.2, 1) |
+| hover-scale | transition | 150ms | ease |
+| Motion library | framer-motion | — | — |
+| Reduced motion | @media query present | — | — |
+
+### 8.4 Layout Measurements
+| Measurement | Mobile | Tablet | Desktop |
+|-------------|--------|--------|---------|
+| Sidebar width (expanded) | — | 240px | 280px |
+| Sidebar width (collapsed) | — | 64px | 64px |
+| Bottom nav height | 56px | — | — |
+| Content padding | 16px | 24px | 32px |
+| Card border-radius | 8px | 8px | 12px |
+
+### 8.5 Status Colors
+| Status | Background | Text | Border |
+|--------|-----------|------|--------|
+| active | #e8f5e9 | #2e7d32 | #4caf50 |
+| pending | #fff3e0 | #e65100 | #ff9800 |
+| error | #ffebee | #c62828 | #ef5350 |
+```
+
 ### 6b. Character Limit Enforcement
 
-The UI contract document must not exceed **50,000 characters**.
+The UI contract document must not exceed **65,000 characters**.
 
-After generating the full document, measure its character count. If it exceeds 50,000 characters:
+After generating the full document, measure its character count. If it exceeds 65,000 characters:
 
 1. Calculate the overage.
 2. Remove routes from the end of the route list (lowest-priority routes first — routes discovered later in the traversal are considered lower priority).
 3. For each removed route, strip its entries from all sections (Component Inventory, Interactive Elements, Form Contracts, Accessibility Map, Data-Testid Registry, Screenshots).
-4. Re-measure until the document is within the 50,000-character limit.
+4. Re-measure until the document is within the 65,000-character limit.
 5. Add a Warning at the top of the document:
    ```
-   WARNING: UI contract truncated to 50,000 character limit.
+   WARNING: UI contract truncated to 65,000 character limit.
    Routes dropped: <N> (of <total discovered>)
    Dropped routes: <list of dropped route paths>
    Increase tdd.max_mock_routes or simplify the mock app to include all routes.

@@ -95,6 +95,24 @@ When reviewing a PRD (not code), evaluate:
 - [ ] Transitions are smooth and not jarring (appropriate duration/easing)
 - [ ] No animations that block user interaction
 
+### Visual Contract Fidelity (when UI contract Visual Contract section exists)
+- [ ] CSS custom property values match contracted design tokens
+- [ ] Contracted fonts imported and load successfully
+- [ ] Font scale matches contracted values (no rogue hardcoded px sizes bypassing the scale)
+- [ ] Status colors match contracted mapping (bg, text, border per status)
+- [ ] Border radius values match contracted tokens
+- [ ] Shadow values match contracted tokens
+- [ ] Animation patterns from contract are implemented (@keyframes, transitions)
+- [ ] `prefers-reduced-motion` respected if contracted
+- [ ] Layout measurements match at each viewport (±2px tolerance)
+- [ ] Spacing uses contracted scale (no arbitrary values outside the token set)
+
+**Scoring guidance for Visual Contract:**
+- Individual token deviations (wrong color value, off-by-1px spacing) → **Warning**
+- Missing entire categories (no animation system when contracted, no status colors when contracted) → **Critical**
+- Hardcoded values bypassing tokens (`color: #ff0000` instead of `var(--color-destructive)`) → **Warning**
+- If no Visual Contract section exists in the UI contract, skip this entire checklist and report "N/A — no Visual Contract in UI contract"
+
 ## Output Format
 
 ```markdown
@@ -164,6 +182,18 @@ When reviewing a PRD (not code), evaluate:
 - [x/✗/N/A] Animations serve a purpose
 - [x/✗/N/A] Respects prefers-reduced-motion
 - [x/✗/N/A] No interaction-blocking animations
+
+#### Visual Contract Fidelity (when Visual Contract exists)
+- [x/✗/N/A] CSS tokens match contracted values
+- [x/✗/N/A] Contracted fonts loaded and applied
+- [x/✗/N/A] Font scale matches contract
+- [x/✗/N/A] Status colors match contract
+- [x/✗/N/A] Border radius matches contract
+- [x/✗/N/A] Shadows match contract
+- [x/✗/N/A] Animations implemented per contract
+- [x/✗/N/A] Reduced motion respected
+- [x/✗/N/A] Layout measurements match per viewport
+- [x/✗/N/A] Spacing uses contracted scale
 
 ### Accessibility Summary
 | WCAG Criterion | Status | Notes |

@@ -538,6 +538,47 @@ These checks run regardless of Playwright availability, as supplementary validat
 3. Verify images/icons/assets referenced in code exist as files (no missing references)
 4. If the project defines a dark theme (`data-theme`, `prefers-color-scheme`), verify all CSS custom properties have definitions in both themes
 
+**6. Visual Contract token validation (when UI contract Visual Contract section exists):**
+
+If a Visual Contract exists at `docs/tdd/<slug>/ui-contract.md` (Section 8), validate contracted tokens against the running app via Playwright's `page.evaluate()`:
+
+1. **Extract actual CSS custom properties** from the running app:
+   ```js
+   const styles = getComputedStyle(document.documentElement);
+   // For each contracted token, read: styles.getPropertyValue('--token-name')
+   ```
+
+2. **Compare each contracted token against actual value:**
+   - **Colors:** Exact match after normalizing to lowercase hex (convert `rgb()` to hex for comparison)
+   - **Spacing/dimensions:** ±2px tolerance (parse to numeric, compare)
+   - **Fonts:** Substring match — contracted `"Inter"` matches actual `"Inter, sans-serif"`
+   - **Radius/shadows:** Exact string match after whitespace normalization
+
+3. **Check font loading:** For each contracted font family, run `document.fonts.check('16px <family>')` and report loaded/not-loaded status.
+
+4. **Check animation infrastructure:** Verify `@media (prefers-reduced-motion)` media query exists in at least one stylesheet if contracted.
+
+5. **Report mismatches as a table:**
+   ```
+   ### Visual Contract Validation
+   | Token | Contracted | Actual | Match |
+   |-------|-----------|--------|-------|
+   | --color-primary | #1a2b4a | #1a2b4a | MATCH |
+   | --spacing-md | 16px | 14px | MISMATCH (±2px) |
+   | --radius-lg | 12px | 8px | MISMATCH |
+   | Font: Inter | loaded | loaded | MATCH |
+   | reduced-motion | present | missing | MISMATCH |
+
+   Token match rate: 85% (17/20)
+   ```
+
+6. **Failure classification:**
+   - **>70% match rate** → PASS with Warnings for individual mismatches
+   - **30–70% match rate** → WARNING (report in smoke test results, do not block)
+   - **<30% match rate** → CRITICAL (visual contract severely violated, blocks delivery)
+
+If no Visual Contract section exists in the UI contract, skip this sub-step and report `Visual Contract: N/A (no Visual Contract in UI contract)`.
+
 #### Branch (b): Static analysis only with Warning (`has_frontend: true` BUT Playwright NOT available)
 
 When `has_frontend: true` but Playwright was NOT available (Step 5d fell back to Path B):

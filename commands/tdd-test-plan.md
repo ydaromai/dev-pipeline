@@ -100,6 +100,17 @@ Define data integrity test expectations:
 - **State persistence:** Data that must survive route navigation, form multi-step flows, or page refresh
 - Each contract item references its TP-{N} ID(s)
 
+### Visual Contracts
+
+Define visual fidelity test expectations (only when UI contract contains a Visual Contract section — Section 8):
+
+- **Token fidelity:** CSS custom property values in the implemented app match the Visual Contract's design tokens (colors, spacing, radius, shadows)
+- **Typography fidelity:** Contracted font families are imported, load successfully (`document.fonts.check()`), and are applied to the correct elements. Font scale matches contracted values.
+- **Animation presence:** Contracted `@keyframes` and transition patterns are implemented. `prefers-reduced-motion` media query is respected if contracted.
+- **Layout measurements:** Sidebar width, bottom nav height, content padding, and card border-radius match contracted values at each viewport (mobile, tablet, desktop) within ±2px tolerance
+- **Status color mapping:** Each status (active, pending, error, etc.) has the correct background, text, and border colors from the Visual Contract
+- Each contract item references its TP-{N} ID(s)
+
 ---
 
 ## Step 4: Critic Review
@@ -308,7 +319,7 @@ The test plan document must include this header:
 - **Total TP count:** N
 - **Tier 1 (E2E/Playwright):** N specifications
 - **Tier 2 (Integration/Unit):** N outlines
-- **Contract sections:** Performance, Accessibility, Error, Data Flow
+- **Contract sections:** Performance, Accessibility, Error, Data Flow, Visual
 
 ---
 ```
@@ -336,6 +347,7 @@ Test plan generated: docs/tdd/<slug>/test-plan.md
 - Accessibility Contracts: N items (TP-X, TP-Y, ...)
 - Error Contracts: N items (TP-X, TP-Y, ...)
 - Data Flow Contracts: N items (TP-X, TP-Y, ...)
+- Visual Contracts: N items (TP-X, TP-Y, ...)
 
 ### Traceability Overview
 - PRD acceptance criteria covered: N / M (percentage)
