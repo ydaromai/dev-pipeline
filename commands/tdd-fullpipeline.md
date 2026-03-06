@@ -104,6 +104,21 @@ ORCHESTRATOR (this agent — lightweight coordinator)
 
 **Proactive checkpoint rule:** When context usage reaches ~70% of the context window, the orchestrator MUST proactively save a checkpoint before continuing. Do not wait for the user to request it. Steps: (1) write the state file with current progress using the same Write Rule as gate transitions, (2) log: `"INFO: [tdd-fullpipeline] Proactive checkpoint at ~70% context — state saved to docs/pipeline-state/<slug>.json"`, (3) tell the user: `"Context is at ~70%. State has been saved. You can /clear and re-run the same command to resume, or continue if you prefer."` This prevents data loss from auto-compaction.
 
+**Auto-clear after gate approval:** After every gate approval (except per-PR gates handled inside subagents and the final gate before Completion), the orchestrator MUST automatically perform a context clear cycle instead of proceeding to the next stage inline. Steps: (1) update the state file as normal (stage done, increment current_stage) and commit, (2) copy the resume command to clipboard using the same clipboard logic as `/clear_and_go` Step 6 (single-quoted, `pbcopy` with fallbacks), (3) present:
+```
+## Gate <N> Approved — Clearing Context
+
+State saved: docs/pipeline-state/<slug>.json
+Next stage: Stage <N+1> — <stage_name>
+
+Resume command (copied to clipboard):
+`/tdd-fullpipeline <original requirement text>`
+
+Clear context now: press Escape, type /clear, press Enter
+Then paste the command (Cmd+V / Ctrl+V) to resume from Stage <N+1>.
+```
+Then **stop** — do not proceed to the next stage. Wait for the user to clear and re-invoke. This ensures each stage gets a fresh context window. Gates excluded from auto-clear: Gate 8 (per-PR, inside subagent) and Gate 9 (proceeds directly to Completion report, which is lightweight).
+
 ---
 
 ## Orchestrator State
@@ -505,7 +520,7 @@ Options: approve | edit | abort
 
 *Gate options convention: "edit" for document-stage gates where the user modifies artifacts; "fix" for code/test-stage gates where the user fixes implementation issues.*
 
-**If approved** → update state file (stage 1 status: `"done"`, current_stage: 2) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 1 done"` → proceed to Stage 2
+**If approved** → update state file (stage 1 status: `"done"`, current_stage: 2) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 1 done"` → auto-clear (see "Auto-clear after gate approval" rule)
 **If edit requested** → wait for user edits, then re-validate with `/validate`
 **If aborted** → update state file (stage 1 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, log residual artifacts (AC 1.10)
 
@@ -586,7 +601,7 @@ Options: provide mock URL | edit brief | abort
 
 *Gate options convention: Gate 2 uses unique options because it is a manual gate — the user builds an external artifact and provides a URL, rather than reviewing a generated document. "edit brief" allows modifying the design brief before rebuilding the mock.*
 
-**When user provides mock URL** → validate the URL at orchestrator level before proceeding: scheme must be `http` or `https` (reject `file:`, `data:`, `javascript:`); reject non-loopback RFC 1918 addresses; reject `0.0.0.0` (binds all interfaces — use `127.0.0.1` or `localhost` instead); reject IPv6 addresses other than `::1`. DNS rebinding is an accepted risk for this local-only tool. If validation fails, ask the user for a corrected URL. Then store in `user_prefs.mock_url`, update state file (stage 2 status: `"done"`, current_stage: 3, user_prefs.mock_url: `<url>`) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 2 done"` → proceed to Stage 3
+**When user provides mock URL** → validate the URL at orchestrator level before proceeding: scheme must be `http` or `https` (reject `file:`, `data:`, `javascript:`); reject non-loopback RFC 1918 addresses; reject `0.0.0.0` (binds all interfaces — use `127.0.0.1` or `localhost` instead); reject IPv6 addresses other than `::1`. DNS rebinding is an accepted risk for this local-only tool. If validation fails, ask the user for a corrected URL. Then store in `user_prefs.mock_url`, update state file (stage 2 status: `"done"`, current_stage: 3, user_prefs.mock_url: `<url>`) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 2 done"` → auto-clear (see "Auto-clear after gate approval" rule)
 **If edit requested** → wait for user edits, then re-validate
 **If aborted** → update state file (stage 2 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, log residual artifacts (AC 1.10)
 
@@ -683,7 +698,7 @@ Options: approve | edit | abort
 
 *Gate options convention: "edit" for document-stage gates where the user modifies artifacts; "fix" for code/test-stage gates where the user fixes implementation issues.*
 
-**If approved** → update state file (stage 3 status: `"done"`, current_stage: 4) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 3 done"` → proceed to Stage 4
+**If approved** → update state file (stage 3 status: `"done"`, current_stage: 4) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 3 done"` → auto-clear (see "Auto-clear after gate approval" rule)
 **If edit requested** → user corrects the UI contract, then re-validate
 **If aborted** → update state file (stage 3 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, log residual artifacts (AC 1.10)
 
@@ -774,7 +789,7 @@ Options: approve | edit | abort
 
 *Gate options convention: "edit" for document-stage gates where the user modifies artifacts; "fix" for code/test-stage gates where the user fixes implementation issues.*
 
-**If approved** → update state file (stage 4 status: `"done"`, current_stage: 5) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 4 done"` → proceed to Stage 5
+**If approved** → update state file (stage 4 status: `"done"`, current_stage: 5) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 4 done"` → auto-clear (see "Auto-clear after gate approval" rule)
 **If edit requested** → wait for user edits, then re-validate
 **If aborted** → update state file (stage 4 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, log residual artifacts (AC 1.10)
 
@@ -906,7 +921,7 @@ Options: approve | edit | abort
 
 *Gate options convention: "edit" for document-stage gates where the user modifies artifacts; "fix" for code/test-stage gates where the user fixes implementation issues.*
 
-**If approved** → update state file (stage 5 status: `"done"`, current_stage: 6) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 5 done"` → proceed to Stage 6
+**If approved** → update state file (stage 5 status: `"done"`, current_stage: 6) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 5 done"` → auto-clear (see "Auto-clear after gate approval" rule)
 **If edit requested** → wait for user edits, then re-validate
 **If aborted** → update state file (stage 5 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, log residual artifacts (AC 1.10)
 
@@ -941,9 +956,9 @@ Important:
 
 **Note:** This stage includes its own user interaction (critic validation and JIRA confirmation) — the subagent handles both gates directly since they are tightly coupled to the JIRA creation flow.
 
-**If user chose skip-jira** → record `user_prefs.skip_jira = true`, update state file (stage 6 status: `"skipped"`, current_stage: 7, user_prefs.skip_jira: true) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 6 skipped"` → proceed to Stage 7
+**If user chose skip-jira** → record `user_prefs.skip_jira = true`, update state file (stage 6 status: `"skipped"`, current_stage: 7, user_prefs.skip_jira: true) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 6 skipped"` → auto-clear (see "Auto-clear after gate approval" rule)
 
-When Stage 6 subagent completes successfully → update state file (stage 6 status: `"done"`, current_stage: 7, stage 6 `jira_epic`: extract from subagent response) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 6 done"`
+When Stage 6 subagent completes successfully → update state file (stage 6 status: `"done"`, current_stage: 7, stage 6 `jira_epic`: extract from subagent response) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 6 done"` → auto-clear (see "Auto-clear after gate approval" rule)
 
 ---
 
@@ -1054,7 +1069,7 @@ Options: approve | fix | abort
 
 *Gate options convention: "edit" for document-stage gates where the user modifies artifacts; "fix" for code/test-stage gates where the user fixes implementation issues.*
 
-**If approved** → update state file (stage 7 status: `"done"`, current_stage: 8) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 7 done"` → proceed to Stage 8
+**If approved** → update state file (stage 7 status: `"done"`, current_stage: 8) and commit. Output: `"INFO: [tdd-fullpipeline] Checkpoint saved: slug=<slug>, stage 7 done"` → auto-clear (see "Auto-clear after gate approval" rule)
 **If fix requested** → wait for user fixes, re-run self-health gate
 **If aborted** → update state file (stage 7 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, log residual artifacts (AC 1.10)
 

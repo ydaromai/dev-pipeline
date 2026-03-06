@@ -68,6 +68,21 @@ ORCHESTRATOR (this agent — lightweight coordinator)
 
 **Proactive checkpoint rule:** When context usage reaches ~70% of the context window, the orchestrator MUST proactively save a checkpoint before continuing. Do not wait for the user to request it. Steps: (1) write the state file with current progress using the same Write Rule as gate transitions, (2) log: `"INFO: [fullpipeline] Proactive checkpoint at ~70% context — state saved to docs/pipeline-state/<slug>.json"`, (3) tell the user: `"Context is at ~70%. State has been saved. You can /clear and re-run the same command to resume, or continue if you prefer."` This prevents data loss from auto-compaction.
 
+**Auto-clear after gate approval:** After every gate approval (except per-PR gates handled inside subagents and the final gate before Completion), the orchestrator MUST automatically perform a context clear cycle instead of proceeding to the next stage inline. Steps: (1) update the state file as normal (stage done, increment current_stage) and commit, (2) copy the resume command to clipboard using the same clipboard logic as `/clear_and_go` Step 6 (single-quoted, `pbcopy` with fallbacks), (3) present:
+```
+## Gate <N> Approved — Clearing Context
+
+State saved: docs/pipeline-state/<slug>.json
+Next stage: Stage <N+1> — <stage_name>
+
+Resume command (copied to clipboard):
+`/fullpipeline <original requirement text>`
+
+Clear context now: press Escape, type /clear, press Enter
+Then paste the command (Cmd+V / Ctrl+V) to resume from Stage <N+1>.
+```
+Then **stop** — do not proceed to the next stage. Wait for the user to clear and re-invoke. This ensures each stage gets a fresh context window. Gates excluded from auto-clear: Gate 4 (per-PR, inside subagent) and Gate 5 (proceeds directly to Completion report, which is lightweight).
+
 ---
 
 ## Orchestrator State
@@ -310,7 +325,7 @@ Options: approve | edit | abort
 
 *Gate options convention: "edit" for document-stage gates where the user modifies artifacts; "fix" for code/test-stage gates where the user fixes implementation issues.*
 
-**If approved** → update state file (stage 1 status: `"done"`, current_stage: 2) and commit. Output: `"INFO: [fullpipeline] Checkpoint saved: slug=<slug>, stage 1 done"` → proceed to Stage 2
+**If approved** → update state file (stage 1 status: `"done"`, current_stage: 2) and commit. Output: `"INFO: [fullpipeline] Checkpoint saved: slug=<slug>, stage 1 done"` → auto-clear (see "Auto-clear after gate approval" rule)
 **If edit requested** → wait for user edits, then re-validate with `/validate`
 **If aborted** → update state file (stage 1 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, present abort report (see "Pipeline Abort" section)
 
@@ -384,7 +399,7 @@ Options: approve | edit | abort
 
 *Gate options convention: "edit" for document-stage gates where the user modifies artifacts; "fix" for code/test-stage gates where the user fixes implementation issues.*
 
-**If approved** → update state file (stage 2 status: `"done"`, current_stage: 3) and commit. Output: `"INFO: [fullpipeline] Checkpoint saved: slug=<slug>, stage 2 done"` → proceed to Stage 3
+**If approved** → update state file (stage 2 status: `"done"`, current_stage: 3) and commit. Output: `"INFO: [fullpipeline] Checkpoint saved: slug=<slug>, stage 2 done"` → auto-clear (see "Auto-clear after gate approval" rule)
 **If aborted** → update state file (stage 2 status: `"aborted"`, pipeline_status: `"aborted"`) and commit → stop pipeline, present abort report
 
 ---
@@ -418,9 +433,9 @@ Important:
 
 **Note:** This stage includes its own user interaction (Gate 3a critic validation and Gate 3b JIRA confirmation) — the subagent handles both gates directly since they are tightly coupled to the JIRA creation flow.
 
-**If user chose skip-jira** → record `user_prefs.skip_jira = true`, update state file (stage 3 status: `"skipped"`, current_stage: 4, user_prefs.skip_jira: true) and commit. Output: `"INFO: [fullpipeline] Checkpoint saved: slug=<slug>, stage 3 skipped"` → proceed to Stage 4
+**If user chose skip-jira** → record `user_prefs.skip_jira = true`, update state file (stage 3 status: `"skipped"`, current_stage: 4, user_prefs.skip_jira: true) and commit. Output: `"INFO: [fullpipeline] Checkpoint saved: slug=<slug>, stage 3 skipped"` → auto-clear (see "Auto-clear after gate approval" rule)
 
-When Stage 3 subagent completes successfully → update state file (stage 3 status: `"done"`, current_stage: 4, stage 3 `jira_epic`: extract from subagent response if JIRA was enabled) and commit. Output: `"INFO: [fullpipeline] Checkpoint saved: slug=<slug>, stage 3 done"`
+When Stage 3 subagent completes successfully → update state file (stage 3 status: `"done"`, current_stage: 4, stage 3 `jira_epic`: extract from subagent response if JIRA was enabled) and commit. Output: `"INFO: [fullpipeline] Checkpoint saved: slug=<slug>, stage 3 done"` → auto-clear (see "Auto-clear after gate approval" rule)
 
 ---
 
