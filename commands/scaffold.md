@@ -1,0 +1,159 @@
+# /scaffold — Foundation Scaffold Stage
+
+You are executing the **scaffold** stage. This stage prepares a new venture project by forking the Foundation starter project and configuring it for the specific venture.
+
+**Input:** Approved dev plan + pipeline.config.yaml with foundation settings
+**Output:** A working, deployed baseline project — ready for domain code
+
+---
+
+## Prerequisites
+
+- `assumes_foundation: true` in pipeline.config.yaml
+- `foundation.repo_url` in pipeline.config.yaml (default: the Foundation repo URL)
+- `foundation.target_dir` in pipeline.config.yaml (the venture's project directory)
+- Approved dev plan exists at the configured path
+
+---
+
+## Steps
+
+### Step 1: Read Configuration
+
+Read `pipeline.config.yaml` and extract:
+- `foundation.repo_url` — the Foundation repo to fork/clone
+- `foundation.target_dir` — where to create the venture project
+- `foundation.venture_name` — the venture's name (used for renaming)
+- `foundation.supabase_project_ref` — Supabase project reference (optional, can link later)
+- `foundation.roles` — custom role definitions if different from defaults (admin/manager/viewer)
+
+Validate all required fields are present. If missing, halt and report which fields need to be added.
+
+### Step 2: Fork/Clone Foundation
+
+1. Clone the foundation repo into the target directory:
+   ```bash
+   git clone <repo_url> <target_dir>
+   cd <target_dir>
+   rm -rf .git
+   git init
+   ```
+2. If a remote is configured (`foundation.remote_url`), add it:
+   ```bash
+   git remote add origin <remote_url>
+   ```
+
+### Step 3: Configure for Venture
+
+Apply venture-specific configuration:
+
+1. **Rename project:**
+   - Update `package.json`: name, description
+   - Update `README.md`: project name, description
+   - Update any Vercel project references
+
+2. **Generate environment file:**
+   - Copy `.env.example` to `.env.local`
+   - Fill in venture-specific values from pipeline.config.yaml:
+     - `NEXT_PUBLIC_SUPABASE_URL`
+     - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+     - Any other required env vars
+
+3. **Link Supabase project (if ref provided):**
+   ```bash
+   supabase link --project-ref <supabase_project_ref>
+   ```
+
+4. **Update role definitions (if custom roles):**
+   - Modify `src/lib/roles.ts` with venture-specific roles
+   - Update seed data if roles changed
+   - Update any role-based UI components
+
+5. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+
+### Step 4: Verify Foundation Works
+
+Run verification checks to ensure the scaffolded project is healthy:
+
+1. **Build check:**
+   ```bash
+   npm run build
+   ```
+   Must exit 0.
+
+2. **Lint check:**
+   ```bash
+   npm run lint
+   ```
+   Must exit 0.
+
+3. **Unit tests:**
+   ```bash
+   npm test
+   ```
+   Must pass (66+ tests from foundation).
+
+4. **Type check:**
+   ```bash
+   npx tsc --noEmit
+   ```
+   Must exit 0.
+
+If any check fails, report the failure and halt. Do not proceed to execution with a broken baseline.
+
+### Step 5: Initial Commit
+
+Create the initial commit for the venture:
+```bash
+git add -A
+git commit -m "scaffold: initialize <venture_name> from foundation"
+```
+
+If a remote is configured, push:
+```bash
+git push -u origin main
+```
+
+### Step 6: Report
+
+Return:
+1. Venture name and target directory
+2. Verification results (build, lint, tests, typecheck)
+3. Whether Supabase was linked
+4. Whether custom roles were applied
+5. Whether remote was configured and pushed
+6. Any warnings or issues
+
+---
+
+## Error Handling
+
+- **Clone fails:** Check repo URL, network connectivity, permissions
+- **Build fails:** Foundation may have been updated with breaking changes. Report the error and suggest checking foundation repo for recent changes.
+- **Supabase link fails:** Non-blocking. Report as warning — user can link manually later.
+- **Tests fail:** Blocking. Foundation tests must pass before domain code is added.
+
+---
+
+## Pipeline Config Schema
+
+Add these fields to `pipeline.config.yaml`:
+
+```yaml
+pipeline:
+  assumes_foundation: true    # Enable foundation-aware pipeline behavior
+
+  foundation:
+    repo_url: "https://github.com/user/foundation.git"  # Foundation repo
+    target_dir: "../my-venture"                           # Where to scaffold
+    venture_name: "My Venture"                            # Project display name
+    supabase_project_ref: ""                              # Optional Supabase ref
+    remote_url: ""                                        # Optional git remote
+    roles:                                                # Custom roles (optional)
+      - admin
+      - manager
+      - viewer
+```

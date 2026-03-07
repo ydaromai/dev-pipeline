@@ -151,15 +151,16 @@ Then **stop** — do not proceed to the next stage. Wait for the user to clear a
 The orchestrator maintains only these variables between gates:
 
 ```
-slug:             <derived from PRD title, kebab-case>
-prd_path:         docs/prd/<slug>.md
-plan_path:        docs/dev_plans/<slug>.md
-brief_path:       docs/tdd/<slug>/design-brief.md
-contract_path:    docs/tdd/<slug>/ui-contract.md
-test_plan_path:   docs/tdd/<slug>/test-plan.md
-test_result:      PASS | FAIL | SKIPPED
-requirement:      <original requirement text>
-user_prefs:       { skip_jira: bool, mock_url: string, ... }
+slug:                <derived from PRD title, kebab-case>
+prd_path:            docs/prd/<slug>.md
+plan_path:           docs/dev_plans/<slug>.md
+brief_path:          docs/tdd/<slug>/design-brief.md
+contract_path:       docs/tdd/<slug>/ui-contract.md
+test_plan_path:      docs/tdd/<slug>/test-plan.md
+test_result:         PASS | FAIL | SKIPPED
+requirement:         <original requirement text>
+user_prefs:          { skip_jira: bool, mock_url: string, ... }
+assumes_foundation:  <from pipeline.config.yaml, default false>
 ```
 
 Everything else is persisted on disk and read fresh by each stage subagent.
@@ -201,6 +202,8 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
     "1.2": { "status": "in_progress", "jira": "<key>" },
     "2.1": { "status": "pending", "jira": "<key>" }
   },
+  "assumes_foundation": false,
+  "scaffold": { "status": "not_started", "target_dir": "" },
   "test_result": null,
   "test_adjustments": {
     "structural": 0,
@@ -234,6 +237,8 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
 - `tasks` — object keyed by task ID (e.g., `"1.1"`); empty `{}` until Stage 8 begins. Writers MUST NOT populate `tasks` before the execution stage starts. On read, validate that each task entry has a `status` field with a valid enum value
 - `test_result` — `null` until Stage 9 completes, then `"PASS"` | `"FAIL"` | `"SKIPPED"`. On read, reject unknown non-null values. On abort, the orchestrator sets `"FAIL"` and logs: `"INFO: [tdd-fullpipeline] test_result set to FAIL (reason: user abort at stage <N>)"` — there is no separate `"ABORTED"` enum value; check `pipeline_status` to distinguish test failure from user abort. On genuine validation failure, log: `"INFO: [tdd-fullpipeline] test_result set to FAIL (reason: Stage 9 validation failed)"`
 - `test_adjustments` — cumulative test adjustment counts from Stage 8, persisted across interruptions to enforce the 20% behavioral threshold. Always an object with exactly three keys: `{ "structural": 0, "behavioral": 0, "security": 0 }`, each a non-negative integer (>= 0). Reject negative values, non-integer values, or extra keys beyond these three. On resume: if malformed and `current_stage < 8`, reset to zeroes with a warning; if malformed and `current_stage >= 8`, halt and ask the user (see resume step 12)
+- `assumes_foundation` — boolean; `true` if this pipeline is built on top of the Foundation starter project (read from `pipeline.config.yaml` at startup, default `false`). Controls whether the scaffold conditional step runs between Stage 6 and Stage 7, and whether subagent prompts include foundation-awareness hints. Writers set this once at pipeline creation and do not change it
+- `scaffold` — object with keys `status` (`"not_started"` | `"done"` | `"skipped"`) and `target_dir` (string, path to the scaffolded project directory). Present only when `assumes_foundation` is `true`. `"not_started"` = scaffold has not run yet, `"done"` = scaffold completed successfully, `"skipped"` = scaffold was not needed (target directory already exists and passed verification, or `assumes_foundation` is `false`). Writers set `target_dir` when scaffold completes. If `assumes_foundation` is `false`, omit this field entirely
 - `user_prefs` — object with known keys: `skip_jira` (boolean), `mock_url` (string). Additional keys may be added; readers MUST ignore unknown keys (forward-compatible). Writers MUST NOT remove keys they don't recognize when updating the state file
 - `known_issues` — array of strings; `[]` when no issues. Writers MUST enforce: individual entries under 200 characters (truncate with `"…"` suffix if needed), array under 10 entries (keep most recent). Do not include secrets, API keys, or PII in entries — they are committed to git history
 - `git_branch` — string; the git branch name when the state file was last written. Used by Resume Detection to warn if the current branch differs from the saved branch. Informational; not validated on read
@@ -454,6 +459,8 @@ Execute all steps (1 through 6) for this requirement:
 
 Important:
 - Read pipeline.config.yaml for project-specific config
+- If pipeline.config.yaml contains assumes_foundation: true, the PRD should scope to domain logic only.
+  Auth, multi-tenancy, RBAC, CI/CD, and deployment are provided by the Foundation starter project.
 - Run the full scoring Ralph Loop (all critics, iterate until thresholds met)
 - Write the PRD to docs/prd/<slug>.md
 - Return the following in your final message:
@@ -853,6 +860,8 @@ In addition to the standard /prd2plan process, you must also:
 
 Important:
 - Read the PRD file, pipeline.config.yaml, AGENT_CONSTRAINTS.md, TASK_BREAKDOWN_DEFINITION.md
+- If pipeline.config.yaml contains assumes_foundation: true, the dev plan should assume foundation baseline.
+  Tasks start at domain logic, not project setup. Do not generate tasks for auth, RBAC, CI/CD, or deployment.
 - Read the test plan for TP-{N} mapping
 - Explore the codebase for existing patterns
 - Generate the full Epic/Story/Task/Subtask breakdown
@@ -993,6 +1002,38 @@ When Stage 6 subagent completes successfully → update state file (stage 6 stat
 
 ---
 
+## Conditional: Foundation Scaffold (between Stage 6 and Stage 7)
+
+If `assumes_foundation: true` in pipeline.config.yaml AND `scaffold.status` is `"not_started"`:
+
+1. Check if the scaffold has already been completed (target directory exists and passes verification)
+2. If not scaffolded yet, spawn a subagent (Task tool, model: opus) to execute `/scaffold`:
+
+**Subagent prompt:**
+```
+You are executing the /scaffold pipeline stage. Read the full command instructions:
+<read and paste ${CLAUDE_PLUGIN_ROOT}/commands/scaffold.md>
+
+Execute all steps for this venture:
+
+Pipeline config: pipeline.config.yaml
+Dev plan: <plan_path>
+
+Important:
+- Clone/fork the foundation repo
+- Configure for the specific venture
+- Verify the foundation works (build, lint, tests, typecheck)
+- Return verification results and any issues
+```
+
+3. When scaffold completes, update state file: set `scaffold.status` to `"done"` and `scaffold.target_dir` to the scaffolded directory path, then commit.
+4. Present scaffold results to user and auto-clear before Stage 7.
+
+If `assumes_foundation: false` or not set: skip scaffold entirely, proceed to Stage 7 as normal.
+If scaffold target already exists and passes verification: set `scaffold.status` to `"done"` and skip.
+
+---
+
 ## Stage 7: Test Plan → Develop Tests (fresh context)
 
 Spawn a subagent (Task tool, model: opus — Opus 4.6) to execute the `/tdd-develop-tests` stage:
@@ -1126,6 +1167,9 @@ Execute all steps for this dev plan:
 
 Dev plan file: <plan_path>
 JIRA integration: <enabled/disabled based on user_prefs.skip_jira>
+
+If pipeline.config.yaml contains assumes_foundation: true, build agents must not modify foundation
+infrastructure (auth, RBAC, CI/CD, deployment). Domain code only.
 
 IMPORTANT TDD EXTENSIONS — Test Adjustment Taxonomy:
 

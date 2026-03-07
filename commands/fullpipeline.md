@@ -117,12 +117,13 @@ Then **stop** — do not proceed to the next stage. Wait for the user to clear a
 The orchestrator maintains only these variables between gates:
 
 ```
-slug:           <derived from PRD title, kebab-case>
-prd_path:       docs/prd/<slug>.md
-plan_path:      docs/dev_plans/<slug>.md
-requirement:    <original requirement text>
-user_prefs:     { skip_jira: bool, ... }
-test_result:    PASS | FAIL | SKIPPED
+slug:                <derived from PRD title, kebab-case>
+prd_path:            docs/prd/<slug>.md
+plan_path:           docs/dev_plans/<slug>.md
+requirement:         <original requirement text>
+user_prefs:          { skip_jira: bool, ... }
+test_result:         PASS | FAIL | SKIPPED
+assumes_foundation:  <from pipeline.config.yaml, default false>
 ```
 
 Everything else is persisted on disk and read fresh by each stage subagent.
@@ -160,6 +161,8 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
     "1.2": { "status": "in_progress", "jira": "<key>" },
     "2.1": { "status": "pending", "jira": "<key>" }
   },
+  "assumes_foundation": false,
+  "scaffold": { "status": "not_started", "target_dir": "" },
   "test_result": null,
   "user_prefs": { "skip_jira": false },
   "known_issues": [],
@@ -192,6 +195,8 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
 - `git_branch` — string; the git branch name when the state file was last written. Used by Resume Detection to warn if the current branch differs from the saved branch. Informational; not validated on read
 - `updated_at` — ISO 8601 timestamp in UTC (e.g., `"2026-03-05T14:30:00Z"`); set on every write. Always use UTC. On read, accept any valid ISO 8601 string; do not reject if timezone offset differs (normalize to UTC for display)
 - `test_adjustments` — not present in fullpipeline state files (TDD pipeline only). Writers MUST NOT include this field in fullpipeline state files. If found during resume, log a warning and ignore
+- `assumes_foundation` — boolean; `true` if this pipeline is built on top of the Foundation starter project (read from `pipeline.config.yaml` at startup, default `false`). Controls whether the scaffold conditional step runs between Stage 3 and Stage 4, and whether subagent prompts include foundation-awareness hints. Writers set this once at pipeline creation and do not change it
+- `scaffold` — object with keys `status` (`"not_started"` | `"done"` | `"skipped"`) and `target_dir` (string, path to the scaffolded project directory). Present only when `assumes_foundation` is `true`. `"not_started"` = scaffold has not run yet, `"done"` = scaffold completed successfully, `"skipped"` = scaffold was not needed (target directory already exists and passed verification, or `assumes_foundation` is `false`). Writers set `target_dir` when scaffold completes. If `assumes_foundation` is `false`, omit this field entirely
 
 **Important:** Do not include secrets, API keys, or PII in the requirement text — it is stored verbatim in the state file and committed to git history. Keep requirement text concise (recommended: under 2 KB) — excessively long text bloats the state file and git history without benefit.
 
@@ -308,6 +313,8 @@ Execute all steps (1 through 6) for this requirement:
 
 Important:
 - Read pipeline.config.yaml for project-specific config
+- If pipeline.config.yaml contains assumes_foundation: true, the PRD should scope to domain logic only.
+  Auth, multi-tenancy, RBAC, CI/CD, and deployment are provided by the Foundation starter project.
 - Run the full scoring Ralph Loop (all critics, iterate until thresholds met)
 - Write the PRD to docs/prd/<slug>.md
 - Return the following in your final message:
@@ -378,6 +385,8 @@ PRD file: <prd_path>
 
 Important:
 - Read the PRD file, pipeline.config.yaml, AGENT_CONSTRAINTS.md, TASK_BREAKDOWN_DEFINITION.md
+- If pipeline.config.yaml contains assumes_foundation: true, the dev plan should assume foundation baseline.
+  Tasks start at domain logic, not project setup. Do not generate tasks for auth, RBAC, CI/CD, or deployment.
 - Explore the codebase for existing patterns
 - Generate the full Epic/Story/Task/Subtask breakdown
 - Run the full critic review loop (0 Critical + 0 Warnings, max 5 iterations)
@@ -471,6 +480,38 @@ When Stage 3 subagent completes successfully → update state file (stage 3 stat
 
 ---
 
+## Conditional: Foundation Scaffold (between Stage 3 and Stage 4)
+
+If `assumes_foundation: true` in pipeline.config.yaml AND `scaffold.status` is `"not_started"`:
+
+1. Check if the scaffold has already been completed (target directory exists and passes verification)
+2. If not scaffolded yet, spawn a subagent (Task tool, model: opus) to execute `/scaffold`:
+
+**Subagent prompt:**
+```
+You are executing the /scaffold pipeline stage. Read the full command instructions:
+<read and paste ${CLAUDE_PLUGIN_ROOT}/commands/scaffold.md>
+
+Execute all steps for this venture:
+
+Pipeline config: pipeline.config.yaml
+Dev plan: <plan_path>
+
+Important:
+- Clone/fork the foundation repo
+- Configure for the specific venture
+- Verify the foundation works (build, lint, tests, typecheck)
+- Return verification results and any issues
+```
+
+3. When scaffold completes, update state file: set `scaffold.status` to `"done"` and `scaffold.target_dir` to the scaffolded directory path, then commit.
+4. Present scaffold results to user and auto-clear before Stage 4.
+
+If `assumes_foundation: false` or not set: skip scaffold entirely, proceed to Stage 4 as normal.
+If scaffold target already exists and passes verification: set `scaffold.status` to `"done"` and skip.
+
+---
+
 ## Stage 4: Execute with Ralph Loop (fresh context)
 
 **CRITICAL: The orchestrator MUST read the full execute.md file and paste its ENTIRE content into the subagent prompt.** Do NOT paraphrase, summarize, or write from memory. The execute.md file contains 6 mandatory JIRA touchpoints, branch/PR workflow, critic review format, smoke test configuration, and failure handling that will be silently skipped if not included verbatim. This is the #1 cause of pipeline compliance failures.
@@ -494,6 +535,9 @@ You are executing the /execute pipeline stage.
 
 Dev plan file: <plan_path>
 JIRA integration: <enabled/disabled based on user_prefs.skip_jira>
+
+If pipeline.config.yaml contains assumes_foundation: true, build agents must not modify foundation
+infrastructure (auth, RBAC, CI/CD, deployment). Domain code only.
 
 ## Compliance Checklist (orchestrator verifies these in the subagent's response)
 

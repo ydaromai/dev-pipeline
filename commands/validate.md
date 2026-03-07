@@ -37,6 +37,22 @@ Read `pipeline.config.yaml` for stage-specific overrides if available.
 - **PRD/dev plan files**: Critics review the full document on first pass. On subsequent iterations (ralph loop), pass `--diff` to scope reviews to changes since the last iteration — full-file re-reviews generate noise proportional to file length.
 - **Spec/orchestration files** (non-code `.md` outside `docs/prd/` and `docs/dev_plans/`): Use at most 3 critics (product, dev, qa) unless `--critics=` explicitly requests more. Full 10-critic reviews on spec files produce diminishing returns — most findings after the first pass are design opinions, not quality gaps.
 
+### Foundation-Aware Validation
+
+When `assumes_foundation: true` in `pipeline.config.yaml`:
+
+Critics should be aware that the following are provided by the Foundation starter project and should not be flagged as missing:
+- Authentication implementation (phone OTP, JWT, sessions)
+- Multi-tenancy infrastructure (RLS, tenant isolation)
+- RBAC framework (roles, permissions, role-based access)
+- CI/CD pipeline (GitHub Actions, Vercel deployment)
+- Base database schema (tenants, profiles, audit_log)
+- Test infrastructure (Playwright, Vitest, auth helpers)
+- Navigation and layout (sidebar, top bar, error boundaries)
+
+When spawning critic subagents, append this context to each critic's prompt:
+"This project assumes the Foundation starter project baseline. Auth, multi-tenancy, RBAC, CI/CD, deployment, and test infrastructure are pre-existing. Do not flag their absence. Focus your review on domain-specific additions and whether they correctly extend foundation patterns."
+
 ### Cost optimization:
 Critics use Sonnet by default (`execution.ralph_loop.critic_model` in config). This is intentional — critic evaluation follows structured checklists and produces templated output, which Sonnet handles well at ~1/5 the token cost of Opus. Reserve Opus for build and synthesis subagents that require deep reasoning.
 

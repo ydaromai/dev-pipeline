@@ -15,6 +15,13 @@ You are executing the **execute** pipeline stage. This is the core orchestration
 4. Read the linked PRD (find by matching slug in `docs/prd/`)
 5. Resolve the JIRA transition script path: use `pipeline.config.yaml` → `paths.jira_transition` if available, otherwise default to `scripts/jira/transition-issue.js`. Store this as `jira_transition_path` for use throughout execution.
 
+### Step 1.1: Foundation Detection
+
+Check `pipeline.config.yaml` for `assumes_foundation: true`. If set:
+- Load the foundation baseline context: auth, multi-tenancy, RBAC, CI/CD, deployment are proven and locked
+- Brief all build agents: "Foundation infrastructure is locked — do not modify auth, CI/CD, or deployment config"
+- Set `foundation_mode: true` in the execution context
+
 Parse all tasks and build a dependency graph:
 - Extract `Depends On` and `Parallel Group` from each task
 - Identify **ready tasks**: tasks with no unmet dependencies (all `Depends On` tasks are marked DONE)
@@ -132,6 +139,25 @@ You are implementing a task from a dev plan. Follow all agent constraints.
 ## Agent Constraints
 <paste AGENT_CONSTRAINTS.md content>
 
+## Foundation Guard Rails (when assumes_foundation: true)
+
+You are building domain logic on top of the Foundation starter project. The following are LOCKED and must NOT be modified:
+- Authentication system (src/lib/auth.ts, login page, OTP flow, custom_access_token_hook)
+- RBAC framework (src/lib/roles.ts, role-based middleware, authorization components)
+- Multi-tenancy infrastructure (RLS base policies, tenant table, tenant context)
+- CI/CD pipelines (.github/workflows/*)
+- Deployment configuration (vercel.json, Supabase config)
+- Base database schema (tenants, profiles, audit_log migrations)
+- Navigation/layout components (sidebar, top bar, breadcrumbs — unless extending for domain pages)
+
+You CAN and SHOULD:
+- Add new database migrations for domain tables (following existing RLS patterns)
+- Create new pages and components for domain features
+- Add new API routes for domain logic
+- Write new tests for domain functionality
+- Extend navigation with new domain menu items
+- Add new RLS policies for domain tables
+
 ## Context
 - Branch: <branch name>
 - Project root: <cwd>
@@ -166,6 +192,13 @@ using all applicable critic perspectives. Read all critic persona files:
 8. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/observability-critic.md (only if pipeline.config.yaml has `has_backend_service: true`)
 9. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/api-contract-critic.md (only if pipeline.config.yaml has `has_api: true`)
 10. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/designer-critic.md (only if pipeline.config.yaml has `has_frontend: true`)
+
+## Foundation Context for Critics (when assumes_foundation: true)
+
+- Do NOT flag missing auth/RBAC/tenancy implementation — it exists in the foundation
+- Do NOT flag missing CI/CD configuration — it exists in the foundation
+- DO flag if build agent modified locked foundation files (this is a violation)
+- DO verify domain code correctly extends foundation patterns (RLS, auth hooks, role checks)
 
 ## What to review
 - Branch: <branch name>
@@ -361,6 +394,8 @@ smoke_test:
   llm_timeout_seconds: 30          # timeout for LLM API requests during smoke test
   max_fix_attempts: 2              # max smoke test fix iterations before escalating to user
 ```
+
+**Foundation smoke test note:** When `assumes_foundation: true`, auth/CI/CD smoke checks verify integration with the existing foundation (e.g., that domain code correctly uses the auth context, that new pages render within the foundation layout), not reimplementation of those systems. Do not fail smoke tests because auth or CI/CD infrastructure was not built in this execution — it already exists.
 
 **Defaults:** If the `smoke_test` section is absent from config, Step 5 still runs using auto-detection (this step is mandatory). If `smoke_test` is present but `enabled` is omitted, it defaults to `true`. Only `smoke_test.enabled: false` skips the smoke test.
 
