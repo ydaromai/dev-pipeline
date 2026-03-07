@@ -29,9 +29,9 @@ Evaluate each item. Mark `[x]` for pass, `[✗]` for fail.
 - [ ] Per-story acceptance criteria (Section 5) are met
 - [ ] No scope creep (no features implemented that are not in PRD)
 - [ ] No missing edge cases from user story scenarios
-- [ ] All PRD acceptance criteria are reachable via UI (trace: page → button → API → RPC)
-- [ ] No backend-only features: every RPC/method with a PRD AC has a corresponding UI action
-- [ ] State machines: every transition defined in the PRD has a UI trigger in the implementation
+- [ ] All PRD acceptance criteria are reachable via UI (trace: page → button → API → RPC) (when `has_frontend: true`; mark N/A otherwise)
+- [ ] No backend-only features: every RPC/method with a PRD AC has a corresponding UI action (when `has_frontend: true`; mark N/A otherwise)
+- [ ] State machines: every transition defined in the PRD has a UI trigger in the implementation (when `has_frontend: true`; mark N/A otherwise)
 - [ ] Error states provide user-meaningful feedback
 - [ ] Non-functional requirements considered (performance, accessibility)
 - [ ] Non-goals are respected (nothing out-of-scope was added)
@@ -66,9 +66,9 @@ Evaluate each item. Mark `[x]` for pass, `[✗]` for fail.
 - [x/✗] Acceptance criteria testable and met
 - [x/✗] No scope creep
 - [x/✗] No missing edge cases
-- [x/✗] All ACs reachable via UI path
-- [x/✗] No backend-only features without UI triggers
-- [x/✗] State machine transitions have UI triggers
+- [x/✗/N/A] All ACs reachable via UI path
+- [x/✗/N/A] No backend-only features without UI triggers
+- [x/✗/N/A] State machine transitions have UI triggers
 - [x/✗] Error states user-meaningful
 - [x/✗] Non-functional requirements considered
 - [x/✗] Non-goals respected

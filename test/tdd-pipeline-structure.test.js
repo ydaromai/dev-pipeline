@@ -286,6 +286,13 @@ describe('commands/tdd-test-plan.md structure', () => {
     );
   });
 
+  it('has Visual Contracts section', () => {
+    assert.ok(
+      tddTestPlan.includes('Visual Contracts'),
+      'tdd-test-plan.md should have a "Visual Contracts" section'
+    );
+  });
+
   it('references tiered specifications (Tier 1 / Tier 2)', () => {
     assert.ok(
       tddTestPlan.includes('Tier 1'),

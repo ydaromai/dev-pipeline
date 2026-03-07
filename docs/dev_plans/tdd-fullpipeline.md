@@ -150,7 +150,7 @@ Add a parallel TDD pipeline option (`/tdd-fullpipeline`) that reorders the exist
 
 6. **SUBTASK 4.1.6:** Add Step 5 (Keyboard Navigation Testing): tab through all interactive elements, verify focus visibility, test Enter/Space activation. Share the per-route budget; partial results with Warning if budget exceeded (AC 4.6, NFR-7).
 
-7. **SUBTASK 4.1.7:** Add Step 6 (Generate UI Contract): produce structured document with sections: Route Map, Component Inventory, Interactive Elements, Form Contracts, Accessibility Map, Data-Testid Registry, Screenshots (paths). Enforce 50,000 character limit -- truncate lowest-priority routes from the end with Warning noting count of routes dropped (AC 4.7, AC 4.12).
+7. **SUBTASK 4.1.7:** Add Step 6 (Generate UI Contract): produce structured document with sections: Route Map, Component Inventory, Interactive Elements, Form Contracts, Accessibility Map, Data-Testid Registry, Screenshots (paths), Visual Contract (when visual tokens extracted). Enforce 65,000 character limit -- truncate lowest-priority routes from the end with Warning noting count of routes dropped (AC 4.7, AC 4.12).
 
 8. **SUBTASK 4.1.8:** Add Step 7 (Critic Review): 10-critic Ralph Loop on the UI contract (max 5 iterations, 0 Critical + 0 Warnings) (AC 4.9).
 
@@ -171,7 +171,7 @@ Add a parallel TDD pipeline option (`/tdd-fullpipeline`) that reorders the exist
 **Estimated Time:** 2 hrs
 **Files:** `commands/tdd-test-plan.md` (new file)
 **Required Tests:**
-- **UT:** Structural test verifies file exists, references TP-{N} traceability IDs, includes Performance Contracts / Accessibility Contracts / Error Contracts / Data Flow Contracts sections, and outputs tiered specifications (AC 14.5).
+- **UT:** Structural test verifies file exists, references TP-{N} traceability IDs, includes Performance Contracts / Accessibility Contracts / Error Contracts / Data Flow Contracts / Visual Contracts sections, and outputs tiered specifications (AC 14.5).
 
 **Subtasks:**
 
@@ -181,7 +181,7 @@ Add a parallel TDD pipeline option (`/tdd-fullpipeline`) that reorders the exist
 
 3. **SUBTASK 5.1.3:** Add Step 2 (Generate Tiered Test Specifications): produce two tiers. Tier 1 (E2E/Playwright): full specifications from PRD + UI contract with complete test steps, selectors from data-testid registry, expected outcomes, assertions. Tier 2 (integration/unit): specification outlines only with TP-{N} ID, tier label (`Tier 2`), linked PRD requirement (AC reference), test intent description, and expected test type (integration or unit) (AC 5.3, AC 5.9). Every test item gets a unique `TP-{N}` traceability ID (AC 5.4).
 
-4. **SUBTASK 5.1.4:** Add Step 3 (Mandatory Contract Sections): include four mandatory sections -- Performance Contracts (response times, rendering budgets), Accessibility Contracts (WCAG 2.1 AA, keyboard nav, screen reader), Error Contracts (error states, validation messages, fallbacks), Data Flow Contracts (data shapes, transformations, validation) (AC 5.5).
+4. **SUBTASK 5.1.4:** Add Step 3 (Mandatory Contract Sections): include five mandatory sections -- Performance Contracts (response times, rendering budgets), Accessibility Contracts (WCAG 2.1 AA, keyboard nav, screen reader), Error Contracts (error states, validation messages, fallbacks), Data Flow Contracts (data shapes, transformations, validation), Visual Contracts (design token fidelity, typography, animations, layout measurements — when UI contract contains Visual Contract section) (AC 5.5).
 
 5. **SUBTASK 5.1.5:** Add Step 4 (Critic Review): 10-critic Ralph Loop on the test plan (max 5 iterations, 0 Critical + 0 Warnings) (AC 5.7).
 
@@ -291,7 +291,7 @@ Add a parallel TDD pipeline option (`/tdd-fullpipeline`) that reorders the exist
 
 4. **SUBTASK 8.1.4:** Add `describe('commands/tdd-mock-analysis.md structure')` block with tests: file exists, references Playwright, references 3 viewport widths (375, 768, 1280), outputs to `docs/tdd/<slug>/ui-contract.md`, extracts DOM structure, references ARIA roles, references data-testid (AC 14.4).
 
-5. **SUBTASK 8.1.5:** Add `describe('commands/tdd-test-plan.md structure')` block with tests: file exists, references `TP-{N}` or `TP-` traceability IDs, has "Performance Contracts" section, has "Accessibility Contracts" section, has "Error Contracts" section, has "Data Flow Contracts" section, references tiered specifications (Tier 1 / Tier 2) (AC 14.5).
+5. **SUBTASK 8.1.5:** Add `describe('commands/tdd-test-plan.md structure')` block with tests: file exists, references `TP-{N}` or `TP-` traceability IDs, has "Performance Contracts" section, has "Accessibility Contracts" section, has "Error Contracts" section, has "Data Flow Contracts" section, has "Visual Contracts" section, references tiered specifications (Tier 1 / Tier 2) (AC 14.5).
 
 6. **SUBTASK 8.1.6:** Add `describe('commands/tdd-develop-tests.md structure')` block with tests: file exists, references self-health gate (`red_count = total_test_count` or `red_count`), references "Tier 1" and "Tier 2", references blind agent or context restriction (no dev plan access) (AC 14.6).
 

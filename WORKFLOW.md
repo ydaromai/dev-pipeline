@@ -360,7 +360,7 @@ Reuses the existing `/req2prd` stage (see [Stage 1](#stage-1-requirement--prd--r
 | 3 | Route discovery | Navigate to entry page, discover routes via link traversal capped at `max_mock_routes`. Critical error + halt if entry page fails; Warning + continue for individual route failures |
 | 4 | Per-route extraction | Screenshots at 3 viewports (mobile 375x812, tablet 768x1024, desktop 1280x720). Extract: DOM structure, interactive elements, form fields, ARIA roles/labels, tab order, data-testid candidates (kebab-case, fallback `{element-type}-{sequential-index}`). 15s per-route timeout, 300s total budget |
 | 5 | Keyboard navigation testing | Tab through interactive elements, verify focus visibility, test Enter/Space activation. Shares per-route budget; partial results with Warning if exceeded |
-| 6 | Generate UI contract | Sections: Route Map, Component Inventory, Interactive Elements, Form Contracts, Accessibility Map, Data-Testid Registry, Screenshots. 50,000 char limit — truncate lowest-priority routes with Warning |
+| 6 | Generate UI contract | Sections: Route Map, Component Inventory, Interactive Elements, Form Contracts, Accessibility Map, Data-Testid Registry, Screenshots, Visual Contract. 65,000 char limit — truncate lowest-priority routes with Warning |
 | 7 | Critic review | 10-critic Ralph Loop, max 5 iterations, 0 Critical + 0 Warnings |
 | 8 | **GATE 3** — Human approval | Contract summary, cross-reference against Design Brief route manifest and component inventory. Flag missing routes/elements as Warnings. User can correct before proceeding |
 
@@ -373,7 +373,7 @@ Reuses the existing `/req2prd` stage (see [Stage 1](#stage-1-requirement--prd--r
 |------|--------|---------|
 | 1 | Read inputs | PRD, UI contract (`docs/tdd/<slug>/ui-contract.md`), schema files referenced in PRD |
 | 2 | Generate tiered test specifications | **Tier 1 (E2E/Playwright):** full specs from PRD + UI contract — test steps, selectors from data-testid registry, expected outcomes, assertions. **Tier 2 (integration/unit):** outlines only — TP-{N} ID, tier label, linked AC reference, test intent, expected test type. Every test item gets a unique `TP-{N}` traceability ID |
-| 3 | Mandatory contract sections | Performance Contracts (response times, rendering budgets), Accessibility Contracts (WCAG 2.1 AA, keyboard nav, screen reader), Error Contracts (error states, validation messages, fallbacks), Data Flow Contracts (data shapes, transformations, validation) |
+| 3 | Mandatory contract sections | Performance Contracts (response times, rendering budgets), Accessibility Contracts (WCAG 2.1 AA, keyboard nav, screen reader), Error Contracts (error states, validation messages, fallbacks), Data Flow Contracts (data shapes, transformations, validation), Visual Contracts (design token fidelity, typography, animations, layout measurements — when UI contract contains Visual Contract section) |
 | 4 | Critic review | 10-critic Ralph Loop, max 5 iterations, 0 Critical + 0 Warnings |
 | 5 | Write output | Save to `docs/tdd/<slug>/test-plan.md` |
 | 6 | **GATE 4** — Human approval | TP count by tier, contract coverage summary, traceability overview |

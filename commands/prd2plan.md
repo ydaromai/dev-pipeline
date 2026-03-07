@@ -79,10 +79,12 @@ After generating the task breakdown, build a coverage matrix that maps every acc
    - Deduplicate — Section 7 is authoritative; Section 5 may have additional detail
 
 2. **Map each AC to task(s)** in the dev plan:
+   - If `has_frontend: false` in `pipeline.config.yaml`, skip the UI Task column and classify as COVERED when a backend task exists. The BACKEND-ONLY and FRONTEND-ONLY classifications do not apply to backend-only projects.
    - For each AC, identify which task(s) implement it
    - Classify coverage status:
-     - **COVERED** — has both a UI task (page/component/action) and a backend task (API/RPC/repo)
-     - **BACKEND-ONLY** — has an RPC/repo/API task but no UI task that triggers it
+     - **COVERED** — has at least one implementing task; when `has_frontend: true`, has both a UI task (page/component/action) and a backend task (API/RPC/repo)
+     - **FRONTEND-ONLY** — has a UI task but no backend task (when `has_frontend: true`; acceptable for purely presentational ACs like static content, UI-only state, drag-and-drop)
+     - **BACKEND-ONLY** — has an RPC/repo/API task but no UI task that triggers it (when `has_frontend: true`)
      - **UNCOVERED** — no task implements this AC at all
 
 3. **Output the matrix** as a new section in the dev plan:
@@ -93,14 +95,18 @@ After generating the task breakdown, build a coverage matrix that maps every acc
 |-------|------------|----------|----------|---------|-------------|-------|
 | AC 1.1 | User can cancel order | P0 | COVERED | TASK 2.3 | TASK 1.2 | — |
 | AC 1.2 | Admin can upload catalog | P0 | BACKEND-ONLY | — | TASK 1.4 | ⚠ Missing UI task |
+| AC 1.3 | Landing page shows hero | P1 | FRONTEND-ONLY | TASK 3.1 | — | Presentational only |
 | AC 2.1 | System sends PO to supplier | P1 | UNCOVERED | — | — | ❌ No implementing task |
 ```
 
 4. **Hard gate:**
    - Any **UNCOVERED P0 AC** → CRITICAL finding (blocks Step 5 critics — must add tasks first)
    - Any **BACKEND-ONLY AC** → WARNING (requires justification: "intentionally API-only" or "missing UI task — add one")
+   - Any **FRONTEND-ONLY AC** → acceptable for presentational ACs; WARNING if the AC implies data persistence or API interaction
    - Any **UNCOVERED P1 AC** → WARNING (must be explicitly deferred with justification or covered)
    - The matrix must have zero UNCOVERED P0 ACs and zero unjustified BACKEND-ONLY ACs before proceeding
+
+**Summary line:** After the matrix, include: `AC Coverage: X/Y ACs covered, Z backend-only, W frontend-only, V uncovered`
 
 ## Step 4: Validate structure
 

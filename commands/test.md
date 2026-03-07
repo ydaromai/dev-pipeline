@@ -482,7 +482,8 @@ Re-run the smoke test after all test PRs are merged, verifying that test additio
    - **5b.** Health checks (verify all endpoints respond)
    - **5c.** SDK version compatibility check
    - **5d.** Core user flow verification (HTTP requests, response inspection)
-   - **5e.** Visual rendering check (if `has_frontend: true`)
+   - **5c.5.** API→UI Wiring Audit (if `has_frontend: true`)
+   - **5e.** Visual rendering check (if `has_frontend: true`), including Visual Contract token validation
    - **5f.** Teardown (terminate dev server process group, verify ports released)
 
 4. Follow the same failure handling as `execute.md` Step 5:
@@ -502,6 +503,8 @@ Re-run the smoke test after all test PRs are merged, verifying that test additio
 | SDK compatibility | PASS | 1.1s | ai@6.2.1 confirmed |
 | Core user flow | PASS | 0.8s | POST /api/chat -> 200 |
 | Visual rendering | N/A | -- | has_frontend: false |
+| API→UI Wiring | N/A | -- | has_frontend: false |
+| Visual Contract | N/A | -- | No Visual Contract in UI contract |
 | Server teardown | PASS | 0.2s | ports released |
 ```
 

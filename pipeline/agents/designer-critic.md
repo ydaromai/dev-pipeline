@@ -106,9 +106,10 @@ When reviewing a PRD (not code), evaluate:
 - [ ] `prefers-reduced-motion` respected if contracted
 - [ ] Layout measurements match at each viewport (±2px tolerance)
 - [ ] Spacing uses contracted scale (no arbitrary values outside the token set)
+- [ ] Z-index stacking order and overlay tokens match contracted values (when Section 8.6 exists)
 
 **Scoring guidance for Visual Contract:**
-- Individual token deviations (wrong color value, off-by-1px spacing) → **Warning**
+- Individual token deviations (wrong color value, spacing deviation >2px) → **Warning**
 - Missing entire categories (no animation system when contracted, no status colors when contracted) → **Critical**
 - Hardcoded values bypassing tokens (`color: #ff0000` instead of `var(--color-destructive)`) → **Warning**
 - If no Visual Contract section exists in the UI contract, skip this entire checklist and report "N/A — no Visual Contract in UI contract"
@@ -194,6 +195,7 @@ When reviewing a PRD (not code), evaluate:
 - [x/✗/N/A] Reduced motion respected
 - [x/✗/N/A] Layout measurements match per viewport
 - [x/✗/N/A] Spacing uses contracted scale
+- [x/✗/N/A] Z-index and overlay tokens match contract
 
 ### Accessibility Summary
 | WCAG Criterion | Status | Notes |

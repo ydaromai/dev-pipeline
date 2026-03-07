@@ -214,12 +214,13 @@ For each route (at the desktop viewport), extract visual design tokens and anima
    ```js
    const styles = getComputedStyle(document.documentElement);
    ```
-   - Collect all `--*` properties and group into categories: colors, spacing, typography, radius, shadows
+   - Collect all `--*` properties and group into categories: colors, spacing, typography, radius, shadows. **Cap at 200 custom properties;** if more exist, sample the first 200 alphabetically and log a Warning: `"Visual Contract: ⚠ CSS custom property cap reached — 200/N properties sampled (M skipped)"`. **Sizing note:** The Visual Contract section (Section 8 with sub-sections 8.1–8.6) typically consumes 10,000–12,000 characters; the 65,000-character UI contract limit provides headroom for projects at the 200-property cap.
+   - Validate property names against `/^--[a-zA-Z0-9_-]+$/` before using in any subsequent `page.evaluate()` call. Skip properties with non-matching names with a Warning: `"Visual Contract: ⚠ Skipped CSS property with invalid name: '<name>'"`. Always pass validated names as arguments to `page.evaluate((names) => { ... }, nameArray)` rather than string interpolation.
    - Record raw values (hex, rem, px, etc.)
 
 2. **Typography:**
    - `@font-face` declarations from all stylesheets (family name, weight, style, src)
-   - Font loading status via `document.fonts.check('16px <family>')` for each declared family
+   - Font loading status via `document.fonts.check('16px <family>')` for each declared family. Strip surrounding quotes from font family names before validation. Validate family names against `/^[a-zA-Z0-9 -]+$/` (literal space, not `\s`) before interpolation; skip non-matching names with a Warning: `"Visual Contract: ⚠ Skipped font family with invalid name: '<name>'"`. Always pass validated names as arguments to `page.evaluate()` rather than string interpolation.
    - Type scale: collect all unique `font-size` values applied to text elements, sorted ascending
 
 3. **Animation system:**
@@ -228,15 +229,23 @@ For each route (at the desktop viewport), extract visual design tokens and anima
    - Transition properties on interactive elements — sample up to 10 unique `transition` patterns (deduplicated by property+duration+easing)
    - Motion library detection: check for `motion/react` or `framer-motion` in script tags or module imports
 
-4. **Layout measurements at each viewport** (mobile, tablet, desktop):
+4. **Layout measurements at each viewport** (mobile, tablet, desktop) — **combine with the screenshot viewport passes from Step 4b** (since the viewport is already set for each screenshot, run `page.evaluate()` for layout measurements immediately after screenshot capture at that viewport to avoid redundant navigation/resize cycles). This step shares the existing 300-second total budget (not additive). If visual extraction for a route exceeds the per-route 15s budget, skip remaining extraction sub-steps for that route with a Warning: `"Visual Contract: ⚠ Visual extraction for route '<path>' exceeded 15s budget — sub-steps N-M skipped"`. Layout measurement errors (e.g., null element references) must be caught per-measurement and reported as individual Warnings, not propagated to the screenshot capture step.
    - Sidebar width (expanded and collapsed states, if a sidebar toggle exists)
    - Bottom navigation height (if present)
    - Content area padding (top, right, bottom, left)
-   - Card border-radius (sample from first card-like element: `[class*="card"]`, `article`, `.card`)
+   - Card border-radius (sample from multiple card-like elements: `[class*="card"]`, `article`, `.card` — record the most common value if variants differ)
 
 5. **Status colors:**
    - Scan for semantic status elements (elements with status-related classes or `data-status` attributes)
    - For each unique status, record: background color, text color, border color
+
+6. **Z-index and overlay tokens:**
+   - Collect `z-index` values from positioned elements (modals, dialogs, sticky headers, dropdowns, tooltips) and record the stacking order
+   - Record `opacity` values and `backdrop-filter` properties on overlay/modal elements (if present)
+
+7. **Stylesheet iteration safety:** Only iterate same-origin stylesheets (skip sheets where `sheet.cssRules` throws a SecurityError). Cap stylesheet iteration at 20 stylesheets; if more exist, sample the first 20 and log a Warning: `"Visual Contract: ⚠ Stylesheet cap reached — 20/N stylesheets inspected (M skipped)"`.
+
+8. **Z-index extraction cap:** Sample up to 50 positioned elements; if more exist, sample the 50 with the highest z-index values and log a Warning: `"Visual Contract: ⚠ Positioned element cap reached — 50/N elements sampled"`.
 
 ---
 
@@ -481,6 +490,13 @@ The visual design tokens and animation infrastructure extracted in Step 4d:
 | active | #e8f5e9 | #2e7d32 | #4caf50 |
 | pending | #fff3e0 | #e65100 | #ff9800 |
 | error | #ffebee | #c62828 | #ef5350 |
+
+### 8.6 Z-Index & Overlay Tokens
+| Element | z-index | opacity | backdrop-filter |
+|---------|---------|---------|-----------------|
+| Modal overlay | 50 | 0.5 | blur(4px) |
+| Sticky header | 40 | — | — |
+| Dropdown | 30 | — | — |
 ```
 
 ### 6b. Character Limit Enforcement
@@ -491,7 +507,7 @@ After generating the full document, measure its character count. If it exceeds 6
 
 1. Calculate the overage.
 2. Remove routes from the end of the route list (lowest-priority routes first — routes discovered later in the traversal are considered lower priority).
-3. For each removed route, strip its entries from all sections (Component Inventory, Interactive Elements, Form Contracts, Accessibility Map, Data-Testid Registry, Screenshots).
+3. For each removed route, strip its entries from all sections (Component Inventory, Interactive Elements, Form Contracts, Accessibility Map, Data-Testid Registry, Screenshots, Visual Contract).
 4. Re-measure until the document is within the 65,000-character limit.
 5. Add a Warning at the top of the document:
    ```

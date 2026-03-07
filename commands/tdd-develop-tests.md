@@ -62,11 +62,12 @@ For each Tier 1 test specification (`TP-{N}`):
    - Include proper `beforeEach` / `afterEach` hooks for test setup and teardown
    - Respect accessibility map: include keyboard navigation tests where specified
 
-5. **Contract sections coverage:** Ensure tests cover all four mandatory contract sections from the test plan:
+5. **Contract sections coverage:** Ensure tests cover all five mandatory contract sections from the test plan (four always present, plus Visual Contracts when the UI contract contains a Visual Contract section):
    - **Performance Contracts:** Response time and rendering budget assertions using Playwright's built-in timing
    - **Accessibility Contracts:** WCAG 2.1 AA assertions, keyboard navigation, ARIA role validation
    - **Error Contracts:** Error state rendering, validation message display, fallback behavior
    - **Data Flow Contracts:** Data shape validation through UI rendering, form submission flows
+   - **Visual Contracts (when Visual Contract section exists in UI contract):** Design token fidelity, typography loading, animation presence, layout measurements, status color mapping, z-index and overlay token validation
 
 ### 2c. Tier 2 Documentation Note
 

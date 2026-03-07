@@ -1021,6 +1021,8 @@ Log: `"INFO: [fullpipeline] Pipeline completed: slug=<slug>, all stages done"`
 | Core user flow | ✅ | 0.8s | POST /api/chat → 200 |
 | Visual rendering | ✅ / N/A (no frontend) | 0.5s | 0 orphan CSS vars |
 | Browser screenshots | ✅ / N/A / ⚠️ | 12.3s | 5 routes x 3 viewports = 15 screenshots / N/A (has_frontend: false) / Playwright not available — static only |
+| API→UI Wiring | ✅ / N/A (no frontend) | 1.5s | 12/15 methods wired, 3 unwired (0 P0) |
+| Visual Contract | ✅ / N/A / ⚠️ | 2.0s | Token match rate: 95% (19/20) / N/A (no Visual Contract) / Warning: Playwright not available |
 | Real API test | ✅ / ⚠️ skipped (no API key) | 2.1s | — |
 | Server teardown | ✅ | 0.2s | ports released |
 

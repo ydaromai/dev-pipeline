@@ -58,7 +58,7 @@ Tier 2 outlines are intentionally minimal. Full test code for Tier 2 is develope
 
 ## Step 3: Mandatory Contract Sections
 
-After the tiered specifications, include four mandatory contract sections. Each contract section contains test specifications (with TP-{N} IDs) that cut across the tiered structure. A single TP-{N} may appear in a contract section AND in the tiered listing above — the contract section groups related tests for review completeness, not to create duplicates.
+After the tiered specifications, include five mandatory contract sections (four always present, plus Visual Contracts when UI contract contains a Visual Contract section — Section 8). Each contract section contains test specifications (with TP-{N} IDs) that cut across the tiered structure. A single TP-{N} may appear in a contract section AND in the tiered listing above — the contract section groups related tests for review completeness, not to create duplicates.
 
 ### Performance Contracts
 
@@ -107,8 +107,9 @@ Define visual fidelity test expectations (only when UI contract contains a Visua
 - **Token fidelity:** CSS custom property values in the implemented app match the Visual Contract's design tokens (colors, spacing, radius, shadows)
 - **Typography fidelity:** Contracted font families are imported, load successfully (`document.fonts.check()`), and are applied to the correct elements. Font scale matches contracted values.
 - **Animation presence:** Contracted `@keyframes` and transition patterns are implemented. `prefers-reduced-motion` media query is respected if contracted.
-- **Layout measurements:** Sidebar width, bottom nav height, content padding, and card border-radius match contracted values at each viewport (mobile, tablet, desktop) within ±2px tolerance
+- **Layout measurements:** Sidebar width, bottom nav height, content padding, and card border-radius match contracted values at each viewport (mobile, tablet, desktop) within ±2px tolerance (difference ≤ 2px is a MATCH)
 - **Status color mapping:** Each status (active, pending, error, etc.) has the correct background, text, and border colors from the Visual Contract
+- **Z-index and overlay tokens:** When Section 8.6 data exists, z-index stacking order matches contracted values (exact numeric match), overlay opacity and backdrop-filter match contracted values
 - Each contract item references its TP-{N} ID(s)
 
 ---
@@ -324,7 +325,7 @@ The test plan document must include this header:
 ---
 ```
 
-Followed by the Tier 1 specifications, Tier 2 outlines, and the four mandatory contract sections.
+Followed by the Tier 1 specifications, Tier 2 outlines, and the five mandatory contract sections.
 
 ---
 

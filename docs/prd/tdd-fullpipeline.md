@@ -46,7 +46,7 @@ Non-frontend projects should use `/fullpipeline`. The `/tdd-fullpipeline` is des
 - **NG3: Visual regression testing** -- Screenshot comparison between mock app and final app is deferred to P2. Mock screenshots are used for contract extraction, not pixel-level comparison.
 - **NG4: New critic agents** -- All 10 existing critics are reused. No new critic personas are created.
 - **NG5: Runtime code or services** -- The pipeline is Markdown command files and YAML config. No JavaScript runtime, no database, no API server.
-- **NG6: Modifying existing critic persona files** -- Critic `.md` files remain unchanged. The pipeline uses them as-is.
+- **NG6: Modifying existing critic persona files** -- Critic `.md` files remain unchanged for pipeline-specific logic. Exception: additive checklist items and output format updates that extend critic coverage (e.g., Visual Contract Fidelity, UI-reachability checks) are permitted when gated by `has_frontend` or similar conditionals and do not alter existing checklist semantics.
 - **NG7: Full CI integration** -- Label-based skip on `tdd/{slug}/tests` branches is a P0 convention documented in the command file, not a CI system integration.
 - **NG8: TDD for simple tasks** -- Config changes, documentation updates, and small single-file edits use `/fullpipeline`. The complexity gate routes only medium/complex tasks to `/tdd-fullpipeline`.
 
@@ -103,12 +103,12 @@ Non-frontend projects should use `/fullpipeline`. The `/tdd-fullpipeline` is des
 - [ ] AC 4.4: At each route, Playwright captures screenshots at 3 viewports: mobile (375x812), tablet (768x1024), desktop (1280x720).
 - [ ] AC 4.5: At each route, the analysis extracts: DOM structure (component tree, nesting depth), interactive elements (buttons, links, inputs, selects, textareas), form fields (name, type, required, validation), ARIA roles and labels, tab order and focus management, `data-testid` candidates derived from component names in the DOM. Data-testid candidates are derived from DOM element roles and labels using the convention: `kebab-case` of the accessible name or component purpose (e.g., `submit-button`, `supplier-name-input`, `navigation-menu`). Duplicate candidates within the same route are disambiguated by appending the parent component context. Elements with no accessible name and no component name use the fallback convention `{element-type}-{sequential-index}` (e.g., `div-3`, `button-7`). Such elements are logged as Warnings in the UI contract.
 - [ ] AC 4.6: Keyboard navigation paths are tested: Tab through all interactive elements, verify focus visibility, test Enter/Space activation.
-- [ ] AC 4.7: The output is a structured UI contract document saved to `docs/tdd/<slug>/ui-contract.md` with sections: Route Map, Component Inventory, Interactive Elements, Form Contracts, Accessibility Map, Data-Testid Registry, Screenshots (paths).
+- [ ] AC 4.7: The output is a structured UI contract document saved to `docs/tdd/<slug>/ui-contract.md` with sections: Route Map, Component Inventory, Interactive Elements, Form Contracts, Accessibility Map, Data-Testid Registry, Screenshots (paths), Visual Contract (when visual design tokens are extracted).
 - [ ] AC 4.8: Screenshots are saved to `.pipeline/tdd/<slug>/mock-screenshots/`.
 - [ ] AC 4.9: A 10-critic Ralph Loop reviews the UI contract (max 5 iterations, 0 Critical + 0 Warnings).
 - [ ] AC 4.10: Gate 3 presents the extracted contract summary and requires user approval. The user can correct any misidentified elements or missing routes before proceeding.
 - [ ] AC 4.11: After Mock Analysis completes, Gate 3 cross-references the extracted UI contract against the Design Brief's route manifest and Mock App Requirements section. Routes present in the manifest but missing from the extracted contract are flagged as Warnings. Interactive elements specified in the component inventory but not found in the DOM are flagged as Warnings.
-- [ ] AC 4.12: The UI contract document must not exceed 50,000 characters. If the extracted content exceeds this limit, routes are truncated from the end (lowest-priority routes first) with a Warning noting the truncation and the count of routes dropped.
+- [ ] AC 4.12: The UI contract document must not exceed 65,000 characters. If the extracted content exceeds this limit, routes are truncated from the end (lowest-priority routes first) with a Warning noting the truncation and the count of routes dropped.
 
 ### US-5: Generate test plan from PRD and UI contract (Stage 4)
 
@@ -121,7 +121,7 @@ Non-frontend projects should use `/fullpipeline`. The `/tdd-fullpipeline` is des
   - Tier 1 (E2E/Playwright): Full specifications from PRD + UI contract.
   - Tier 2 (integration/unit): Specification outlines only (TP-{N} ID, requirement citation, test intent description). Full test code is developed in Stage 7 alongside application code.
 - [ ] AC 5.4: Every test specification has a unique traceability ID: `TP-{N}` (e.g., TP-1, TP-2, ..., TP-N).
-- [ ] AC 5.5: The test plan includes four mandatory contract sections: Performance Contracts, Accessibility Contracts, Error Contracts, Data Flow Contracts.
+- [ ] AC 5.5: The test plan includes five mandatory contract sections: Performance Contracts, Accessibility Contracts, Error Contracts, Data Flow Contracts, Visual Contracts (when UI contract contains Visual Contract section).
 - [ ] AC 5.6: The test plan output is saved to `docs/tdd/<slug>/test-plan.md`.
 - [ ] AC 5.7: A 10-critic Ralph Loop reviews the test plan (max 5 iterations, 0 Critical + 0 Warnings).
 - [ ] AC 5.8: Gate 4 presents the test plan summary (TP count by tier, contract coverage) and requires user approval.
@@ -233,7 +233,7 @@ Non-frontend projects should use `/fullpipeline`. The `/tdd-fullpipeline` is des
 - [ ] AC 14.2: Tests verify `tdd-fullpipeline.md` has all 8 stage sections, gates, orchestrator state with TDD-specific fields, error recovery for all 8 stages, and completion report.
 - [ ] AC 14.3: Tests verify `tdd-design-brief.md` references the PRD, outputs to `docs/tdd/<slug>/design-brief.md`, includes Mock App Requirements section, and runs critic review.
 - [ ] AC 14.4: Tests verify `tdd-mock-analysis.md` references Playwright, 3 viewport widths (375, 768, 1280), outputs to `docs/tdd/<slug>/ui-contract.md`, and extracts DOM structure, ARIA roles, and data-testid candidates.
-- [ ] AC 14.5: Tests verify `tdd-test-plan.md` references TP-{N} traceability IDs, includes Performance Contracts / Accessibility Contracts / Error Contracts / Data Flow Contracts sections, and outputs tiered specifications.
+- [ ] AC 14.5: Tests verify `tdd-test-plan.md` references TP-{N} traceability IDs, includes Performance Contracts / Accessibility Contracts / Error Contracts / Data Flow Contracts / Visual Contracts sections, and outputs tiered specifications.
 - [ ] AC 14.6: Tests verify `tdd-develop-tests.md` references self-health gate (`red_count = total_test_count`), tiered development (Tier 1 / Tier 2), and blind agent context restrictions.
 - [ ] AC 14.7: Tests verify `pipeline-config-template.yaml` has a `tdd` section with `max_mock_routes`, `self_health_gate`, `max_test_adjustment_pct`, `metrics_dir`.
 - [ ] AC 14.8: Tests verify cross-file consistency: `tdd-fullpipeline.md` references all TDD stage command files, config keys match between command files and config template.
@@ -246,7 +246,7 @@ Non-frontend projects should use `/fullpipeline`. The `/tdd-fullpipeline` is des
 - **FR-2:** Stage 1 (PRD) reuses `commands/req2prd.md` via subagent, identical to `/fullpipeline` Stage 1. (US-2)
 - **FR-3:** Create `commands/tdd-design-brief.md` -- Stage 2 command file that reads the PRD and generates a functional requirements brief for Figma AI designer, including user flows, component inventory, data shapes, responsive requirements, accessibility requirements, and Mock App Requirements section. Does not prescribe visual design decisions. (US-3)
 - **FR-4:** Create `commands/tdd-mock-analysis.md` -- Stage 3 command file that accepts a mock app URL, crawls all routes with Playwright, captures screenshots at 3 viewports, extracts DOM structure, interactive elements, form fields, ARIA roles, tab order, data-testid candidates, and keyboard navigation paths. Outputs structured UI contract to `docs/tdd/<slug>/ui-contract.md`. (US-4)
-- **FR-5:** Create `commands/tdd-test-plan.md` -- Stage 4 command file that reads PRD + UI contract + schema files and generates tiered test specifications (Tier 1 E2E from PRD + UI contract, Tier 2 placeholders for post-dev-plan). Every test item has a TP-{N} traceability ID. Includes mandatory sections: Performance Contracts, Accessibility Contracts, Error Contracts, Data Flow Contracts. (US-5)
+- **FR-5:** Create `commands/tdd-test-plan.md` -- Stage 4 command file that reads PRD + UI contract + schema files and generates tiered test specifications (Tier 1 E2E from PRD + UI contract, Tier 2 placeholders for post-dev-plan). Every test item has a TP-{N} traceability ID. Includes mandatory sections: Performance Contracts, Accessibility Contracts, Error Contracts, Data Flow Contracts, Visual Contracts (when UI contract contains Visual Contract section). (US-5)
 - **FR-6:** Stage 5 (Dev Plan) reuses the `/prd2plan` generation process, extended with contract negotiation gate -- compares dev plan against test plan contracts, flags conflicts, resolves with test plan as authority document. After resolution, completes Tier 2 test specifications with component boundaries. (US-6)
 - **FR-7:** Create `commands/tdd-develop-tests.md` -- Stage 6 command file implementing Tier 1 E2E test development only: Tier 1 E2E by blind agent (PRD + UI contract + schema, no dev plan, no app code). Each test maps to TP-{N}. Self-health blocking gate: `red_count = total_test_count`. Tier 2 integration/unit tests are developed in Stage 7 alongside application code. (US-7)
 - **FR-8:** Stage 7 (Develop App) reuses the `/execute` execution pattern, extended with test adjustment taxonomy -- Structural (auto-approved), Behavioral (QA re-review with TP-{N} citation), Security (immutable). More than 20% adjustments halts pipeline. (US-8)
@@ -306,12 +306,12 @@ Non-frontend projects should use `/fullpipeline`. The `/tdd-fullpipeline` is des
 - [ ] AC 4.9: 10-critic Ralph Loop on UI contract
 - [ ] AC 4.10: Gate 3 with contract summary and user approval
 - [ ] AC 4.11: Gate 3 cross-references UI contract against Design Brief route manifest and component inventory
-- [ ] AC 4.12: UI contract document capped at 50,000 characters (lowest-priority routes truncated with Warning)
+- [ ] AC 4.12: UI contract document capped at 65,000 characters (lowest-priority routes truncated with Warning)
 - [ ] AC 5.1: `commands/tdd-test-plan.md` exists
 - [ ] AC 5.2: Reads PRD + UI contract + schema files
 - [ ] AC 5.3: Tiered specifications (Tier 1 full specs, Tier 2 outlines only)
 - [ ] AC 5.4: TP-{N} traceability IDs on every test item
-- [ ] AC 5.5: Mandatory sections: Performance, Accessibility, Error, Data Flow Contracts
+- [ ] AC 5.5: Mandatory sections: Performance, Accessibility, Error, Data Flow, Visual Contracts
 - [ ] AC 5.6: Output saved to `docs/tdd/<slug>/test-plan.md`
 - [ ] AC 5.7: 10-critic Ralph Loop on test plan
 - [ ] AC 5.8: Gate 4 with test plan summary and approval

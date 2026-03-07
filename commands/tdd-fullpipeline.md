@@ -659,7 +659,7 @@ Important:
 - Capture screenshots at 3 viewports per route (375x812, 768x1024, 1280x720)
 - Extract DOM structure, interactive elements, ARIA roles, data-testid candidates
 - Test keyboard navigation paths
-- Enforce 50,000 character limit on UI contract (truncate lowest-priority routes)
+- Enforce 65,000 character limit on UI contract (truncate lowest-priority routes)
 - Run 10-critic Ralph Loop (max 5 iterations, 0 Critical + 0 Warnings)
 - Write UI contract to docs/tdd/<slug>/ui-contract.md
 - Save screenshots to .pipeline/tdd/<slug>/mock-screenshots/
@@ -757,13 +757,13 @@ Important:
     linked PRD requirement (AC reference), test intent description, expected test type
 - Every test item gets a unique TP-{N} traceability ID
 - Include mandatory contract sections: Performance Contracts, Accessibility Contracts,
-  Error Contracts, Data Flow Contracts
+  Error Contracts, Data Flow Contracts, Visual Contracts (when UI contract contains Visual Contract section)
 - Run 10-critic Ralph Loop (max 5 iterations, 0 Critical + 0 Warnings)
 - Write test plan to docs/tdd/<slug>/test-plan.md
 - Return the following in your final message:
   1. The test plan file path
   2. TP count by tier (Tier 1 count, Tier 2 count, total)
-  3. Contract coverage summary (Performance, Accessibility, Error, Data Flow)
+  3. Contract coverage summary (Performance, Accessibility, Error, Data Flow, Visual)
   4. Traceability overview: TP-{N} range, PRD AC coverage percentage
   5. Critic results (all critics, verdicts, iteration count)
   6. Any unresolved issues
@@ -794,6 +794,7 @@ Test plan generated: docs/tdd/<slug>/test-plan.md
 | Accessibility Contracts | N | Covered |
 | Error Contracts | N | Covered |
 | Data Flow Contracts | N | Covered |
+| Visual Contracts | N / N/A | Covered / N/A (no Visual Contract in UI contract) |
 
 ### Traceability
 - TP range: TP-1 through TP-N
@@ -1335,6 +1336,8 @@ Present the full validation results:
 | Core user flow | ✅ | 0.8s | POST /api/chat → 200 |
 | Visual rendering | ✅ / N/A | 0.5s | 0 orphan CSS vars |
 | Browser screenshots | ✅ / N/A / ⚠️ | 12.3s | N routes x 3 viewports |
+| API→UI Wiring | ✅ / N/A (no frontend) | 1.5s | X/Y methods wired, Z unwired (0 P0) |
+| Visual Contract | ✅ / N/A / ⚠️ | 2.0s | Token match rate: X% (N/M) / N/A (no Visual Contract) / Warning: Playwright not available |
 | Real API test | ✅ / ⚠️ skipped (no API key) | 2.1s | — |
 | Server teardown | ✅ | 0.2s | ports released |
 
@@ -1889,6 +1892,8 @@ Log: `"INFO: [tdd-fullpipeline] Pipeline completed: slug=<slug>, all stages done
 | Core user flow | ✅ | 0.8s | POST /api/chat → 200 |
 | Visual rendering | ✅ / N/A | 0.5s | 0 orphan CSS vars |
 | Browser screenshots | ✅ / N/A / ⚠️ | 12.3s | N routes x 3 viewports |
+| API→UI Wiring | ✅ / N/A (no frontend) | 1.5s | X/Y methods wired, Z unwired (0 P0) |
+| Visual Contract | ✅ / N/A / ⚠️ | 2.0s | Token match rate: X% (N/M) / N/A (no Visual Contract) / Warning: Playwright not available |
 | Real API test | ✅ / ⚠️ skipped (no API key) | 2.1s | — |
 | Server teardown | ✅ | 0.2s | ports released |
 

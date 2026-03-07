@@ -415,11 +415,12 @@ After verifying SDK compatibility, audit that every backend method is reachable 
    - Exclude methods called only by other repo/API methods (internal composition)
 
 2. **Cross-reference against UI:**
-   - For each backend method, grep `app/`, `components/`, `pages/`, `src/` for invocations (function calls, imports, hook usage)
+   - **Batching:** If more than 20 public methods are discovered, batch the search — build a single `grep -F` (fixed-string) pattern file of up to 20 method names per invocation (one name per line, passed via `grep -Ff <(printf '%s\n' methods...)` or multiple `-e` flags) rather than one grep per method. Use `grep -F` to avoid shell metacharacter injection from method names. **Method count cap:** If more than 100 public methods are discovered, audit only methods that map to P0/P1 ACs in the PRD and report the remainder as `⚠ SKIPPED (method count cap)`. If P0/P1-mapped methods still exceed 100, audit all P0 methods first, then P1 methods up to the cap. **Time budget:** 60 seconds for the entire wiring audit; if exceeded, report partial results with a Warning: `"Wiring audit timed out after 60s: X/Y methods audited, Z remaining. All P0-mapped methods audited: yes/no."`
+   - For each backend method (or batch), grep `app/`, `components/`, `pages/`, `src/` for invocations (function calls, imports, hook usage)
    - For RPC calls (`.rpc('name')`), search for the RPC name string in production UI code
    - For state machine transitions, verify each defined transition has a UI trigger (button, form submission, link, automated UI action)
 
-3. **Output a structured audit table:**
+3. **Output a structured audit table with summary line:**
 
 ```markdown
 ### API→UI Wiring Audit
@@ -429,6 +430,8 @@ After verifying SDK compatibility, audit that every backend method is reachable 
 | createOrder | lib/repo/orders.ts | 3 (OrderForm, OrderPage, QuickOrder) | ✅ WIRED |
 | deleteCatalogItem | lib/repo/catalog.ts | 0 | ⚠ UNWIRED |
 | sendPurchaseOrder | lib/api/po.ts | 0 | ⚠ UNWIRED |
+
+Wiring coverage: 1/4 methods wired (25%), 3 unwired (0 P0)
 ```
 
 4. **Classify findings:**
@@ -540,7 +543,7 @@ These checks run regardless of Playwright availability, as supplementary validat
 
 **6. Visual Contract token validation (when UI contract Visual Contract section exists):**
 
-If a Visual Contract exists at `docs/tdd/<slug>/ui-contract.md` (Section 8), validate contracted tokens against the running app via Playwright's `page.evaluate()`:
+If a Visual Contract exists at `docs/tdd/<slug>/ui-contract.md` (Section 8), validate contracted tokens against the running app via Playwright's `page.evaluate()`. **Time budget:** 30 seconds for the full validation; if exceeded, report partial results with a Warning: `"Visual Contract validation timed out after 30s: X/Y tokens validated, Z remaining."` Token count is bounded by the upstream 200-property cap from extraction.
 
 1. **Extract actual CSS custom properties** from the running app:
    ```js
@@ -548,13 +551,16 @@ If a Visual Contract exists at `docs/tdd/<slug>/ui-contract.md` (Section 8), val
    // For each contracted token, read: styles.getPropertyValue('--token-name')
    ```
 
-2. **Compare each contracted token against actual value:**
-   - **Colors:** Exact match after normalizing to lowercase hex (convert `rgb()` to hex for comparison)
-   - **Spacing/dimensions:** ±2px tolerance (parse to numeric, compare)
-   - **Fonts:** Substring match — contracted `"Inter"` matches actual `"Inter, sans-serif"`
-   - **Radius/shadows:** Exact string match after whitespace normalization
+2. **Compare each contracted token against actual value.** Extract all contracted tokens in a single `page.evaluate()` call (batch all `getPropertyValue` reads into one evaluation — do not call `page.evaluate()` per token). Validate token names against `/^--[a-zA-Z0-9_-]+$/` before interpolation into `page.evaluate()`. Always pass validated token names as arguments to `page.evaluate((tokens) => { ... }, tokenArray)` rather than string interpolation. Comparison rules:
+   - **Colors:** Exact match after normalizing to lowercase hex. Convert `rgb()` and `rgba()` to hex (for `rgba`, compare the alpha channel with ±0.02 tolerance). For `hsl()`/`hsla()`, convert to hex first. For other color functions (`oklch()`, `color-mix()`), compare as normalized strings.
+   - **Spacing/dimensions:** ±2px tolerance — difference ≤ 2px is a MATCH, difference > 2px is a MISMATCH (parse to numeric `px` values; if contracted value uses `rem`, resolve to `px` using the actual root `font-size` from `getComputedStyle(document.documentElement).fontSize`)
+   - **Fonts:** Substring match — contracted value is a substring of actual value (e.g., contracted `"Inter"` matches actual `"Inter, sans-serif"`)
+   - **Radius:** ±2px tolerance (same as spacing/dimensions)
+   - **Shadows:** Exact string match after whitespace normalization. Normalize the `inset` keyword position (always move to front if present). Normalize each shadow component to `[inset] <offset-x> <offset-y> <blur> <spread> <color>` order, applying color normalization (rgb→hex) within shadow values. For multi-layer shadows (comma-separated), split on comma, normalize each layer individually, then rejoin before comparison.
+   - **Z-index/overlay tokens:** Exact numeric match for `z-index` values. For `opacity`, ±0.05 tolerance. For `backdrop-filter`, exact string match after whitespace normalization. These are validated only when Section 8.6 data exists in the contract.
+   - **Status colors:** For each contracted status (Section 8.5, when Section 8.5 data exists in the contract), select an element matching the status class or `[data-status="<status>"]` attribute, then read `getComputedStyle` for `background-color`, `color`, and `border-color`. Apply the same color normalization rules as design token colors (rgb→hex). Report per-status match/mismatch. If no element with a given status is found in the DOM, report as `SKIPPED (no element with status '<status>' found in DOM)` rather than MISMATCH.
 
-3. **Check font loading:** For each contracted font family, run `document.fonts.check('16px <family>')` and report loaded/not-loaded status.
+3. **Check font loading:** For each contracted font family, validate family names against `/^[a-zA-Z0-9 -]+$/` (literal space, not `\s`) before interpolation. Run `document.fonts.check('16px <family>')` and report loaded/not-loaded status. If the type scale defines specific sizes, also check at those sizes.
 
 4. **Check animation infrastructure:** Verify `@media (prefers-reduced-motion)` media query exists in at least one stylesheet if contracted.
 
@@ -564,18 +570,18 @@ If a Visual Contract exists at `docs/tdd/<slug>/ui-contract.md` (Section 8), val
    | Token | Contracted | Actual | Match |
    |-------|-----------|--------|-------|
    | --color-primary | #1a2b4a | #1a2b4a | MATCH |
-   | --spacing-md | 16px | 14px | MISMATCH (±2px) |
-   | --radius-lg | 12px | 8px | MISMATCH |
+   | --spacing-md | 16px | 13px | MISMATCH (>2px) |
+   | --radius-lg | 12px | 8px | MISMATCH (>2px) |
    | Font: Inter | loaded | loaded | MATCH |
    | reduced-motion | present | missing | MISMATCH |
 
    Token match rate: 85% (17/20)
    ```
 
-6. **Failure classification:**
-   - **>70% match rate** → PASS with Warnings for individual mismatches
-   - **30–70% match rate** → WARNING (report in smoke test results, do not block)
-   - **<30% match rate** → CRITICAL (visual contract severely violated, blocks delivery)
+6. **Failure classification** (thresholds tightened from the initial 30%/70% split to catch more fidelity violations early — the previous 30-70% WARNING band was too permissive for design-system-driven projects):
+   - **≥70% match rate** → PASS with Warnings for individual mismatches
+   - **≥50% and <70% match rate** → WARNING (report in smoke test results, do not block)
+   - **<50% match rate** → CRITICAL (visual contract severely violated, blocks delivery)
 
 If no Visual Contract section exists in the UI contract, skip this sub-step and report `Visual Contract: N/A (no Visual Contract in UI contract)`.
 
@@ -592,11 +598,12 @@ When `has_frontend: true` but Playwright was NOT available (Step 5d fell back to
 
 2. **Run static analysis only** (same as Branch (a) step 5 above):
    - CSS custom properties, dynamic content rendering, asset references, dark theme
+   - **Visual Contract token validation: SKIPPED** (requires Playwright `page.evaluate()`). Report as Warning: `Visual Contract: ⚠ skipped (Playwright not available)`
    - Report results with a Warning-level note that browser checks were skipped
 
 #### Branch (c): Skip entirely (`has_frontend: false`)
 
-If `has_frontend` is not `true`, skip this step and report `Visual rendering: N/A (no frontend)` in the results table. No static analysis or browser checks are performed.
+If `has_frontend` is not `true`, skip all sub-steps (visual rendering, API→UI Wiring, Visual Contract) and report `Visual rendering: N/A (no frontend)`, `API→UI Wiring: N/A (no frontend)`, `Visual Contract: N/A (no frontend)` in the results table. No static analysis or browser checks are performed.
 
 ### 5f. Teardown
 
@@ -643,6 +650,8 @@ When all tasks are processed AND smoke tests pass:
 | Core user flow | ✅ | 0.8s | POST /api/chat → 200 |
 | Visual rendering | ✅ / N/A (no frontend) | 0.5s | 0 orphan CSS vars, 0 missing assets |
 | Browser screenshots | ✅ / N/A / ⚠️ | 12.3s | 5 routes x 3 viewports = 15 screenshots / N/A (has_frontend: false) / Warning: Playwright not available — static analysis only (see installation instructions above) |
+| API→UI Wiring | ✅ / N/A (no frontend) | 1.5s | 12/15 methods wired, 3 unwired (0 P0) |
+| Visual Contract | ✅ / N/A / ⚠️ | 2.0s | Token match rate: 95% (19/20) / N/A (no Visual Contract) / Warning: Playwright not available |
 | Real API test | ✅ / ⚠️ skipped (no API key) | 2.1s | LLM response format valid / no ANTHROPIC_API_KEY |
 | Server teardown | ✅ | 0.2s | PID group terminated, ports released |
 
