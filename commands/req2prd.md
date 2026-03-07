@@ -13,6 +13,40 @@ Read `${CLAUDE_PLUGIN_ROOT}/pipeline/templates/prd-template.md` for the required
 
 If a `pipeline.config.yaml` exists in the project root, read it for project-specific paths (the `paths.prd_dir` value). Otherwise default to `docs/prd/`.
 
+### Foundation-Aware Mode
+
+If `pipeline.config.yaml` contains `assumes_foundation: true`:
+
+This PRD is for a venture built on the Foundation starter project. The foundation already provides:
+- Authentication (phone OTP via Supabase Auth)
+- Multi-tenancy (RLS with tenant_id isolation)
+- RBAC (admin/manager/viewer roles, JWT claims)
+- CI/CD (GitHub Actions CI on PR, Vercel deploy on push)
+- Deployment (Vercel frontend, Supabase Cloud backend)
+- User management (admin page, invite, role change, deactivate)
+- Navigation & layout (sidebar, top bar, breadcrumbs)
+- Database foundation (tenants, profiles, audit_log tables)
+- E2E test infrastructure (Playwright, auth helpers, fixtures)
+
+**PRD scope:** Domain logic ONLY. Do NOT include requirements for any of the above — they are already implemented and tested. The PRD should focus on:
+- Domain entities and their relationships
+- Domain-specific business logic and workflows
+- Domain-specific UI pages and components
+- Domain-specific API endpoints (if any beyond Supabase)
+- Domain-specific test scenarios
+
+**PRD metadata:** Add this to the PRD header:
+```
+assumes_foundation: true
+foundation_provides: auth, multi-tenancy, RBAC, CI/CD, deployment, user-management, navigation, database-foundation, e2e-infrastructure
+```
+
+**Critic adjustments:** When `assumes_foundation: true`:
+- DevOps Critic scores as N/A (deployment/infra already handled by foundation)
+- Security Critic scopes to domain-level security only (auth/RLS framework is proven)
+- QA Critic does not flag missing auth/RBAC tests (foundation covers those)
+- All critics should not flag "missing" infrastructure that the foundation provides
+
 ## Step 2: Clarify requirements (if needed)
 
 If `$ARGUMENTS` is short (< 200 characters), ask clarifying questions using AskUserQuestion. Ask about:
@@ -40,7 +74,7 @@ Derive the slug from the PRD title (kebab-case, e.g., "Daily Revenue Trends" →
 
 Spawn all applicable critic subagents in parallel using the Task tool (model: sonnet — Sonnet 4.6, or `execution.ralph_loop.critic_model` from config). Each critic reviews the PRD from their domain perspective using their **PRD Review Focus** checklist, and produces a **score (1–10)** in addition to findings.
 
-Read `pipeline.config.yaml` for the `req2prd.critics` list. Default: `[product, dev, devops, qa, security, performance, data-integrity]` + `observability` if `has_backend_service: true` + `api-contract` if `has_api: true` + `designer` if `has_frontend: true`. **Skip conditional critics entirely** when their flag is `false` or absent — do not spawn their subagent, and mark them as N/A in the score table.
+Read `pipeline.config.yaml` for the `req2prd.critics` list. Default: `[product, dev, devops, qa, security, performance, data-integrity]` + `observability` if `has_backend_service: true` + `api-contract` if `has_api: true` + `designer` if `has_frontend: true` + `ml` if `has_ml: true`. **Skip conditional critics entirely** when their flag is `false` or absent — do not spawn their subagent, and mark them as N/A in the score table.
 
 **Parallelization:** All critics spawn simultaneously via the Task tool. If model concurrency limits are reached, the Task tool queues and retries automatically — no user action required.
 
@@ -67,7 +101,7 @@ Produce your structured output. Include:
 **Thresholds** (from `pipeline.config.yaml`, with defaults):
 - Per-critic minimum score: `scoring.per_critic_min` (default: **8.5**)
 - Overall minimum score: `scoring.overall_min` (default: **9.0**)
-- **Overall score formula:** `overall = sum(scores) / count(scored critics)` — N/A critics (e.g., Designer when `has_frontend: false`) are excluded from both numerator and denominator
+- **Overall score formula:** `overall = sum(scores) / count(scored critics)` — N/A critics (e.g., Designer when `has_frontend: false`, DevOps when `assumes_foundation: true`) are excluded from both numerator and denominator
 - Max iterations: `validation.max_iterations` (default: **3**)
 
 **Expected duration:** Each iteration spawns up to 10 parallel critic subagents using Sonnet. A full 3-iteration loop typically takes 5–10 minutes. Most PRDs converge within 2 iterations. If thresholds are not met after 3 iterations, the remaining findings are likely design opinions rather than quality gaps — escalate to the user rather than continuing to iterate. If the session is interrupted mid-loop, re-running `/req2prd` will detect the existing PRD file and ask whether to regenerate or resume validation.
@@ -91,11 +125,11 @@ Produce your structured output. Include:
 ```
 ## PRD Quality Scores
 
-| Iteration | Product | Dev | DevOps | QA | Security | Performance | Data Integrity | Observability | API Contract | Designer | Overall |
-|-----------|---------|-----|--------|-----|----------|-------------|----------------|---------------|--------------|----------|---------|
-| 1         | 7.5     | 8.0 | 9.0    | 7.0 | 8.5      | 8.0         | 8.5            | 7.5          | 8.0          | N/A      | 8.1     |
-| 2         | 8.5     | 8.5 | 9.0    | 8.0 | 9.0      | 8.5         | 9.0            | 8.5          | 9.0          | N/A      | 8.7     |
-| 3         | 9.0     | 9.0 | 9.5    | 9.0 | 9.5      | 9.0         | 9.5            | 9.0          | 9.5          | N/A      | 9.3     | ← thresholds met
+| Iteration | Product | Dev | DevOps | QA | Security | Performance | Data Integrity | Observability | API Contract | Designer | ML  | Overall |
+|-----------|---------|-----|--------|-----|----------|-------------|----------------|---------------|--------------|----------|-----|---------|
+| 1         | 7.5     | 8.0 | 9.0    | 7.0 | 8.5      | 8.0         | 8.5            | 7.5          | 8.0          | N/A      | N/A | 8.1     |
+| 2         | 8.5     | 8.5 | 9.0    | 8.0 | 9.0      | 8.5         | 9.0            | 8.5          | 9.0          | N/A      | N/A | 8.7     |
+| 3         | 9.0     | 9.0 | 9.5    | 9.0 | 9.5      | 9.0         | 9.5            | 9.0          | 9.5          | N/A      | N/A | 9.3     | ← thresholds met
 ```
 
 ## Step 6: Write the PRD
@@ -132,7 +166,7 @@ PRD generated: docs/prd/<slug>.md
 |--------|-------|--------|
 | Product | 9.0 | ✅ (> 8.5) |
 | Dev | 9.0 | ✅ (> 8.5) |
-| DevOps | 9.5 | ✅ (> 8.5) |
+| DevOps | 9.5 / N/A | ✅ (> 8.5) / — |
 | QA | 9.0 | ✅ (> 8.5) |
 | Security | 9.5 | ✅ (> 8.5) |
 | Performance | 9.0 | ✅ (> 8.5) |
@@ -140,6 +174,7 @@ PRD generated: docs/prd/<slug>.md
 | Observability | 9.0 / N/A | ✅ (> 8.5) / — |
 | API Contract | 9.5 / N/A | ✅ (> 8.5) / — |
 | Designer | N/A | — |
+| ML | N/A | — |
 | **Overall** | **9.3** | **✅ (> 9.0)** |
 
 Ralph Loop iterations: 3

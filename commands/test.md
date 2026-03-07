@@ -541,6 +541,7 @@ Read all critic persona files:
 8. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/observability-critic.md (only if pipeline.config.yaml has `has_backend_service: true`)
 9. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/api-contract-critic.md (only if pipeline.config.yaml has `has_api: true`)
 10. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/designer-critic.md (only if pipeline.config.yaml has `has_frontend: true`)
+11. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/ml-critic.md (only if pipeline.config.yaml has `has_ml: true`)
 
 ## What to review
 - Run: git diff main..HEAD to see ALL changes across the feature branch
@@ -573,6 +574,7 @@ Produce each critic's review in sequence, then a final summary:
 - Observability: PASS/FAIL/N/A (only if has_backend_service: true)
 - API Contract: PASS/FAIL/N/A (only if has_api: true)
 - Designer: PASS/FAIL/N/A (only if has_frontend: true)
+- ML: PASS/FAIL/N/A (only if has_ml: true)
 
 <Then include each critic's full structured output>
 ```
@@ -685,6 +687,7 @@ Smoke Test Status: PASS/FAIL/SKIPPED
 | Observability | PASS/FAIL/N/A | <summary> |
 | API Contract | PASS/FAIL/N/A | <summary> |
 | Designer | PASS/FAIL/N/A | <summary> |
+| ML | PASS/FAIL/N/A | <summary> |
 
 Critic Validation: PASS (all critics) | Ralph Loop iterations: N
 

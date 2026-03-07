@@ -47,6 +47,7 @@ EPIC (one per document or initiative)
 | Field | Required | Description |
 |-------|----------|-------------|
 | **Complexity** | Yes | Simple / Medium / Complex |
+| **Domain** | No | Frontend / Backend / Data / Security / Infra / Data Analytics / ML (auto-inferred from files if omitted) |
 | **Depends On** | If any | Other tasks that must complete first |
 | **Parallel Group** | Yes | Which tasks can run in parallel |
 | **Files to Create/Modify** | Yes | Explicit list of files |

@@ -15,6 +15,13 @@ You are executing the **execute** pipeline stage. This is the core orchestration
 4. Read the linked PRD (find by matching slug in `docs/prd/`)
 5. Resolve the JIRA transition script path: use `pipeline.config.yaml` → `paths.jira_transition` if available, otherwise default to `scripts/jira/transition-issue.js`. Store this as `jira_transition_path` for use throughout execution.
 
+### Step 1.1: Foundation Detection
+
+Check `pipeline.config.yaml` for `assumes_foundation: true`. If set:
+- Load the foundation baseline context: auth, multi-tenancy, RBAC, CI/CD, deployment are proven and locked
+- Brief all build agents: "Foundation infrastructure is locked — do not modify auth, CI/CD, or deployment config"
+- Set `assumes_foundation: true` in the execution context
+
 Parse all tasks and build a dependency graph:
 - Extract `Depends On` and `Parallel Group` from each task
 - Identify **ready tasks**: tasks with no unmet dependencies (all `Depends On` tasks are marked DONE)
@@ -69,12 +76,13 @@ Dev Plan: <slug>
 Total Tasks: N (Simple: X, Medium: Y, Complex: Z)
 
 ### Execution Order
-Group A (parallel, first): TASK 1.1 (Simple), TASK 2.1 (Medium)
-Group B (after A):          TASK 1.2 (Complex), TASK 2.2 (Simple)
-Group C (after B):          TASK 1.3 (Medium)
+Group A (parallel, first): TASK 1.1 (Simple, Frontend Expert), TASK 2.1 (Medium, Data Expert)
+Group B (after A):          TASK 1.2 (Complex, Backend Expert), TASK 2.2 (Simple, Infra Expert)
+Group C (after B):          TASK 1.3 (Medium, ML Expert)
 
 ### Ralph Loop Config
 Build Models: Simple→Sonnet 4.6, Medium→Opus 4.6, Complex→Opus 4.6
+Expert Selection: Inferred from task files (override with Domain field in dev plan)
 Review Model: Opus 4.6
 Max Iterations: 3
 Fresh Context: Yes
@@ -122,15 +130,78 @@ Spawn a subagent (Task tool) with the appropriate model based on task complexity
 - Medium → `model: opus` (Opus 4.6)
 - Complex → `model: opus` (Opus 4.6)
 
+#### Domain Expert Selection
+
+Before spawning the build subagent, infer the task's **primary domain** from its `Files to Create/Modify` list to select the appropriate expert builder persona. Use the following rules:
+
+| Domain | File Path Patterns (glob) | Expert Persona |
+|--------|--------------------------|----------------|
+| **Security** | `**/auth.ts`, `**/auth.tsx`, `**/auth.js`, `**/auth.jsx`, `**/auth/*`, `**/rbac/*`, `**/permissions/*`, `**/middleware/auth*`, `**/login/*`, `**/signup/*`, `**/security/*`, `**/crypto/*` | `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/builders/security-expert.md` |
+| **ML** | `**/ai/*`, `**/ml/*`, `**/llm/*`, `**/services/ai*`, `**/services/ml*`, `**/prompts/*`, `**/embeddings/*`, `**/inference/*`, `**/ml/models/*`, `**/ai/models/*`, `**/rag/*`, `**/ai/agents/*`, `**/ml/agents/*`, `**/vectors/*` | `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/builders/ml-expert.md` |
+| **Data Analytics** | `**/dashboards/*`, `**/dashboard/widgets/*`, `**/dashboard/charts/*`, `**/analytics/*`, `**/charts/*`, `**/reports/*`, `**/metrics/*`, `**/kpi/*`, `**/visualization/*` | `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/builders/data-analyst-expert.md` |
+| **Infra** | `.github/workflows/*`, `.gitlab-ci.yml`, `Dockerfile*`, `docker-compose*`, `vercel.json`, `netlify.toml`, `**/terraform/*`, `*.tf`, `**/cdk/*`, `**/pulumi/*`, `**/k8s/*`, `**/kubernetes/*`, `**/helm/*`, `**/cloudformation/*` | `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/builders/infra-expert.md` |
+| **Data** | `migrations/*`, `supabase/migrations/*`, `prisma/*`, `drizzle/*`, `*.sql`, `**/seed*`, `**/repo/*`, `**/repositories/*`, `**/etl/*`, `**/transforms/*`, `**/import/*`, `**/export/*` | `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/builders/data-expert.md` |
+| **Frontend** | `src/components/**/*`, `src/app/**/*`, `src/pages/**/*`, `pages/**/*`, `components/**/*`, `src/hooks/**/*`, `src/context/**/*`, `*.css`, `*.scss`, `*.module.css` | `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/builders/frontend-expert.md` |
+| **Backend** | `src/api/**/*`, `src/lib/**/*`, `src/services/**/*`, `src/middleware/**/*`, `app/api/**/*` | `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/builders/backend-expert.md` |
+
+**Valid domain values:** `Security`, `ML`, `Data Analytics`, `Infra`, `Data`, `Frontend`, `Backend`.
+
+**Rules:**
+1. If the task has an explicit `Domain` field in the dev plan, use that directly (overrides inference). If the value does not match one of the valid domain values above, halt with an error listing the valid options.
+2. Otherwise, infer from the majority of files in `Files to Create/Modify`. Match file paths against the glob patterns in the table above. The domain with the most file matches wins. If tied, use the higher-priority domain (table order = priority, top to bottom).
+3. If no pattern matches, use **Backend** as the default and log a note in the execution output: `"Domain: Backend (default — no pattern matched)"`.
+4. For cross-domain tasks (files match 2+ domains), select the primary domain (most file matches) and add a `## Secondary Domain Context` section to the build prompt containing **only** the `Anti-Patterns to Avoid` and `Definition of Done` sections from the secondary expert persona. Do not paste the full secondary persona file.
+5. When `assumes_foundation: true` and all matched files are in the foundation-locked set (auth, RBAC, CI/CD, deployment config), do NOT route to Security or Infra expert. Instead, fall through to the next matching domain or Backend default — those files should not be modified. **Rule 5 takes precedence over Rule 8** — when all security-pattern files are foundation-locked, Security Expert routing is suppressed because those files must not be modified.
+6. Read the selected expert persona file and include its content in the build subagent prompt. If the persona file is not found at the expected path, halt with an error: `"Expert persona file not found: <path>"`.
+7. When `assumes_foundation` is `false` or absent in `pipeline.config.yaml`, omit the `## Foundation Guard Rails` section from both the build prompt and fix prompt entirely.
+8. If any file in `Files to Create/Modify` matches Security domain patterns (row 1 of the table above), the Security Expert must be selected as primary or included as secondary context (Anti-Patterns + Definition of Done sections only), regardless of any explicit `Domain` field override. **Rule 8 is subject to Rule 5** — it does not apply when all security-pattern files are foundation-locked.
+
+Report the selected expert in the execution plan output with routing rationale:
+```
+TASK 1.1 (Medium, Frontend Expert + Backend secondary) → Opus 4.6
+  Routing: 3/5 files matched Frontend, 2/5 matched Backend (Rule 2: majority)
+TASK 1.2 (Simple, Data Expert) → Sonnet 4.6
+  Routing: Domain field override (Rule 1)
+TASK 2.1 (Complex, ML Expert) → Opus 4.6
+  Routing: 4/4 files matched ML (Rule 2: unanimous)
+TASK 3.1 (Simple, Backend Expert) → Sonnet 4.6
+  Routing: Backend (default — no pattern matched) (Rule 3)
+```
+
 **Build subagent prompt:**
 ```
-You are implementing a task from a dev plan. Follow all agent constraints.
+You are a <Domain> Expert implementing a task from a dev plan. Follow all agent constraints and your domain expertise.
+
+## Domain Expertise
+<paste content from the selected expert builder persona file>
+
+## Secondary Domain Context (only if cross-domain task)
+<paste key points from secondary expert persona — anti-patterns, definition of done items relevant to the secondary files>
 
 ## Your Task
 <paste full task spec from dev plan, including subtasks>
 
 ## Agent Constraints
 <paste AGENT_CONSTRAINTS.md content>
+
+## Foundation Guard Rails (when assumes_foundation: true)
+
+You are building domain logic on top of the Foundation starter project. The following are LOCKED and must NOT be modified:
+- Authentication system (src/lib/auth.ts, login page, OTP flow, custom_access_token_hook)
+- RBAC framework (src/lib/roles.ts, role-based middleware, authorization components)
+- Multi-tenancy infrastructure (RLS base policies, tenant table, tenant context)
+- CI/CD pipelines (.github/workflows/*)
+- Deployment configuration (vercel.json, Supabase config)
+- Base database schema (tenants, profiles, audit_log migrations)
+- Navigation/layout components (sidebar, top bar, breadcrumbs — unless extending for domain pages)
+
+You CAN and SHOULD:
+- Add new database migrations for domain tables (following existing RLS patterns)
+- Create new pages and components for domain features
+- Add new API routes for domain logic
+- Write new tests for domain functionality
+- Extend navigation with new domain menu items
+- Add new RLS policies for domain tables
 
 ## Context
 - Branch: <branch name>
@@ -149,7 +220,7 @@ You are implementing a task from a dev plan. Follow all agent constraints.
 
 ### 3c. Ralph Loop — REVIEW phase (fresh context, different model)
 
-After the build phase completes, spawn a **review subagent** (Task tool, model: sonnet — Sonnet 4.6, or `execution.ralph_loop.critic_model` from config) with all applicable critic personas (7 always-on + conditional: Observability if `has_backend_service: true`, API Contract if `has_api: true`, Designer if `has_frontend: true`):
+After the build phase completes, spawn a **review subagent** (Task tool, model: sonnet — Sonnet 4.6, or `execution.ralph_loop.critic_model` from config) with all applicable critic personas (7 always-on + conditional: Observability if `has_backend_service: true`, API Contract if `has_api: true`, Designer if `has_frontend: true`, ML if `has_ml: true`):
 
 **Review subagent prompt:**
 ```
@@ -166,6 +237,14 @@ using all applicable critic perspectives. Read all critic persona files:
 8. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/observability-critic.md (only if pipeline.config.yaml has `has_backend_service: true`)
 9. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/api-contract-critic.md (only if pipeline.config.yaml has `has_api: true`)
 10. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/designer-critic.md (only if pipeline.config.yaml has `has_frontend: true`)
+11. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/ml-critic.md (only if pipeline.config.yaml has `has_ml: true`)
+
+## Foundation Context for Critics (when assumes_foundation: true)
+
+- Do NOT flag missing auth/RBAC/tenancy implementation — it exists in the foundation
+- Do NOT flag missing CI/CD configuration — it exists in the foundation
+- DO flag if build agent modified locked foundation files (this is a violation)
+- DO verify domain code correctly extends foundation patterns (RLS, auth hooks, role checks)
 
 ## What to review
 - Branch: <branch name>
@@ -195,6 +274,7 @@ Produce each critic's review in sequence, then a final summary:
 - Observability: PASS/FAIL/N/A (only if has_backend_service: true)
 - API Contract: PASS/FAIL/N/A (only if has_api: true)
 - Designer: PASS/FAIL/N/A (only if has_frontend: true)
+- ML: PASS/FAIL/N/A (only if has_ml: true)
 
 <Then include each critic's full structured output>
 ```
@@ -207,13 +287,26 @@ If the review verdict is **FAIL**:
 2. Spawn a **new build subagent** (fresh context) with the fix prompt:
 
 ```
-You are fixing issues found during code review. Follow all agent constraints.
+You are a <Domain> Expert fixing issues found during code review. Follow all agent constraints and your domain expertise.
+
+## Domain Expertise
+<paste content from the selected expert builder persona file — same persona used for the original build>
+
+## Secondary Domain Context (only if cross-domain task — same as original build)
+<paste Anti-Patterns + Definition of Done from secondary expert persona, matching the original build prompt>
+
+## Agent Constraints
+<paste AGENT_CONSTRAINTS.md content>
+
+## Foundation Guard Rails (when assumes_foundation: true)
+<paste the same Foundation Guard Rails section from the original build prompt — omit this section entirely when assumes_foundation is false or absent, per Rule 7>
 
 ## Original Task
-<paste task spec>
+<paste full task spec from dev plan, including subtasks>
 
-## Current State
+## Context
 - Branch: <branch name> (already has implementation from previous iteration)
+- PRD: <paste relevant PRD sections — same as original build prompt>
 - Read the current code on this branch first
 
 ## Review Feedback (must fix all Critical items)
@@ -221,10 +314,12 @@ You are fixing issues found during code review. Follow all agent constraints.
 
 ## Instructions
 1. Read the current implementation on the branch
-2. Address each Critical finding
-3. Run tests
-4. Commit fixes with message: fix: address review feedback (round N)
-5. Report what you fixed
+2. If fix involves CI/CD workflows or Vercel config, read `${CLAUDE_PLUGIN_ROOT}/pipeline/templates/ci-guidelines.md` and follow all rules strictly
+3. Address each Critical finding
+4. Write or update tests for any new or modified functionality
+5. Run tests
+6. Commit fixes with message: fix: address review feedback (round N)
+7. Report what you fixed
 ```
 
 3. Re-run the REVIEW phase (fresh context), but only evaluate the **previously failed critics**
@@ -361,6 +456,8 @@ smoke_test:
   llm_timeout_seconds: 30          # timeout for LLM API requests during smoke test
   max_fix_attempts: 2              # max smoke test fix iterations before escalating to user
 ```
+
+**Foundation smoke test note:** When `assumes_foundation: true`, auth/CI/CD smoke checks verify integration with the existing foundation (e.g., that domain code correctly uses the auth context, that new pages render within the foundation layout), not reimplementation of those systems. Do not fail smoke tests because auth or CI/CD infrastructure was not built in this execution — it already exists.
 
 **Defaults:** If the `smoke_test` section is absent from config, Step 5 still runs using auto-detection (this step is mandatory). If `smoke_test` is present but `enabled` is omitted, it defaults to `true`. Only `smoke_test.enabled: false` skips the smoke test.
 

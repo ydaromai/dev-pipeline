@@ -292,7 +292,7 @@ describe('commands/test.md — Step 8: Local Deployment Verification', () => {
 });
 
 describe('commands/test.md — Step 9: Full Cumulative Critic Validation', () => {
-  it('references all 10 critic persona files', () => {
+  it('references all 11 critic persona files', () => {
     const critics = [
       'product-critic.md',
       'dev-critic.md',
@@ -304,6 +304,7 @@ describe('commands/test.md — Step 9: Full Cumulative Critic Validation', () =>
       'observability-critic.md',
       'api-contract-critic.md',
       'designer-critic.md',
+      'ml-critic.md',
     ];
     for (const critic of critics) {
       assert.ok(

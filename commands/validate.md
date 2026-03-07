@@ -27,15 +27,31 @@ Parse `$ARGUMENTS` to identify:
 | Target | Default Critics |
 |--------|----------------|
 | PRD | product |
-| Dev plan | product, dev, devops, qa, security, performance, data-integrity, observability (if has_backend_service), api-contract (if has_api), designer (if has_frontend) |
-| Code diff | product, dev, devops, qa, security, performance, data-integrity, observability (if has_backend_service), api-contract (if has_api), designer (if has_frontend) |
+| Dev plan | product, dev, devops, qa, security, performance, data-integrity, observability (if has_backend_service), api-contract (if has_api), designer (if has_frontend), ml (if has_ml) |
+| Code diff | product, dev, devops, qa, security, performance, data-integrity, observability (if has_backend_service), api-contract (if has_api), designer (if has_frontend), ml (if has_ml) |
 
 Read `pipeline.config.yaml` for stage-specific overrides if available.
 
 ### Review scope enforcement:
 - **Code diffs** (`--diff`): Critics review the diff only, not the full file. This is the default and preferred mode for iterative reviews.
 - **PRD/dev plan files**: Critics review the full document on first pass. On subsequent iterations (ralph loop), pass `--diff` to scope reviews to changes since the last iteration — full-file re-reviews generate noise proportional to file length.
-- **Spec/orchestration files** (non-code `.md` outside `docs/prd/` and `docs/dev_plans/`): Use at most 3 critics (product, dev, qa) unless `--critics=` explicitly requests more. Full 10-critic reviews on spec files produce diminishing returns — most findings after the first pass are design opinions, not quality gaps.
+- **Spec/orchestration files** (non-code `.md` outside `docs/prd/` and `docs/dev_plans/`): Use at most 3 critics (product, dev, qa) unless `--critics=` explicitly requests more. Full critic reviews on spec files produce diminishing returns — most findings after the first pass are design opinions, not quality gaps.
+
+### Foundation-Aware Validation
+
+When `assumes_foundation: true` in `pipeline.config.yaml`:
+
+Critics should be aware that the following are provided by the Foundation starter project and should not be flagged as missing:
+- Authentication implementation (phone OTP, JWT, sessions)
+- Multi-tenancy infrastructure (RLS, tenant isolation)
+- RBAC framework (roles, permissions, role-based access)
+- CI/CD pipeline (GitHub Actions, Vercel deployment)
+- Base database schema (tenants, profiles, audit_log)
+- Test infrastructure (Playwright, Vitest, auth helpers)
+- Navigation and layout (sidebar, top bar, error boundaries)
+
+When spawning critic subagents, append this context to each critic's prompt:
+"This project assumes the Foundation starter project baseline. Auth, multi-tenancy, RBAC, CI/CD, deployment, and test infrastructure are pre-existing. Do not flag their absence. Focus your review on domain-specific additions and whether they correctly extend foundation patterns."
 
 ### Cost optimization:
 Critics use Sonnet by default (`execution.ralph_loop.critic_model` in config). This is intentional — critic evaluation follows structured checklists and produces templated output, which Sonnet handles well at ~1/5 the token cost of Opus. Reserve Opus for build and synthesis subagents that require deep reasoning.
@@ -61,12 +77,13 @@ Depending on target type, read:
 - `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/observability-critic.md` (only if `pipeline.config.yaml` has `has_backend_service: true`)
 - `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/api-contract-critic.md` (only if `pipeline.config.yaml` has `has_api: true`)
 - `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/designer-critic.md` (only if `pipeline.config.yaml` has `has_frontend: true`)
+- `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/ml-critic.md` (only if `pipeline.config.yaml` has `has_ml: true`)
 
 **For code diff validation:**
 - Run `git diff` and `git diff --staged` to get the full diff
 - Read the related task spec (if identifiable from branch name or `$ARGUMENTS`)
 - Read the PRD (if identifiable)
-- All relevant critic agent files from `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/` (including `performance-critic.md`, `data-integrity-critic.md`, and conditional critics: `observability-critic.md` if `has_backend_service: true`, `api-contract-critic.md` if `has_api: true`, `designer-critic.md` if `has_frontend: true`)
+- All relevant critic agent files from `${CLAUDE_PLUGIN_ROOT}/pipeline/agents/` (including `performance-critic.md`, `data-integrity-critic.md`, and conditional critics: `observability-critic.md` if `has_backend_service: true`, `api-contract-critic.md` if `has_api: true`, `designer-critic.md` if `has_frontend: true`, `ml-critic.md` if `has_ml: true`)
 - `docs/ai_definitions/AGENT_CONSTRAINTS.md`
 - `pipeline.config.yaml` for test requirements
 
@@ -117,6 +134,7 @@ Aggregate all critic results and present:
 | Observability | PASS ✅ / N/A | 8.5 | 0 | 1 | 0 |
 | API Contract | PASS ✅ / N/A | 9.0 | 0 | 0 | 1 |
 | Designer | PASS ✅ / N/A | N/A | 0 | 0 | 1 |
+| ML | PASS ✅ / N/A | N/A | 0 | 0 | 0 |
 
 Overall Score: 7.6 (average of scored critics)
 

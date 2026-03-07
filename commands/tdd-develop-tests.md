@@ -75,11 +75,11 @@ Tier 2 integration/unit tests are NOT developed in this stage. They are specific
 
 ---
 
-## Step 3: Critic Review (10-Critic Ralph Loop)
+## Step 3: Critic Review (Ralph Loop)
 
 Spawn all applicable critic subagents in parallel using the Task tool. Each critic reviews the generated test code from their domain perspective.
 
-Read `pipeline.config.yaml` for the critic list. Default: `[product, dev, devops, qa, security, performance, data-integrity]` + conditional critics based on project flags.
+Read `pipeline.config.yaml` for the critic list. Default: `[product, dev, devops, qa, security, performance, data-integrity]` + conditional: Observability if `has_backend_service: true`, API Contract if `has_api: true`, Designer if `has_frontend: true`, ML if `has_ml: true`.
 
 **Subagent prompt (per critic):**
 ```

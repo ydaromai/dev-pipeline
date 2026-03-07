@@ -224,7 +224,7 @@ This is the core execution engine. It reads the dev plan, builds a dependency gr
 | 2 | Pre-flight check | Present execution plan, model config, completed tasks — **wait for approval** |
 | 3a | Setup per task | Create git branch, transition JIRA to "In Progress", update dev plan status |
 | 3b | **BUILD** phase | Fresh-context subagent (Sonnet 4.6 or Opus 4.6 per complexity), implements subtasks, writes tests, commits |
-| 3c | **REVIEW** phase | Fresh-context Opus 4.6 subagent, runs all applicable critic checklists against the diff (7 always-on + conditional: Observability, API Contract, Designer) |
+| 3c | **REVIEW** phase | Fresh-context Opus 4.6 subagent, runs all applicable critic checklists against the diff (7 always-on + conditional: Observability, API Contract, Designer, ML) |
 | 3d | **ITERATE** if FAIL | New build subagent with fix prompt (critical findings only), re-review failed critics |
 | 3e | Escalation | After max iterations: mark BLOCKED, create WIP PR, ask user (override/fix/skip/abort) |
 | 3f | Create PR | Push branch, `gh pr create` with critic results + AC checklist + JIRA link |
@@ -344,7 +344,7 @@ Reuses the existing `/req2prd` stage (see [Stage 1](#stage-1-requirement--prd--r
 | 1 | Read inputs | Approved PRD, `pipeline.config.yaml` TDD config settings |
 | 2 | Extract functional requirements | Route manifest (paths, descriptions), user flows (entry/exit), component inventory (name, purpose, data inputs, interactive elements), data shapes (fields, types, validation, examples), responsive requirements, accessibility requirements (WCAG 2.1 AA, keyboard nav, screen reader) |
 | 3 | Generate Design Brief | Functional-only brief — does NOT prescribe layouts, colors, spacing, typography, or visual hierarchy. Includes "Mock App Requirements" section: mock must be functional, navigable, with all routes, interactive elements, and form validation |
-| 4 | Critic review | 10-critic Ralph Loop (all applicable), max 5 iterations, 0 Critical + 0 Warnings |
+| 4 | Critic review | critic Ralph Loop (all applicable), max 5 iterations, 0 Critical + 0 Warnings |
 | 5 | Write output | Save to `docs/tdd/<slug>/design-brief.md` |
 | 6 | **GATE 2** — MANUAL | User builds mock app in Figma AI, deploys or runs locally, provides mock app URL |
 
@@ -361,7 +361,7 @@ Reuses the existing `/req2prd` stage (see [Stage 1](#stage-1-requirement--prd--r
 | 4 | Per-route extraction | Screenshots at 3 viewports (mobile 375x812, tablet 768x1024, desktop 1280x720). Extract: DOM structure, interactive elements, form fields, ARIA roles/labels, tab order, data-testid candidates (kebab-case, fallback `{element-type}-{sequential-index}`). 15s per-route timeout, 300s total budget |
 | 5 | Keyboard navigation testing | Tab through interactive elements, verify focus visibility, test Enter/Space activation. Shares per-route budget; partial results with Warning if exceeded |
 | 6 | Generate UI contract | Sections: Route Map, Component Inventory, Interactive Elements, Form Contracts, Accessibility Map, Data-Testid Registry, Screenshots, Visual Contract. 65,000 char limit — truncate lowest-priority routes with Warning |
-| 7 | Critic review | 10-critic Ralph Loop, max 5 iterations, 0 Critical + 0 Warnings |
+| 7 | Critic review | critic Ralph Loop, max 5 iterations, 0 Critical + 0 Warnings |
 | 8 | **GATE 3** — Human approval | Contract summary, cross-reference against Design Brief route manifest and component inventory. Flag missing routes/elements as Warnings. User can correct before proceeding |
 
 ### Stage 4: Test Plan — `/tdd-test-plan`
@@ -374,7 +374,7 @@ Reuses the existing `/req2prd` stage (see [Stage 1](#stage-1-requirement--prd--r
 | 1 | Read inputs | PRD, UI contract (`docs/tdd/<slug>/ui-contract.md`), schema files referenced in PRD |
 | 2 | Generate tiered test specifications | **Tier 1 (E2E/Playwright):** full specs from PRD + UI contract — test steps, selectors from data-testid registry, expected outcomes, assertions. **Tier 2 (integration/unit):** outlines only — TP-{N} ID, tier label, linked AC reference, test intent, expected test type. Every test item gets a unique `TP-{N}` traceability ID |
 | 3 | Mandatory contract sections | Performance Contracts (response times, rendering budgets), Accessibility Contracts (WCAG 2.1 AA, keyboard nav, screen reader), Error Contracts (error states, validation messages, fallbacks), Data Flow Contracts (data shapes, transformations, validation), Visual Contracts (design token fidelity, typography, animations, layout measurements — when UI contract contains Visual Contract section) |
-| 4 | Critic review | 10-critic Ralph Loop, max 5 iterations, 0 Critical + 0 Warnings |
+| 4 | Critic review | critic Ralph Loop, max 5 iterations, 0 Critical + 0 Warnings |
 | 5 | Write output | Save to `docs/tdd/<slug>/test-plan.md` |
 | 6 | **GATE 4** — Human approval | TP count by tier, contract coverage summary, traceability overview |
 
@@ -387,7 +387,7 @@ Reuses the existing `/prd2plan` stage (see [Stage 2](#stage-2-prd--dev-plan--prd
 | 1–7 | Standard `/prd2plan` flow | Same as existing Stage 2: generate dev plan with Epic/Story/Task/Subtask structure, critic review |
 | 8 | Contract Negotiation Gate | Compare dev plan architecture against test plan contracts. Flag conflicts. Resolve with test plan as authority |
 | 9 | Complete Tier 2 specifications | Fill in Tier 2 test outlines with component boundaries from the dev plan |
-| 10 | 10-critic Ralph Loop | Full critic review of the final dev plan |
+| 10 | critic Ralph Loop | Full critic review of the final dev plan |
 | 11 | **GATE 5** — Human approval | Dev plan summary + conflict resolution log |
 
 ### Stage 6: Develop Tests — `/tdd-develop-tests`
@@ -399,7 +399,7 @@ Reuses the existing `/prd2plan` stage (see [Stage 2](#stage-2-prd--dev-plan--prd
 |------|--------|---------|
 | 1 | Read inputs | PRD, UI contract, schema files, test plan. **Blind agent constraint:** dev plan is NOT read and application code is NOT accessed |
 | 2 | Develop Tier 1 E2E tests | Playwright test code for each Tier 1 specification. Each test maps to `TP-{N}` via code comment. Selectors from UI contract data-testid registry. Tests must assert behavior requiring application code to pass |
-| 3 | Critic review | 10-critic Ralph Loop, max 5 iterations, 0 Critical + 0 Warnings. QA Critic validates tests assert real behavior, not trivial conditions |
+| 3 | Critic review | critic Ralph Loop, max 5 iterations, 0 Critical + 0 Warnings. QA Critic validates tests assert real behavior, not trivial conditions |
 | 4 | Self-health gate | Run all tests, verify `red_count = total_test_count`. Tests with exit code 0 but no assertions flagged as fake tests. Security tests auto-classified by keyword/directory matching |
 | 5 | Self-health fix loop | If any tests pass without app code, fix subagent corrects them. Re-run gate. Max 3 iterations, then escalate with fake test list |
 | 6 | Commit and branch | Commit to `tdd/{slug}/tests` branch (configurable via `tdd.tests_branch_pattern`). Apply `tdd-red-tests` label. Tier 2 tests developed in Stage 7 alongside app code |
@@ -428,7 +428,7 @@ Reuses the existing `/execute` stage (see [Stage 4](#stage-4-execute-with-ralph-
 | 2 | Traceability matrix | Map TP-{N} → test file path → test name → pass/fail. Bidirectional. Traceability key: `{file_path}::{describe/it block path}` |
 | 3 | Gap flagging | Flag any TP-{N} without a passing test |
 | 4 | Regression check | Compare against pre-pipeline baseline from `.pipeline/tdd/<slug>/baseline-results.json` |
-| 5 | Cumulative critic validation | 10-critic review on `main..HEAD` diff, max 3 iterations, escalate to user |
+| 5 | Cumulative critic validation | critic review on `main..HEAD` diff, max 3 iterations, escalate to user |
 | 6 | Pipeline metrics | Emit to `.pipeline/metrics/{slug}.json` (schema_version: 1): `red_test_count`, `green_pass_rate`, `test_adjustment_count`, `test_plan_accuracy`, `tdd_cycle_time_seconds`, `security_test_integrity`. Written only on successful completion; previous run preserved as `{slug}.prev.json` |
 | 7 | **GATE 8** — Human approval | Full results, traceability matrix summary, pipeline metrics summary, test adjustment summary, overall verdict |
 

@@ -530,13 +530,13 @@ Pipeline artifacts must be committed the moment they are written. Do not defer t
 
 ---
 
-## Step 7: Critic Review (10-Critic Ralph Loop)
+## Step 7: Critic Review (Ralph Loop)
 
-Run a 10-critic Ralph Loop on the generated UI contract document.
+Run a critic Ralph Loop on the generated UI contract document.
 
 ### 7a. Critic Invocation
 
-Spawn all applicable critic subagents in parallel using the Task tool. Read `pipeline.config.yaml` for the `tdd_stages.mock_analysis.critics` list. Default: `[product, dev, devops, qa, security, performance, data-integrity]` + `observability` if `has_backend_service: true` + `api-contract` if `has_api: true` + `designer` if `has_frontend: true`.
+Spawn all applicable critic subagents in parallel using the Task tool. Read `pipeline.config.yaml` for the `tdd_stages.mock_analysis.critics` list. Default: `[product, dev, devops, qa, security, performance, data-integrity]` + `observability` if `has_backend_service: true` + `api-contract` if `has_api: true` + `designer` if `has_frontend: true` + `ml` if `has_ml: true`.
 
 **Subagent prompt (per critic):**
 ```

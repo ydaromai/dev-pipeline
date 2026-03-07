@@ -25,6 +25,18 @@ Use the Task tool with `subagent_type: Explore` to understand the project:
 - Test structure and conventions
 - Available utilities and shared code
 
+### Foundation Pattern Catalog
+
+When `assumes_foundation: true` in `pipeline.config.yaml`, additionally identify and catalog existing foundation patterns:
+- **Auth hooks:** custom_access_token_hook, JWT claim injection, OTP flow
+- **RLS policies:** Base tenant-isolation policies on core tables (tenants, profiles, audit_log)
+- **Role config:** Role definitions, role-based routing, authorization components
+- **Test setup:** Playwright config, Vitest config, auth test helpers, E2E fixtures
+- **Navigation/layout:** Sidebar, top bar, breadcrumbs, error boundaries
+- **CI/CD:** GitHub Actions workflows, Vercel deployment config
+
+Record these as the "foundation baseline" — domain tasks will reference and extend these patterns rather than recreate them.
+
 This informs realistic task scoping — tasks should reference actual file paths and follow existing patterns.
 
 ## Step 3: Generate the dev plan
@@ -57,6 +69,33 @@ Create an Epic/Story/Task/Subtask breakdown following `TASK_BREAKDOWN_DEFINITION
 - **Simple**: Documentation, config changes, small single-file edits, schema definitions
 - **Medium**: Single-file logic, API endpoints, database queries, UI components
 - **Complex**: Multi-file changes, complex business logic, cross-cutting concerns
+
+### Foundation-Aware Task Breakdown
+
+When `assumes_foundation: true` in `pipeline.config.yaml`:
+
+**DO NOT generate tasks for:**
+- Setting up authentication (OTP, JWT, session management)
+- Creating multi-tenancy infrastructure (tenant table, RLS base policies)
+- Implementing RBAC framework (role definitions, role-based routing)
+- Configuring CI/CD (GitHub Actions, Vercel deployment)
+- Setting up project scaffolding (Next.js config, Tailwind, TypeScript)
+- Creating base database schema (tenants, profiles, audit_log)
+- Building navigation/layout components (sidebar, top bar, breadcrumbs)
+- Setting up test infrastructure (Playwright config, Vitest config, auth helpers)
+
+**DO generate tasks for:**
+- Adding domain entities (tables with RLS, extending existing patterns)
+- Implementing domain business logic
+- Creating domain-specific UI pages and components
+- Adding domain-specific API routes
+- Writing domain-specific tests (unit + E2E)
+- Extending existing patterns (adding new roles if needed, new RLS policies for domain tables)
+
+**Task references:** Domain tasks should reference foundation patterns they extend:
+- "Add `orders` table following the same RLS pattern as `profiles`"
+- "Create order management page following the same layout as `/admin/users`"
+- "Add E2E test for order CRUD following the auth helper pattern in `e2e/fixtures`"
 
 ### Testing requirements per task:
 
@@ -99,7 +138,12 @@ After generating the task breakdown, build a coverage matrix that maps every acc
 | AC 2.1 | System sends PO to supplier | P1 | UNCOVERED | — | — | ❌ No implementing task |
 ```
 
-4. **Hard gate:**
+4. **Foundation-provided ACs** (when `assumes_foundation: true`):
+   - ACs covering authentication, RBAC, multi-tenancy, CI/CD, and base infrastructure are pre-covered by the foundation and do not need new tasks
+   - Mark these as **COVERED (foundation)** in the matrix with a note: "Provided by foundation baseline"
+   - Only domain-specific ACs require new implementing tasks
+
+5. **Hard gate:**
    - Any **UNCOVERED P0 AC** → CRITICAL finding (blocks Step 5 critics — must add tasks first)
    - Any **BACKEND-ONLY AC** → WARNING (requires justification: "intentionally API-only" or "missing UI task — add one")
    - Any **FRONTEND-ONLY AC** → acceptable for presentational ACs; WARNING if the AC implies data persistence or API interaction
@@ -120,6 +164,22 @@ Fix any validation errors and re-run until it passes.
 ## Step 5: Critic review (parallel — all applicable critics)
 
 Spawn all applicable critic subagents in parallel using the Task tool:
+
+### Foundation Context Injection for Critics
+
+When `assumes_foundation: true` in `pipeline.config.yaml`, append the following context to each critic's prompt:
+
+- **Product Critic:** When `assumes_foundation: true`: Product Critic should not flag missing infrastructure that the foundation provides. Focus review on domain-specific additions only.
+- **Dev Critic:** When `assumes_foundation: true`: Dev Critic should not flag missing infrastructure that the foundation provides. Focus review on domain-specific additions only.
+- **DevOps Critic:** When `assumes_foundation: true`: DevOps Critic should not flag missing infrastructure that the foundation provides. Focus review on domain-specific additions only.
+- **QA Critic:** When `assumes_foundation: true`: QA Critic should not flag missing infrastructure that the foundation provides. Focus review on domain-specific additions only.
+- **Security Critic:** When `assumes_foundation: true`: Security Critic should not flag missing infrastructure that the foundation provides. Focus review on domain-specific additions only.
+- **Performance Critic:** When `assumes_foundation: true`: Performance Critic should not flag missing infrastructure that the foundation provides. Focus review on domain-specific additions only.
+- **Data Integrity Critic:** When `assumes_foundation: true`: Data Integrity Critic should not flag missing infrastructure that the foundation provides. Focus review on domain-specific additions only.
+- **Observability Critic:** When `assumes_foundation: true`: Observability Critic should not flag missing infrastructure that the foundation provides. Focus review on domain-specific additions only.
+- **API Contract Critic:** When `assumes_foundation: true`: API Contract Critic should not flag missing infrastructure that the foundation provides. Focus review on domain-specific additions only.
+- **Designer Critic:** When `assumes_foundation: true`: Designer Critic should not flag missing infrastructure that the foundation provides. Focus review on domain-specific additions only.
+- **ML Critic:** When `assumes_foundation: true`: ML Critic should not flag missing infrastructure that the foundation provides. Focus review on domain-specific ML additions only.
 
 **Product Critic (model: sonnet — Sonnet 4.6):**
 ```
@@ -294,6 +354,24 @@ Dev plan content:
 <paste plan content>
 ```
 
+**ML Critic (model: sonnet — Sonnet 4.6) — Only spawn if pipeline.config.yaml has `has_ml: true`:**
+```
+You are the ML Critic. Read:
+1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/ml-critic.md (your persona)
+2. The PRD: <paste PRD content>
+3. The dev plan document below
+
+Review the dev plan for:
+- Do ML tasks include prompt versioning and input sanitization?
+- Are fallback strategies defined for ML service failures?
+- Do ML tasks include output validation and schema enforcement?
+- Are cost and latency monitoring requirements included?
+- Are ML-specific test requirements defined (prompt regression, edge cases)?
+
+Dev plan content:
+<paste plan content>
+```
+
 ## Step 6: Revise until zero Critical AND zero Warnings
 
 **Pass condition:** ALL critics must have zero Critical findings AND zero Warnings. Notes (informational) are acceptable.
@@ -356,6 +434,7 @@ Group C (after B):  TASK 1.3
 - Observability Critic: PASS ✅ / N/A (0 Critical, 0 Warnings)
 - API Contract Critic: PASS ✅ / N/A (0 Critical, 0 Warnings)
 - Designer Critic: PASS ✅ / N/A (0 Critical, 0 Warnings)
+- ML Critic: PASS ✅ / N/A (0 Critical, 0 Warnings)
 Ralph Loop iterations: N
 
 Please review the dev plan. You can:
