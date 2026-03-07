@@ -9,9 +9,9 @@ Requirement → PRD → Dev Plan → JIRA → Code (Ralph Loop) → Test Verific
   GATE 1      G2      G3a/3b    G4 (per PR)   G5              G6               G7            G8             G9              G10
 ```
 
-Each stage is a Claude Code slash command. Human approval gates sit between stages. After each gate approval, the orchestrator auto-clears context and resumes from the state file — every stage gets a fresh context window. Ten critic agents validate artifacts at each gate — 7 always-on (Product, Dev, DevOps, QA, Security, Performance, Data Integrity) and 3 conditional (Observability when `has_backend_service: true`, API Contract when `has_api: true`, Designer when `has_frontend: true`).
+Each stage is a Claude Code slash command. Human approval gates sit between stages. After each gate approval, the orchestrator auto-clears context and resumes from the state file — every stage gets a fresh context window. Eleven critic agents validate artifacts at each gate — 7 always-on (Product, Dev, DevOps, QA, Security, Performance, Data Integrity) and 4 conditional (Observability when `has_backend_service: true`, API Contract when `has_api: true`, Designer when `has_frontend: true`, ML when `has_ml: true`).
 
-Stages 6–10 are mandatory verification: product review against PRD acceptance criteria (10 critics, 0C/0W), E2E tests on localhost, deploy to staging, full tests on staging, and E2E on staging.
+Stages 6–10 are mandatory verification: product review against PRD acceptance criteria (all applicable critics, 0C/0W), E2E tests on localhost, deploy to staging, full tests on staging, and E2E on staging.
 
 ### TDD Pipeline — `/tdd-fullpipeline`
 
@@ -78,7 +78,7 @@ Or run stages individually:
 |---------|-------------|
 | `/pipeline-init` | One-time project setup (config, directories, JIRA) |
 | `/req2prd <requirement>` | Requirement to PRD with all-critic scoring Ralph Loop |
-| `/prd2plan @<prd>` | PRD to dev plan with 10-critic review |
+| `/prd2plan @<prd>` | PRD to dev plan with critic review |
 | `/plan2jira @<plan>` | Dev plan to JIRA issues (mandatory critic gate) |
 | `/execute @<plan>` | Execute tasks with Ralph Loop (build/review cycles) |
 | `/test @<plan>` | Run test verification: audit, execute, coverage, CI/CD audit, critic validation |
@@ -98,7 +98,7 @@ The pipeline uses two distinct quality loops to ensure high-quality artifacts be
 
 ### PRD Scoring Ralph Loop (`/req2prd`)
 
-All applicable critics (7 always-on + conditional: Observability, API Contract, Designer) score the PRD 1–10. The loop iterates until:
+All applicable critics (7 always-on + conditional: Observability, API Contract, Designer, ML) score the PRD 1–10. The loop iterates until:
 - **Per-critic minimum**: > 8.5
 - **Overall average**: > 9.0
 - **Max iterations**: 3
@@ -131,6 +131,23 @@ BUILD (Opus 4.6)  -->  REVIEW (Sonnet 4.6, all critics)  -->  PASS? --> PR
 - **Medium/Complex tasks**: Built with Opus 4.6
 - **All critics**: Sonnet 4.6 (structured checklist evaluation at ~1/5 Opus token cost)
 - **Build/synthesis subagents**: Opus 4.6 (deep reasoning tasks)
+- **Expert selection**: Each task is routed to a domain-specific builder agent based on its file patterns
+
+### Expert Builder Agents
+
+Tasks are routed to specialized builder agents based on the files they modify. Each expert brings domain-specific knowledge, best practices, and anti-patterns to the build phase:
+
+| Expert | Routes When | Specialization |
+|--------|-------------|---------------|
+| **Frontend** | UI components, pages, CSS, design tokens | React/Next.js, accessibility (WCAG 2.1 AA), responsive design, state management |
+| **Backend** | API routes, middleware, services, business logic | API design, error handling, security, layered architecture |
+| **Data** | Migrations, SQL, schemas, RLS policies | Schema design, migration safety, query optimization, data integrity |
+| **Security** | Auth, RBAC, encryption, OAuth, secrets | OWASP, authentication flows, authorization, cryptography |
+| **Infra** | CI/CD, Docker, deployment config, IaC | Pipeline design, containerization, monitoring, environment management |
+| **Data Analytics** | Dashboards, charts, KPIs, reporting, metrics | Visualization, aggregation queries, time-series, data export |
+| **ML** | AI/LLM integration, inference, embeddings, prompts | LLM integration, prompt engineering, model serving, ML observability |
+
+Expert selection is automatic (inferred from `Files to Create/Modify`) or explicit (set `Domain` field in the task spec). Cross-domain tasks use the primary expert with secondary context.
 
 ## Pipeline State & Resume
 
@@ -158,6 +175,7 @@ All critics produce: **Verdict** (PASS/FAIL) → **Score** (N.N / 10) → **Find
 | **Observability** | Structured logging, metrics, tracing, health checks, alerting | SLOs/SLIs, alerting expectations, monitoring, dashboarding (only when `has_backend_service: true`) |
 | **API Contract** | Backward compatibility, versioning, documentation, contract tests | API clarity, breaking changes, versioning strategy, consumer impact (only when `has_api: true`) |
 | **Designer** | Accessibility (WCAG 2.1 AA), responsive design, UX consistency | UX flow, accessibility, responsive, interaction patterns (only when `has_frontend: true`) |
+| **ML** | Prompt injection, output validation, fallback chains, cost controls, token management | ML requirements clarity, feasibility, cost targets, fallback behavior (only when `has_ml: true`) |
 
 ## Project Structure
 
@@ -186,6 +204,15 @@ dev-pipeline/
       observability-critic.md
       api-contract-critic.md
       designer-critic.md
+      ml-critic.md
+      builders/           # Expert builder agent personas
+        frontend-expert.md
+        backend-expert.md
+        data-expert.md
+        security-expert.md
+        infra-expert.md
+        data-analyst-expert.md
+        ml-expert.md
     templates/           # PRD, config, and project scaffolding templates
       prd-template.md
       pipeline-config-template.yaml

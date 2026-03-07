@@ -203,9 +203,9 @@ Append any project-specific mock requirements derived from the PRD (e.g., specif
 
 ## Step 4: Critic Review
 
-Run a 10-critic Ralph Loop reviewing the Design Brief for completeness, accuracy, and adherence to the no-visual-prescriptions constraint.
+Run a critic Ralph Loop reviewing the Design Brief for completeness, accuracy, and adherence to the no-visual-prescriptions constraint.
 
-Read `pipeline.config.yaml` for the `tdd_stages.design_brief.critics` list. Default: `[product, dev, devops, qa, security, performance, data-integrity]` + `observability` if `has_backend_service: true` + `api-contract` if `has_api: true` + `designer` if `has_frontend: true`. Skip conditional critics entirely when their flag is `false` or absent.
+Read `pipeline.config.yaml` for the `tdd_stages.design_brief.critics` list. Default: `[product, dev, devops, qa, security, performance, data-integrity]` + `observability` if `has_backend_service: true` + `api-contract` if `has_api: true` + `designer` if `has_frontend: true` + `ml` if `has_ml: true`. Skip conditional critics entirely when their flag is `false` or absent.
 
 **Subagent prompt (per critic):**
 ```
@@ -303,6 +303,7 @@ Design Brief generated: docs/tdd/<slug>/design-brief.md
 | Observability | PASS / N/A | 0 | 0 | N |
 | API Contract | PASS / N/A | 0 | 0 | N |
 | Designer | PASS / N/A | 0 | 0 | N |
+| ML | PASS / N/A | 0 | 0 | N |
 
 Ralph Loop iterations: N
 

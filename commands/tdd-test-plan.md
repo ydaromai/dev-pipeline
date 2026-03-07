@@ -116,7 +116,7 @@ Define visual fidelity test expectations (only when UI contract contains a Visua
 
 ## Step 4: Critic Review
 
-Run the 10-critic Ralph Loop on the test plan document.
+Run the critic Ralph Loop on the test plan document.
 
 Spawn all applicable critic subagents in parallel using the Task tool:
 
@@ -274,6 +274,23 @@ Review the test plan for:
 Produce your structured output.
 ```
 
+**ML Critic (model: sonnet — Sonnet 4.6) — Only spawn if pipeline.config.yaml has `has_ml: true`:**
+```
+You are the ML Critic. Read:
+1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/ml-critic.md (your persona)
+2. The PRD: <paste PRD content>
+3. The test plan: <paste test plan content>
+
+Review the test plan for:
+- Do ML test specifications include prompt regression tests?
+- Are edge case tests defined for ML inputs (empty, adversarial, max-length)?
+- Do ML integration tests validate output schema enforcement?
+- Are fallback behavior tests specified for ML service failures?
+- Are cost/latency monitoring requirements included in test scope?
+
+Produce your structured output.
+```
+
 ### Revision Loop
 
 **Pass condition:** ALL critics must report 0 Critical findings AND 0 Warnings. Notes (informational) are acceptable.
@@ -365,6 +382,7 @@ Test plan generated: docs/tdd/<slug>/test-plan.md
 - Observability Critic: PASS / N/A (0 Critical, 0 Warnings)
 - API Contract Critic: PASS / N/A (0 Critical, 0 Warnings)
 - Designer Critic: PASS / N/A (0 Critical, 0 Warnings)
+- ML Critic: PASS / N/A (0 Critical, 0 Warnings)
 Ralph Loop iterations: N
 
 Please review the test plan. You can:

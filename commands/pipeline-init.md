@@ -152,6 +152,13 @@ Scan the project structure to build `test_requirements` mapping:
 - If the project has no HTTP/GraphQL/gRPC surface (pure frontend, CLI, library, batch job) → `has_api: false`
 - Otherwise → `has_api: false`
 
+**Auto-detect ML (`has_ml`):**
+- If `ai/`, `ml/`, `prompts/`, `embeddings/`, `inference/` directories exist → `has_ml: true`
+- If dependencies include ML/AI SDKs (`openai`, `anthropic`, `@anthropic-ai/sdk`, `langchain`, `@ai-sdk/`, `transformers`, `huggingface`) → `has_ml: true`
+- If prompt template files (`.prompt`, `.hbs` in a `prompts/` directory) exist → `has_ml: true`
+- If the project has no LLM, ML, or AI features → `has_ml: false`
+- Otherwise → `has_ml: false`
+
 ## Step 5: Create pipeline.config.yaml
 
 Read the template from `${CLAUDE_PLUGIN_ROOT}/pipeline/templates/pipeline-config-template.yaml` and customize it with the gathered values:
@@ -161,6 +168,7 @@ pipeline:
   has_frontend: <auto-detected>        # Enables Designer Critic in review stages
   has_backend_service: <auto-detected>  # Enables Observability Critic in review stages
   has_api: <auto-detected>              # Enables API Contract Critic in review stages
+  has_ml: <auto-detected>              # Enables ML Critic in review stages
 
   jira:
     project_key: <from user or auto-detected>
@@ -173,20 +181,23 @@ pipeline:
     escalation: user
     stages:
       req2prd:
-        critics: [product]
-        mode: sequential
+        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer, ml]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend), ml (has_ml)
+        mode: parallel
       prd2plan:
-        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend)
+        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer, ml]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend), ml (has_ml)
         mode: parallel
       plan2jira:
         critics: [product, dev]
         mode: parallel
         mandatory: true
       execute:
-        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend)
+        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer, ml]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend), ml (has_ml)
+        mode: parallel
+      test:
+        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer, ml]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend), ml (has_ml)
         mode: parallel
       pre_merge:
-        critics: [dev, devops, security, performance, data-integrity, observability, api-contract, designer]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend)
+        critics: [dev, devops, security, performance, data-integrity, observability, api-contract, designer, ml]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend), ml (has_ml)
         mode: sequential
 
   execution:
@@ -284,7 +295,7 @@ This project uses the global development pipeline (`${CLAUDE_PLUGIN_ROOT}/comman
 See `pipeline.config.yaml` for project-specific settings (JIRA, test commands, paths).
 
 ### Critic Agents
-The pipeline uses 7 always-on critic agents + 3 conditional critics for quality validation:
+The pipeline uses 7 always-on critic agents + 4 conditional critics for quality validation:
 - **Product Critic**: PRD alignment, acceptance criteria coverage, analytics tracking
 - **Dev Critic**: Code quality, patterns, conventions, analytics instrumentation
 - **DevOps Critic**: Deployment readiness, secrets, infrastructure
@@ -295,11 +306,12 @@ The pipeline uses 7 always-on critic agents + 3 conditional critics for quality 
 - **Observability Critic**: Structured logging, metrics, tracing, health checks, alerting, SLOs (only when `has_backend_service: true`)
 - **API Contract Critic**: Backward compatibility, versioning, documentation, contract testing (only when `has_api: true`)
 - **Designer Critic**: Accessibility, responsive design, UX consistency, design system adherence (only when `has_frontend: true`)
+- **ML Critic**: Prompt engineering, LLM output validation, prompt injection, fallback chains, cost controls (only when `has_ml: true`)
 
 ### Ralph Loop
 Execution uses the Ralph Loop pattern:
 - Fresh context per build/review iteration
-- Build model: Sonnet 4.6 (simple/medium) or Opus 4.6 (complex)
+- Build model: Sonnet 4.6 (simple) or Opus 4.6 (medium/complex)
 - Review model: Opus 4.6 (always)
 - Max 3 iterations before human escalation
 ```
@@ -330,10 +342,10 @@ Present the initialization summary:
 - Existing scripts: <list found scripts>
 
 ### Configuration
-- Build models: Sonnet 4.6 (simple/medium), Opus 4.6 (complex)
+- Build models: Sonnet 4.6 (simple), Opus 4.6 (medium/complex)
 - Review model: Opus 4.6
 - Ralph Loop: 3 max iterations, escalate to user
-- Critics: Product, Dev, DevOps, QA, Security, Performance, Data Integrity (always-on) + Observability (if backend service) + API Contract (if API) + Designer (if frontend)
+- Critics: Product, Dev, DevOps, QA, Security, Performance, Data Integrity (always-on) + Observability (if backend service) + API Contract (if API) + Designer (if frontend) + ML (if has_ml)
 
 ### Next Steps
 1. Review `pipeline.config.yaml` and adjust if needed

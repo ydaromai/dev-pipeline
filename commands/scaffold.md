@@ -109,6 +109,9 @@ If any check fails, report the failure and halt. Do not proceed to execution wit
 Create the initial commit for the venture:
 ```bash
 git add -A
+# Safety check: ensure .env files are not staged (covers nested paths in monorepos)
+git diff --cached --name-only | grep -iE '\.env|\.pem$|\.key$|credentials\.json|serviceAccountKey' | xargs -r git reset HEAD -- 2>/dev/null || true
+git diff --cached --name-only | grep -iE '\.env|\.pem$|\.key$|credentials\.json|serviceAccountKey' && { echo "ERROR: secret file still staged after unstage attempt — review .gitignore before committing"; exit 1; } || true
 git commit -m "scaffold: initialize <venture_name> from foundation"
 ```
 

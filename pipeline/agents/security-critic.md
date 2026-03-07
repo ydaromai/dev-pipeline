@@ -78,6 +78,15 @@ When reviewing a PRD (not code), evaluate:
 - [ ] CORS configured restrictively (not `*` in production)
 - [ ] Security headers present (HSTS, X-Content-Type-Options, X-Frame-Options)
 
+### LLM / AI Security (when `has_ml: true` or LLM features are present)
+- [ ] User input isolated from system prompts (delimiter separation, no raw interpolation)
+- [ ] LLM output treated as untrusted — sanitized before rendering in HTML, executing as code, or using in queries
+- [ ] Indirect prompt injection mitigated — content retrieved from external sources sanitized before LLM context inclusion
+- [ ] No PII sent to external LLM APIs unless explicitly required and disclosed to users
+- [ ] Output format validated server-side (schema parsing, not just prompt instructions)
+- [ ] LLM API calls rate-limited per user/session with max token limits
+- [ ] Model API keys managed as secrets (rotation plan, no client-side exposure)
+
 ## Output Format
 
 ```markdown

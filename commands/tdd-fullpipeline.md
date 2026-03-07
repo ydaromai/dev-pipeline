@@ -91,12 +91,12 @@ ORCHESTRATOR (this agent — lightweight coordinator)
   │
   ├─ Stage 9 subagent (fresh context) ──► Validation report
   │    └─ smoke test, traceability matrix, regression check, metrics
-  │    └─ 10-critic cumulative validation
+  │    └─ critic cumulative validation
   │
   │  ◄── GATE 9: validation approval ──►
   │
   ├─ Stage 10 subagent (fresh context) ──► Product Review report
-  │    └─ 10 critic subagents vs PRD acceptance criteria (parallel)
+  │    └─ all applicable critic subagents vs PRD acceptance criteria (parallel)
   │
   │  ◄── GATE 10: product review approval ──►
   │
@@ -203,7 +203,6 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
     "2.1": { "status": "pending", "jira": "<key>" }
   },
   "assumes_foundation": false,
-  "scaffold": { "status": "not_started", "target_dir": "" },
   "test_result": null,
   "test_adjustments": {
     "structural": 0,
@@ -288,7 +287,7 @@ Before Pre-Flight Checks, check if any state file exists for this pipeline type.
    - Well-formed JSON (skip files that fail parsing — log: `"WARNING: [tdd-fullpipeline] <filename> is not valid JSON — skipping"`)
    - Required fields present: `schema_version`, `pipeline`, `slug`, `requirement`, `current_stage`, `stages`, `pipeline_status` (skip if missing — log: `"WARNING: [tdd-fullpipeline] <filename> missing required field '<field>' — skipping"`)
    - `schema_version` equals `1` (skip if not — log: `"WARNING: [tdd-fullpipeline] <filename> has unsupported schema_version <value> — skipping"`)
-   - `current_stage` is an integer between 1 and 9 (skip if out of range — log: `"WARNING: [tdd-fullpipeline] <filename> has invalid current_stage <value> — skipping"`)
+   - `current_stage` is an integer between 1 and 14 (skip if out of range — log: `"WARNING: [tdd-fullpipeline] <filename> has invalid current_stage <value> — skipping"`)
    - `stages` object contains keys `"1"` through `"14"` (skip if missing keys — log: `"WARNING: [tdd-fullpipeline] <filename> has incomplete stages object — skipping"`)
    - `slug` matches the validation pattern `^[a-z0-9][a-z0-9_-]{0,63}$` (skip if not — log: `"WARNING: [tdd-fullpipeline] <filename> has invalid slug '<value>' — skipping"`)
    - Each stage entry has a `status` field with a valid enum value (`"done"`, `"in_progress"`, `"not_started"`, `"skipped"`, `"aborted"`) — log: `"WARNING: [tdd-fullpipeline] <filename> has invalid stage status '<value>' for stage <N> — skipping"`
@@ -333,7 +332,7 @@ Options:
 
 *Display label mapping: `"done"` → `DONE`, `"in_progress"` → `IN PROGRESS`, `"not_started"` → `NOT STARTED`, `"skipped"` → `SKIPPED`, `"aborted"` → `ABORTED`, `"pending"` (tasks) → `PENDING`. The JSON state file stores lowercase with underscores.*
 
-12. If the user chooses **resume**: set orchestrator state from the state file (slug, prd_path, plan_path, brief_path, contract_path, test_plan_path, requirement, user_prefs, test_result, test_adjustments) and jump directly to the current stage. If `test_adjustments` is loaded from the state file, log: `"INFO: [tdd-fullpipeline] test_adjustments loaded from state file: structural=<N>, behavioral=<N>, security=<N>"`. If git branch differs, warn but proceed. Validate `test_adjustments`: must be an object with exactly keys `"structural"`, `"behavioral"`, `"security"`, each an integer >= 0. If malformed **and** `current_stage < 8`, reset to `{ "structural": 0, "behavioral": 0, "security": 0 }` and log: `"WARNING: [tdd-fullpipeline] test_adjustments malformed — reset to zeroes"`. If malformed **and** `current_stage >= 8`, **halt and present the raw value to the user** — resetting would lose cumulative adjustment counts that enforce the 20% behavioral threshold. Ask the user to confirm the reset or provide correct values before proceeding. For execution stage (Stage 8), the subagent will run JIRA reconciliation (Step 1.5) automatically and load `test_adjustments` from the state file to preserve cumulative adjustment counts. For Stage 9 resume, ensure `.pipeline/metrics/` directory exists: `mkdir -p .pipeline/metrics`. Clean up the pre-compact rule file if it exists: `rm -f .claude/rules/pipeline-resume.md`. Output: `"INFO: [tdd-fullpipeline] Checkpoint loaded: slug=<slug>, resuming from stage <N>"`
+12. If the user chooses **resume**: set orchestrator state from the state file (slug, prd_path, plan_path, brief_path, contract_path, test_plan_path, requirement, user_prefs, test_result, test_adjustments, assumes_foundation) and jump directly to the current stage. If `test_adjustments` is loaded from the state file, log: `"INFO: [tdd-fullpipeline] test_adjustments loaded from state file: structural=<N>, behavioral=<N>, security=<N>"`. If git branch differs, warn but proceed. Validate `test_adjustments`: must be an object with exactly keys `"structural"`, `"behavioral"`, `"security"`, each an integer >= 0. If malformed **and** `current_stage < 8`, reset to `{ "structural": 0, "behavioral": 0, "security": 0 }` and log: `"WARNING: [tdd-fullpipeline] test_adjustments malformed — reset to zeroes"`. If malformed **and** `current_stage >= 8`, **halt and present the raw value to the user** — resetting would lose cumulative adjustment counts that enforce the 20% behavioral threshold. Ask the user to confirm the reset or provide correct values before proceeding. For execution stage (Stage 8), the subagent will run JIRA reconciliation (Step 1.5) automatically and load `test_adjustments` from the state file to preserve cumulative adjustment counts. For Stage 9 resume, ensure `.pipeline/metrics/` directory exists: `mkdir -p .pipeline/metrics`. Clean up the pre-compact rule file if it exists: `rm -f .claude/rules/pipeline-resume.md`. Output: `"INFO: [tdd-fullpipeline] Checkpoint loaded: slug=<slug>, resuming from stage <N>"`
 13. If the user chooses **restart**: delete the state file, proceed with Pre-Flight Checks as normal.
 14. If no state file exists: proceed with Pre-Flight Checks as normal. (This includes the case where active state files exist but none matched — disk artifact detection in the Error Recovery section still applies on a per-stage basis.)
 
@@ -547,6 +546,7 @@ Complexity: Medium / Complex
 | Observability | 9.0 / N/A | PASS ✅ (> 8.5) / — |
 | API Contract | 9.5 / N/A | PASS ✅ (> 8.5) / — |
 | Designer | N/A | — |
+| ML | N/A | — |
 | **Overall** | **9.3** | **PASS ✅ (> 9.0)** |
 
 Ralph Loop iterations: N
@@ -582,7 +582,7 @@ Important:
   data shapes, responsive requirements, accessibility requirements
 - Generate the Design Brief with NO visual prescriptions (no layouts, colors, spacing)
 - Include the "Mock App Requirements" section
-- Run 10-critic Ralph Loop (max 5 iterations, 0 Critical + 0 Warnings)
+- Run critic Ralph Loop (max 5 iterations, 0 Critical + 0 Warnings)
 - Write the Design Brief to docs/tdd/<slug>/design-brief.md
 - Return the following in your final message:
   1. The Design Brief file path
@@ -620,6 +620,7 @@ Design Brief generated: docs/tdd/<slug>/design-brief.md
 | Observability | PASS ✅ / N/A | X.X |
 | API Contract | PASS ✅ / N/A | X.X |
 | Designer | PASS ✅ / N/A | X.X |
+| ML | PASS ✅ / N/A | X.X |
 
 ### Next Step: Build Mock App
 
@@ -667,7 +668,7 @@ Important:
 - Extract DOM structure, interactive elements, ARIA roles, data-testid candidates
 - Test keyboard navigation paths
 - Enforce 65,000 character limit on UI contract (truncate lowest-priority routes)
-- Run 10-critic Ralph Loop (max 5 iterations, 0 Critical + 0 Warnings)
+- Run critic Ralph Loop (max 5 iterations, 0 Critical + 0 Warnings)
 - Write UI contract to docs/tdd/<slug>/ui-contract.md
 - Save screenshots to .pipeline/tdd/<slug>/mock-screenshots/
 - Cross-reference extracted contract against Design Brief route manifest and component inventory
@@ -727,6 +728,7 @@ Screenshots: .pipeline/tdd/<slug>/mock-screenshots/ (N screenshots)
 | Observability | PASS ✅ / N/A | X.X |
 | API Contract | PASS ✅ / N/A | X.X |
 | Designer | PASS ✅ / N/A | X.X |
+| ML | PASS ✅ / N/A | X.X |
 
 Please review the UI contract and cross-reference warnings.
 You can correct any misidentified elements or missing routes before proceeding.
@@ -765,7 +767,7 @@ Important:
 - Every test item gets a unique TP-{N} traceability ID
 - Include mandatory contract sections: Performance Contracts, Accessibility Contracts,
   Error Contracts, Data Flow Contracts, Visual Contracts (when UI contract contains Visual Contract section)
-- Run 10-critic Ralph Loop (max 5 iterations, 0 Critical + 0 Warnings)
+- Run critic Ralph Loop (max 5 iterations, 0 Critical + 0 Warnings)
 - Write test plan to docs/tdd/<slug>/test-plan.md
 - Return the following in your final message:
   1. The test plan file path
@@ -820,6 +822,7 @@ Test plan generated: docs/tdd/<slug>/test-plan.md
 | Observability | PASS ✅ / N/A | X.X |
 | API Contract | PASS ✅ / N/A | X.X |
 | Designer | PASS ✅ / N/A | X.X |
+| ML | PASS ✅ / N/A | X.X |
 
 Please review and approve to proceed to dev plan generation.
 Options: approve | edit | abort
@@ -913,7 +916,7 @@ No conflicts found. / All conflicts resolved.
 
 4. **After conflict resolution** (AC 6.5): Complete Tier 2 test specifications in the test plan with component boundaries and internal architecture from the dev plan. Update `docs/tdd/<slug>/test-plan.md` with Tier 2 completions.
 
-5. **Run 10-critic Ralph Loop** on the final dev plan (AC 6.6) with max 5 iterations, 0 Critical + 0 Warnings.
+5. **Run critic Ralph Loop** on the final dev plan (AC 6.6) with max 5 iterations, 0 Critical + 0 Warnings.
 
 ### GATE 5: Dev Plan Approval (AC 6.7)
 
@@ -947,6 +950,7 @@ Dev plan generated: docs/dev_plans/<slug>.md
 | Observability | PASS ✅ / N/A | 0 Critical, 0 Warnings |
 | API Contract | PASS ✅ / N/A | 0 Critical, 0 Warnings |
 | Designer | PASS ✅ / N/A | 0 Critical, 0 Warnings |
+| ML | PASS ✅ / N/A | 0 Critical, 0 Warnings |
 
 Ralph Loop iterations: N
 
@@ -1061,7 +1065,7 @@ Important:
 - Develop Tier 1 E2E Playwright tests from the test plan specifications
 - Each test maps to a TP-{N} traceability ID via code comment
 - Use selectors from the UI contract data-testid registry
-- Run 10-critic Ralph Loop (max 5 iterations, 0 Critical + 0 Warnings)
+- Run critic Ralph Loop (max 5 iterations, 0 Critical + 0 Warnings)
 - Run the self-health gate: execute all tests, verify red_count = total_test_count
 - Classify Security tests: tests matching keywords (auth, login, logout, permission,
   role, csrf, xss, injection, sanitize, authorization, token, session, cors, encrypt,
@@ -1119,6 +1123,7 @@ Present the subagent's summary to the user:
 | Observability | PASS ✅ / N/A | X.X |
 | API Contract | PASS ✅ / N/A | X.X |
 | Designer | PASS ✅ / N/A | X.X |
+| ML | PASS ✅ / N/A | X.X |
 
 ### TP Coverage Verification
 | Metric | Value | Status |
@@ -1149,7 +1154,7 @@ Options: approve | fix | abort
 
 ## Stage 8: Dev Plan → Develop App with Test Adjustment Taxonomy (fresh context)
 
-**CRITICAL: The orchestrator MUST read the full execute.md file and paste its ENTIRE content into the subagent prompt.** Do NOT paraphrase, summarize, or write from memory. The execute.md file contains 6 mandatory JIRA touchpoints, branch/PR workflow, critic review format, smoke test configuration, and failure handling that will be silently skipped if not included verbatim. This is the #1 cause of pipeline compliance failures.
+**CRITICAL: The orchestrator MUST read the full execute.md file and paste its ENTIRE content into the subagent prompt.** Do NOT paraphrase, summarize, or write from memory. The execute.md file contains Domain Expert Selection (7 specialized builder personas), 6 mandatory JIRA touchpoints, branch/PR workflow, critic review format, smoke test configuration, and failure handling that will be silently skipped if not included verbatim. This is the #1 cause of pipeline compliance failures.
 
 **Before spawning the subagent**, the orchestrator must:
 1. Read `${CLAUDE_PLUGIN_ROOT}/commands/execute.md` (or `~/Projects/dev-pipeline/commands/execute.md`)
@@ -1229,7 +1234,7 @@ For each task, develop Tier 2 integration/unit tests alongside application code:
 
 ### Ralph Loop Per Task (AC 8.4)
 
-Run 10-critic Ralph Loop per task with max 3 iterations per task.
+Run critic Ralph Loop per task with max 3 iterations per task.
 If a task does not pass after 3 iterations, escalate to the user.
 
 Important:
@@ -1314,9 +1319,9 @@ Run the full test suite and diff results against the pre-pipeline baseline:
 3. Compare: any test that PASSED in baseline but FAILS now is a regression
 4. Report regressions with test name, file, and baseline status
 
-### Step 4: 10-Critic Cumulative Validation (AC 9.5)
+### Step 4: Critic Cumulative Validation (AC 9.5)
 
-Run a 10-critic cumulative validation on the main..HEAD diff:
+Run a critic cumulative validation on the main..HEAD diff:
 - Max 3 iterations
 - If all critics do not pass after 3 iterations, escalate to the user
 - Use the same critic invocation pattern as /validate
@@ -1414,6 +1419,7 @@ Present the full validation results:
 | Observability | PASS ✅ / N/A |
 | API Contract | PASS ✅ / N/A |
 | Designer | PASS ✅ / N/A |
+| ML | PASS ✅ / N/A |
 
 ### Pipeline Metrics
 | Metric | Value |
@@ -1440,7 +1446,7 @@ Options: approve | fix | abort
 
 ## Stage 10: Product Review vs PRD (fresh context)
 
-Run all 10 critics against the cumulative diff (all changes on the feature branch vs main), scored against the PRD acceptance criteria.
+Run all applicable critics against the cumulative diff (all changes on the feature branch vs main), scored against the PRD acceptance criteria.
 
 Spawn a subagent (Task tool, model: opus — Opus 4.6):
 
@@ -1455,7 +1461,7 @@ Test plan file: <test_plan_path>
 Steps:
 1. Read the PRD file and extract all acceptance criteria (grouped by priority)
 2. Run `git diff main...HEAD` to get the cumulative diff
-3. For each of the 10 critics, spawn a critic subagent (model: sonnet — Sonnet 4.6) with:
+3. Read pipeline.config.yaml for conditional critic flags (has_backend_service, has_api, has_frontend, has_ml). Spawn all applicable critic subagents (model: sonnet — Sonnet 4.6) with:
    - The critic's persona file from ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/<role>-critic.md
    - The cumulative diff
    - The PRD acceptance criteria
@@ -1463,7 +1469,7 @@ Steps:
 4. All critics must pass: score > 0, 0 Critical findings, 0 Warnings
 5. If any critic fails, iterate: fix the findings and re-run ALL critics (max 3 iterations)
 6. Return:
-   - Critic results table (all 10 critics, verdicts, scores, findings)
+   - Critic results table (all applicable critics, verdicts, scores, findings)
    - AC coverage matrix (which ACs are covered, which are gaps)
    - Iteration count
    - Overall verdict (PASS/FAIL)
@@ -1947,7 +1953,7 @@ Log: `"INFO: [tdd-fullpipeline] Pipeline completed: slug=<slug>, all stages done
 | Smoke Test | PASS | All checks green |
 | Traceability | PASS | N TP items mapped, 0 gaps |
 | Regression Check | PASS | 0 regressions against baseline |
-| Critic Validation | PASS | All 10 critics passed on main..HEAD |
+| Critic Validation | PASS | All applicable critics passed on main..HEAD |
 | Metrics Emission | PASS | .pipeline/metrics/<slug>.json written |
 | **Overall** | **PASS** | |
 

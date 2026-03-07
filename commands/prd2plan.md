@@ -179,6 +179,7 @@ When `assumes_foundation: true` in `pipeline.config.yaml`, append the following 
 - **Observability Critic:** When `assumes_foundation: true`: Observability Critic should not flag missing infrastructure that the foundation provides. Focus review on domain-specific additions only.
 - **API Contract Critic:** When `assumes_foundation: true`: API Contract Critic should not flag missing infrastructure that the foundation provides. Focus review on domain-specific additions only.
 - **Designer Critic:** When `assumes_foundation: true`: Designer Critic should not flag missing infrastructure that the foundation provides. Focus review on domain-specific additions only.
+- **ML Critic:** When `assumes_foundation: true`: ML Critic should not flag missing infrastructure that the foundation provides. Focus review on domain-specific ML additions only.
 
 **Product Critic (model: sonnet — Sonnet 4.6):**
 ```
@@ -353,6 +354,24 @@ Dev plan content:
 <paste plan content>
 ```
 
+**ML Critic (model: sonnet — Sonnet 4.6) — Only spawn if pipeline.config.yaml has `has_ml: true`:**
+```
+You are the ML Critic. Read:
+1. ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/ml-critic.md (your persona)
+2. The PRD: <paste PRD content>
+3. The dev plan document below
+
+Review the dev plan for:
+- Do ML tasks include prompt versioning and input sanitization?
+- Are fallback strategies defined for ML service failures?
+- Do ML tasks include output validation and schema enforcement?
+- Are cost and latency monitoring requirements included?
+- Are ML-specific test requirements defined (prompt regression, edge cases)?
+
+Dev plan content:
+<paste plan content>
+```
+
 ## Step 6: Revise until zero Critical AND zero Warnings
 
 **Pass condition:** ALL critics must have zero Critical findings AND zero Warnings. Notes (informational) are acceptable.
@@ -415,6 +434,7 @@ Group C (after B):  TASK 1.3
 - Observability Critic: PASS ✅ / N/A (0 Critical, 0 Warnings)
 - API Contract Critic: PASS ✅ / N/A (0 Critical, 0 Warnings)
 - Designer Critic: PASS ✅ / N/A (0 Critical, 0 Warnings)
+- ML Critic: PASS ✅ / N/A (0 Critical, 0 Warnings)
 Ralph Loop iterations: N
 
 Please review the dev plan. You can:

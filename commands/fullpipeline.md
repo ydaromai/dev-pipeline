@@ -62,7 +62,7 @@ ORCHESTRATOR (this agent — lightweight coordinator)
   │  ◄── GATE 5: test results approval ──►
   │
   ├─ Stage 6 subagent (fresh context) ──► Product Review report
-  │    └─ 10 critic subagents vs PRD acceptance criteria (parallel)
+  │    └─ all applicable critic subagents vs PRD acceptance criteria (parallel)
   │
   │  ◄── GATE 6: product review approval ──►
   │
@@ -162,7 +162,6 @@ The orchestrator writes a state file to `docs/pipeline-state/<slug>.json` at eve
     "2.1": { "status": "pending", "jira": "<key>" }
   },
   "assumes_foundation": false,
-  "scaffold": { "status": "not_started", "target_dir": "" },
   "test_result": null,
   "user_prefs": { "skip_jira": false },
   "known_issues": [],
@@ -292,7 +291,7 @@ Options:
 
 *Display label mapping: `"done"` → `DONE`, `"in_progress"` → `IN PROGRESS`, `"not_started"` → `NOT STARTED`, `"skipped"` → `SKIPPED`, `"aborted"` → `ABORTED`, `"pending"` (tasks) → `PENDING`. The JSON state file stores lowercase with underscores.*
 
-11. If the user chooses **resume**: set orchestrator state from the state file (slug, prd_path, plan_path, requirement, user_prefs, test_result) and jump directly to the current stage. If git branch differs, warn but proceed. For execution stage, the subagent will run JIRA reconciliation (Step 1.5) automatically. Clean up the pre-compact rule file if it exists: `rm -f .claude/rules/pipeline-resume.md`. Output: `"INFO: [fullpipeline] Checkpoint loaded: slug=<slug>, resuming from stage <N>"`
+11. If the user chooses **resume**: set orchestrator state from the state file (slug, prd_path, plan_path, requirement, user_prefs, test_result, assumes_foundation) and jump directly to the current stage. If git branch differs, warn but proceed. For execution stage, the subagent will run JIRA reconciliation (Step 1.5) automatically. Clean up the pre-compact rule file if it exists: `rm -f .claude/rules/pipeline-resume.md`. Output: `"INFO: [fullpipeline] Checkpoint loaded: slug=<slug>, resuming from stage <N>"`
 12. If the user chooses **restart**: delete the state file, proceed with Stage 1 as normal.
 13. If no state file exists: proceed with Stage 1 as normal. (This includes the case where active state files exist but none matched — disk artifact detection in the Error Recovery section still applies on a per-stage basis.)
 
@@ -354,6 +353,7 @@ PRD generated: docs/prd/<slug>.md
 | Observability | 9.0 / N/A | PASS ✅ (> 8.5) / — |
 | API Contract | 9.5 / N/A | PASS ✅ (> 8.5) / — |
 | Designer | N/A | — |
+| ML | N/A | — |
 | **Overall** | **9.3** | **PASS ✅ (> 9.0)** |
 
 Ralph Loop iterations: N
@@ -426,6 +426,7 @@ Dev plan generated: docs/dev_plans/<slug>.md
 | Observability | PASS ✅ / N/A | 0 Critical, 0 Warnings |
 | API Contract | PASS ✅ / N/A | 0 Critical, 0 Warnings |
 | Designer | PASS ✅ / N/A | 0 Critical, 0 Warnings |
+| ML | PASS ✅ / N/A | 0 Critical, 0 Warnings |
 
 Ralph Loop iterations: N
 
@@ -514,7 +515,7 @@ If scaffold target already exists and passes verification: set `scaffold.status`
 
 ## Stage 4: Execute with Ralph Loop (fresh context)
 
-**CRITICAL: The orchestrator MUST read the full execute.md file and paste its ENTIRE content into the subagent prompt.** Do NOT paraphrase, summarize, or write from memory. The execute.md file contains 6 mandatory JIRA touchpoints, branch/PR workflow, critic review format, smoke test configuration, and failure handling that will be silently skipped if not included verbatim. This is the #1 cause of pipeline compliance failures.
+**CRITICAL: The orchestrator MUST read the full execute.md file and paste its ENTIRE content into the subagent prompt.** Do NOT paraphrase, summarize, or write from memory. The execute.md file contains Domain Expert Selection (7 specialized builder personas), 6 mandatory JIRA touchpoints, branch/PR workflow, critic review format, smoke test configuration, and failure handling that will be silently skipped if not included verbatim. This is the #1 cause of pipeline compliance failures.
 
 **Before spawning the subagent**, the orchestrator must:
 1. Read `${CLAUDE_PLUGIN_ROOT}/commands/execute.md` (or `~/Projects/dev-pipeline/commands/execute.md`)
@@ -633,6 +634,7 @@ Present the subagent's summary to the user:
 | Observability | PASS ✅ / N/A |
 | API Contract | PASS ✅ / N/A |
 | Designer | PASS ✅ / N/A |
+| ML | PASS ✅ / N/A |
 
 Overall: PASS / FAIL
 Ralph Loop iterations: N
@@ -650,7 +652,7 @@ Options: approve | fix | abort
 
 ## Stage 6: Product Review vs PRD (fresh context)
 
-Run all 10 critics against the cumulative diff (all changes on the feature branch vs main), scored against the PRD acceptance criteria. This is a final product-level validation that the implementation matches what was specified.
+Run all applicable critics against the cumulative diff (all changes on the feature branch vs main), scored against the PRD acceptance criteria. This is a final product-level validation that the implementation matches what was specified.
 
 Spawn a subagent (Task tool, model: opus — Opus 4.6):
 
@@ -664,7 +666,7 @@ Dev plan file: <plan_path>
 Steps:
 1. Read the PRD file and extract all acceptance criteria (grouped by priority)
 2. Run `git diff main...HEAD` to get the cumulative diff
-3. For each of the 10 critics, spawn a critic subagent (model: sonnet — Sonnet 4.6) with:
+3. Read pipeline.config.yaml for conditional critic flags (has_backend_service, has_api, has_frontend, has_ml). Spawn all applicable critic subagents (model: sonnet — Sonnet 4.6) with:
    - The critic's persona file from ${CLAUDE_PLUGIN_ROOT}/pipeline/agents/<role>-critic.md
    - The cumulative diff
    - The PRD acceptance criteria
@@ -672,7 +674,7 @@ Steps:
 4. All critics must pass: score > 0, 0 Critical findings, 0 Warnings
 5. If any critic fails, iterate: fix the findings and re-run ALL critics (max 3 iterations)
 6. Return:
-   - Critic results table (all 10 critics, verdicts, scores, findings)
+   - Critic results table (all applicable critics, verdicts, scores, findings)
    - AC coverage matrix (which ACs are covered, which are gaps)
    - Iteration count
    - Overall verdict (PASS/FAIL)
@@ -1079,14 +1081,14 @@ Log: `"INFO: [fullpipeline] Pipeline completed: slug=<slug>, all stages done"`
 | CI Audit | PASS | All jobs active |
 | CD Audit | INFO | Report-only — 2 findings |
 | Smoke Test | PASS / SKIPPED | Post-test deployment verified / smoke_test.enabled: false |
-| Critic Validation | PASS | All 7 critics passed on cumulative diff |
+| Critic Validation | PASS | All applicable critics passed on cumulative diff |
 | **Overall** | **PASS** | |
 
 ### Product Review (Stage 6)
 | Check | Status |
 |-------|--------|
 | PRD AC Coverage | X/Y ACs covered |
-| 10-Critic Verdict | PASS — 0C, 0W |
+| Critic Verdict | PASS — 0C, 0W |
 | Iterations | N |
 
 ### E2E Local (Stage 7)

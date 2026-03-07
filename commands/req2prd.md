@@ -74,7 +74,7 @@ Derive the slug from the PRD title (kebab-case, e.g., "Daily Revenue Trends" →
 
 Spawn all applicable critic subagents in parallel using the Task tool (model: sonnet — Sonnet 4.6, or `execution.ralph_loop.critic_model` from config). Each critic reviews the PRD from their domain perspective using their **PRD Review Focus** checklist, and produces a **score (1–10)** in addition to findings.
 
-Read `pipeline.config.yaml` for the `req2prd.critics` list. Default: `[product, dev, devops, qa, security, performance, data-integrity]` + `observability` if `has_backend_service: true` + `api-contract` if `has_api: true` + `designer` if `has_frontend: true`. **Skip conditional critics entirely** when their flag is `false` or absent — do not spawn their subagent, and mark them as N/A in the score table.
+Read `pipeline.config.yaml` for the `req2prd.critics` list. Default: `[product, dev, devops, qa, security, performance, data-integrity]` + `observability` if `has_backend_service: true` + `api-contract` if `has_api: true` + `designer` if `has_frontend: true` + `ml` if `has_ml: true`. **Skip conditional critics entirely** when their flag is `false` or absent — do not spawn their subagent, and mark them as N/A in the score table.
 
 **Parallelization:** All critics spawn simultaneously via the Task tool. If model concurrency limits are reached, the Task tool queues and retries automatically — no user action required.
 
@@ -125,11 +125,11 @@ Produce your structured output. Include:
 ```
 ## PRD Quality Scores
 
-| Iteration | Product | Dev | DevOps | QA | Security | Performance | Data Integrity | Observability | API Contract | Designer | Overall |
-|-----------|---------|-----|--------|-----|----------|-------------|----------------|---------------|--------------|----------|---------|
-| 1         | 7.5     | 8.0 | 9.0    | 7.0 | 8.5      | 8.0         | 8.5            | 7.5          | 8.0          | N/A      | 8.1     |
-| 2         | 8.5     | 8.5 | 9.0    | 8.0 | 9.0      | 8.5         | 9.0            | 8.5          | 9.0          | N/A      | 8.7     |
-| 3         | 9.0     | 9.0 | 9.5    | 9.0 | 9.5      | 9.0         | 9.5            | 9.0          | 9.5          | N/A      | 9.3     | ← thresholds met
+| Iteration | Product | Dev | DevOps | QA | Security | Performance | Data Integrity | Observability | API Contract | Designer | ML  | Overall |
+|-----------|---------|-----|--------|-----|----------|-------------|----------------|---------------|--------------|----------|-----|---------|
+| 1         | 7.5     | 8.0 | 9.0    | 7.0 | 8.5      | 8.0         | 8.5            | 7.5          | 8.0          | N/A      | N/A | 8.1     |
+| 2         | 8.5     | 8.5 | 9.0    | 8.0 | 9.0      | 8.5         | 9.0            | 8.5          | 9.0          | N/A      | N/A | 8.7     |
+| 3         | 9.0     | 9.0 | 9.5    | 9.0 | 9.5      | 9.0         | 9.5            | 9.0          | 9.5          | N/A      | N/A | 9.3     | ← thresholds met
 ```
 
 ## Step 6: Write the PRD
@@ -174,6 +174,7 @@ PRD generated: docs/prd/<slug>.md
 | Observability | 9.0 / N/A | ✅ (> 8.5) / — |
 | API Contract | 9.5 / N/A | ✅ (> 8.5) / — |
 | Designer | N/A | — |
+| ML | N/A | — |
 | **Overall** | **9.3** | **✅ (> 9.0)** |
 
 Ralph Loop iterations: 3

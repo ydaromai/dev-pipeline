@@ -6,6 +6,20 @@ pipeline:
   has_frontend: false            # Set true for projects with frontend code (enables Designer Critic)
   has_backend_service: false     # Set true for long-running services: API servers, workers, queue consumers (enables Observability Critic)
   has_api: false                 # Set true for projects exposing or consuming HTTP/GraphQL/gRPC APIs (enables API Contract Critic)
+  has_ml: false                  # Set true for projects with ML/AI/LLM features (enables ML Critic)
+
+  # Foundation project support — set assumes_foundation: true when building on a starter project
+  assumes_foundation: false       # Enable foundation-aware pipeline behavior (scaffold stage, guard rails)
+  # foundation:                   # Required when assumes_foundation: true
+  #   repo_url: ""                # Foundation repo URL to clone
+  #   target_dir: ""              # Where to scaffold the project
+  #   venture_name: ""            # Project display name
+  #   supabase_project_ref: ""    # Optional Supabase project ref
+  #   remote_url: ""              # Optional git remote for the new project
+  #   roles:                      # Custom roles (optional)
+  #     - admin
+  #     - manager
+  #     - viewer
 
   # JIRA integration
   jira:
@@ -18,50 +32,48 @@ pipeline:
     default_mode: parallel      # parallel | sequential
     max_iterations: 5           # Max iterations for PRD and dev plan Ralph Loops
     escalation: user            # user | skip | fail
-
-  # PRD quality scoring thresholds
-  scoring:
-    per_critic_min: 8.5         # Minimum score per critic (1-10 scale)
-    overall_min: 9.0            # Minimum average across all critics
-    # Note: max iterations for PRD scoring uses validation.max_iterations above
-
-    # Per-stage critic overrides
     stages:
       req2prd:
-        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend)
+        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer, ml]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend), ml (has_ml)
         mode: parallel
       prd2plan:
-        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend)
+        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer, ml]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend), ml (has_ml)
         mode: parallel
       plan2jira:
         critics: [product, dev]
         mode: parallel
         mandatory: true         # Must pass before JIRA creation
       execute:
-        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend)
+        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer, ml]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend), ml (has_ml)
         mode: parallel
       test:
-        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend)
+        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer, ml]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend), ml (has_ml)
         mode: parallel
       pre_merge:
-        critics: [dev, devops, security, performance, data-integrity, observability, api-contract, designer]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend)
+        critics: [dev, devops, security, performance, data-integrity, observability, api-contract, designer, ml]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend), ml (has_ml)
         mode: sequential        # DevOps reviews after Dev passes
       # TDD pipeline stages (used by /tdd-fullpipeline)
       tdd_design_brief:
-        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]
+        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer, ml]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend), ml (has_ml)
         mode: parallel
       tdd_mock_analysis:
-        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]
+        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer, ml]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend), ml (has_ml)
         mode: parallel
       tdd_test_plan:
-        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]
+        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer, ml]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend), ml (has_ml)
         mode: parallel
       tdd_develop_tests:
-        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]
+        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer, ml]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend), ml (has_ml)
         mode: parallel
       tdd_validate:
-        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]
+        critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer, ml]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend), ml (has_ml)
         mode: parallel
+
+  # PRD quality scoring thresholds
+  scoring:
+    per_critic_min: 8.5         # Minimum score per critic (1-10 scale)
+    overall_min: 9.0            # Minimum average across all critics
+    # Note: max iterations for scoring uses validation.max_iterations above
 
   # Execution settings
   execution:
@@ -71,6 +83,7 @@ pipeline:
         medium: opus            # Opus 4.6 — Single-file logic, endpoints
         complex: opus           # Opus 4.6 — Multi-file, complex logic
       review_model: opus        # Opus 4.6 — Always reviews with Opus 4.6
+      critic_model: sonnet      # Sonnet 4.6 — for individual critic subagents
       fresh_context: true       # Fresh CLI session per iteration
       max_iterations: 3         # Max build-review cycles
       escalation: user          # user | skip | fail
@@ -152,22 +165,22 @@ pipeline:
   #   tests_branch_pattern: "tdd/{slug}/tests"  # Branch pattern for red test commits
   #   tdd_stages:                      # Per-stage critic overrides for TDD pipeline
   #     design_brief:
-  #       critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]
+  #       critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer, ml]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend), ml (has_ml)
   #       mode: parallel
   #     mock_analysis:
-  #       critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]
+  #       critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer, ml]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend), ml (has_ml)
   #       mode: parallel
   #     test_plan:
-  #       critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]
+  #       critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer, ml]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend), ml (has_ml)
   #       mode: parallel
   #     develop_tests:
-  #       critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]
+  #       critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer, ml]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend), ml (has_ml)
   #       mode: parallel
   #     develop_app:
-  #       critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]
+  #       critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer, ml]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend), ml (has_ml)
   #       mode: parallel
   #     validate:
-  #       critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer]
+  #       critics: [product, dev, devops, qa, security, performance, data-integrity, observability, api-contract, designer, ml]  # conditional: observability (has_backend_service), api-contract (has_api), designer (has_frontend), ml (has_ml)
   #       mode: parallel
 
   # Test verification stage (Stage 5 of /fullpipeline, or run standalone via /test)
@@ -182,7 +195,7 @@ pipeline:
   #     fix_commented_jobs: false            # set to true to auto-fix commented-out CI jobs
   #     config_paths: []                     # additional CI config file paths to scan (e.g., [".buildkite/pipeline.yml"])
   #   critic_validation:
-  #     critics: [product, dev, devops, qa, security, performance, data-integrity]  # always-on critics; conditional critics (observability, api-contract, designer) are added automatically based on has_backend_service/has_api/has_frontend flags
+  #     critics: [product, dev, devops, qa, security, performance, data-integrity]  # always-on critics; conditional critics (observability, api-contract, designer, ml) are added automatically based on has_backend_service/has_api/has_frontend/has_ml flags
   #     max_iterations: 3                    # max fix iterations for critic failures
 
   # Staging deployment (Stages 8–10 of /fullpipeline and /tdd-fullpipeline)
