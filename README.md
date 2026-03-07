@@ -82,6 +82,7 @@ Or run stages individually:
 | `/plan2jira @<plan>` | Dev plan to JIRA issues (mandatory critic gate) |
 | `/execute @<plan>` | Execute tasks with Ralph Loop (build/review cycles) |
 | `/test @<plan>` | Run test verification: audit, execute, coverage, CI/CD audit, critic validation |
+| `/scaffold` | Clone and configure a foundation project for a new venture (when `assumes_foundation: true`) |
 | `/fullpipeline <requirement>` | Run all stages end-to-end with gates |
 | `/tdd-fullpipeline <requirement>` | Run TDD pipeline: PRD, Design Brief, Mock Analysis, Test Plan, Dev Plan, Develop Tests, Develop App, Validate |
 | `/tdd-design-brief @<prd>` | PRD to Design Brief for Figma AI mock app creation |
@@ -187,6 +188,7 @@ dev-pipeline/
     plan2jira.md
     execute.md
     test.md
+    scaffold.md
     fullpipeline.md
     tdd-fullpipeline.md
     validate.md
@@ -297,6 +299,24 @@ Configure in `pipeline.config.yaml`:
       - { name: "desktop", width: 1280, height: 720 }
     max_routes: 10
     max_console_errors: 0
+```
+
+## Foundation Projects
+
+When building on a starter project (auth, RBAC, multi-tenancy already exist), set `assumes_foundation: true` in `pipeline.config.yaml`. This enables:
+
+- **`/scaffold`**: Clones the foundation repo, configures for the venture, verifies build/lint/tests pass, creates initial commit with secret-file safety
+- **Foundation Guard Rails**: Build agents are briefed that auth, CI/CD, deployment, and base schema are locked — they extend, not rebuild
+- **Expert routing suppression**: Rule 5 prevents routing to Security/Infra experts for foundation-locked files
+- **Critic context**: Critics don't flag missing infrastructure that the foundation provides
+
+```yaml
+pipeline:
+  assumes_foundation: true
+  foundation:
+    repo_url: "https://github.com/user/foundation.git"
+    target_dir: "../my-venture"
+    venture_name: "My Venture"
 ```
 
 ## Requirements

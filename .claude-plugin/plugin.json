@@ -1,9 +1,9 @@
 {
   "name": "dev-pipeline",
-  "version": "1.2.2",
-  "description": "AI-driven software delivery pipeline — PRD, dev plan, JIRA, execution with Ralph Loop, multi-critic review, browser-based validation, and TDD pipeline with blind-agent test-first development",
+  "version": "1.6.0",
+  "description": "AI-driven software delivery pipeline — PRD, dev plan, JIRA, execution with Ralph Loop, 11 critic agents, 7 expert builder agents, foundation scaffold, browser-based validation, and TDD pipeline",
   "author": { "name": "Yohai Darom" },
   "repository": "https://github.com/ydaromai/dev-pipeline",
   "license": "MIT",
-  "keywords": ["pipeline", "prd", "jira", "ralph-loop", "critics", "dev-plan", "playwright", "browser-testing", "e2e", "tdd"]
+  "keywords": ["pipeline", "prd", "jira", "ralph-loop", "critics", "dev-plan", "playwright", "browser-testing", "e2e", "tdd", "expert-agents", "ml", "foundation"]
 }
